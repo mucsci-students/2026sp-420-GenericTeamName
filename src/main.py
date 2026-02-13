@@ -15,11 +15,14 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
-"""from cli import run_course_management
-from cli.course import Course"""
+from cli import run_course_management
+from cli.room import run_room_management
+from cli.course import Course
+from cli.room import Room
 from cli.common import prompt
 
 COURSES_KEY_PATH = ("config", "courses")
+ROOMS_KEY_PATH = ("config", "rooms")
 
 
 def load_config(path: Path) -> Dict[str, Any]:
@@ -36,16 +39,16 @@ def load_config(path: Path) -> Dict[str, Any]:
     return cfg
 
 
-def ensure_courses_list(cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Return the list at config.courses, creating containers if missing."""
+def ensure_key_path(cfg: Dict[str, Any], key_path: tuple[str, ...], default_type=list) -> list:
+    """Return the list at a nested key path, creating containers if missing."""
     node: Any = cfg
-    for key in COURSES_KEY_PATH[:-1]:
+    for key in key_path[:-1]:
         if key not in node or not isinstance(node[key], dict):
             node[key] = {}
         node = node[key]
-    leaf_key = COURSES_KEY_PATH[-1]
-    if leaf_key not in node or not isinstance(node[leaf_key], list):
-        node[leaf_key] = []
+    leaf_key = key_path[-1]
+    if leaf_key not in node or not isinstance(node[leaf_key], default_type):
+        node[leaf_key] = default_type()
     return node[leaf_key]
 
 
@@ -58,9 +61,13 @@ def backup_file(path: Path) -> Path | None:
         return None
 
 
-def save_config(cfg: Dict[str, Any], courses: List[Course], config_path: Path) -> None:
-    raw_list = ensure_courses_list(cfg)
-    raw_list[:] = [c.to_raw() for c in courses]
+def save_config(cfg: Dict[str, Any], courses: List[Course], rooms: List[Room], config_path: Path) -> None:
+    raw_courses = ensure_key_path(cfg, COURSES_KEY_PATH)
+    raw_courses[:] = [c.to_raw() for c in courses]
+
+    raw_rooms = ensure_key_path(cfg, ROOMS_KEY_PATH)
+    raw_rooms[:] = [r.to_raw() for r in rooms]
+
     backup = backup_file(config_path)
     config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     if backup is not None:
@@ -74,11 +81,6 @@ def run_faculty_management(cfg: Dict[str, Any]) -> bool:
     print("Faculty Management is not yet implemented.")
     return False
 
-def run_room_management(cfg: Dict[str, Any]) -> bool:
-    """Placeholder."""
-    print("Room Management is not yet implemented.")
-    return False
-
 def run_lab_management(cfg: Dict[str, Any]) -> bool:
     """Placeholder."""
     print("Lab Management is not yet implemented.")
@@ -86,16 +88,19 @@ def run_lab_management(cfg: Dict[str, Any]) -> bool:
 
 def main_menu(config_path: Path) -> None:
     cfg = load_config(config_path)
-    """raw_courses = ensure_courses_list(cfg)
-    courses: List[Course] = [Course.from_raw(c) for c in raw_courses]"""
     dirty = False
+    raw_courses = ensure_key_path(cfg, COURSES_KEY_PATH)
+    courses: List[Course] = [Course.from_raw(c) for c in raw_courses]
+
+    raw_rooms = ensure_key_path(cfg, ROOMS_KEY_PATH)
+    rooms: List[Room] = [Room.from_raw(r) for r in raw_rooms]
 
     while True:
         print(
             "\n=== Scheduler Config CLI ===\n"
             "1) Course Management\n"
             "2) Faculty Management (coming soon)\n"
-            "3) Room Management (coming soon)\n"
+            "3) Room Management\n"
             "4) Lab Management (coming soon)\n"
             "5) Save config without exiting\n"
             "6) Save config and exit\n"
@@ -107,13 +112,13 @@ def main_menu(config_path: Path) -> None:
         elif choice == "2":
             dirty = run_faculty_management(cfg) or dirty
         elif choice == "3":
-            dirty = run_room_management(cfg) or dirty
+            dirty = run_room_management(rooms) or dirty
         elif choice == "4":
             dirty = run_lab_management(cfg) or dirty    
         elif choice == "5":
-            save_config(cfg, courses, config_path)
+            save_config(cfg, courses, rooms, config_path)
         elif choice == "6":
-            save_config(cfg, courses, config_path)
+            save_config(cfg, courses, rooms, config_path)
             return
         elif choice == "7":
             if dirty:
@@ -127,6 +132,7 @@ def main_menu(config_path: Path) -> None:
             return
         else:
             print("Invalid choice. Please enter 1–5.")
+
 
 def main() -> int:
     if len(sys.argv) != 2:
