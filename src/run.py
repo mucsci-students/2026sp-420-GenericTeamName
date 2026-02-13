@@ -25,6 +25,7 @@ class Run:
 
     def specify_limit(self) -> None:
 
+        """Please ensure this value gets updated in config."""
         limit = prompt_int("Please specify the limit (number of schedules to generate): ", 2)
 
     def specify_format(self) -> None:
@@ -51,6 +52,10 @@ class Run:
             optimize = ""
             return
 
+
+    def display_schedule(self) -> None:
+
+        """Display schedule in csv in this function."""
 
     def run_scheduler(self) -> None:
 
