@@ -6,10 +6,10 @@ Desc    : Run the scheduler task & display schedule task.
 
 from __future__ import annotations
 
+import csv
 import json
-import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from cli.common import prompt, prompt_int
 from config import ConfigManager
@@ -70,17 +70,75 @@ class Run:
     def _run_scheduler_impl(self) -> None:
         """Call course-constraint-scheduler if available."""
         try:
-            from course_constraint_scheduler import run  # type: ignore
-        except ImportError:
-            print("Scheduler package not available. Install with: uv sync")
+            from scheduler import Scheduler, load_config_from_file  # type: ignore
+            from scheduler.config import CombinedConfig  # type: ignore
+        except ImportError as e:
+            print(
+                "Scheduler package not available. Install dependencies and run with the project venv:\n"
+                "  From project root:  uv sync\n"
+                "  Then run the CLI with:  uv run python src/main.py path/to/config.json\n"
+                "  Or activate the venv and run:  python src/main.py path/to/config.json"
+            )
             return
         path = self.config_path or self.default_config_path
         if not path.exists():
             print(f"Config file not found: {path}. Choose option 1 to set config path.")
             return
-        # Adapt to whatever API the package exposes; placeholder for actual call
-        print("Running scheduler (placeholder – integrate with course-constraint-scheduler API)...")
-        print(f"  Config: {path}, limit: {self.limit}, format: {self.output_format}, optimize: {self.optimize}")
+        path_str = str(path.resolve())
+        try:
+            config = load_config_from_file(CombinedConfig, path_str)
+        except Exception as e:
+            print(f"Failed to load config: {e}")
+            return
+        scheduler = Scheduler(config)
+        out_path = self.output_path
+        if out_path and not out_path.is_absolute():
+            out_path = path.parent / out_path
+        schedules = []
+        try:
+            for i, schedule in enumerate(scheduler.get_models()):
+                if i >= self.limit:
+                    break
+                schedules.append(schedule)
+            if not schedules:
+                print("No schedules generated.")
+                return
+        except Exception as e:
+            print(f"Scheduler error: {e}")
+            return
+        # Output
+        def course_to_dict(c: Any) -> Any:
+            if hasattr(c, "model_dump"):
+                return c.model_dump()
+            if hasattr(c, "as_dict"):
+                return c.as_dict()
+            if hasattr(c, "__dict__"):
+                return c.__dict__
+            return str(c)
+
+        if out_path:
+            out_path = Path(out_path)
+            if self.output_format == "json":
+                out_data = [[course_to_dict(c) for c in sched] for sched in schedules]
+                with open(out_path, "w", encoding="utf-8") as f:
+                    json.dump(out_data, f, indent=2)
+            else:
+                with open(out_path, "w", encoding="utf-8", newline="") as f:
+                    writer = csv.writer(f)
+                    for idx, sched in enumerate(schedules):
+                        if idx > 0:
+                            f.write("\n")
+                        for course in sched:
+                            if hasattr(course, "as_csv"):
+                                f.write(course.as_csv() + "\n")
+                            else:
+                                writer.writerow([str(course)])
+            print(f"Wrote {len(schedules)} schedule(s) to {out_path}")
+        else:
+            for idx, sched in enumerate(schedules):
+                print(f"\n--- Schedule {idx + 1} ---")
+                for course in sched:
+                    print(getattr(course, "as_csv", lambda c=course: str(c))())
 
     def display_schedule(self) -> None:
         """Display schedule (e.g. from last run or current config)."""
