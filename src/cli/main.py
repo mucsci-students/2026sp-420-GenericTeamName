@@ -1,9 +1,14 @@
 """
+File    : main.py
+Author  : Shane del Villar, Tyler Strohl, & Chayse Altland.
+Desc    :
+
 Scheduler Config CLI - main entry point.
 
 User-friendly interface for managing scheduler config files from
 https://github.com/mucsci/scheduler. Supports Course Management now;
 Faculty and Room management can be added as modules.
+
 
 """
 
@@ -15,16 +20,22 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
-from cli import run_course_management
-from cli.room import run_room_management
-from cli.faculty import run_faculty_management
-from cli.lab import run_lab_management
-from cli.config_mgmt import run_config_management
-from cli.course import Course
-from cli.room import Room
-from cli.faculty import Faculty
-from cli.lab import Lab
-from cli.common import prompt
+#Very important file imports, DO NOT MODIFY STATEMENTS OR FILEPATHS.
+from common import prompt
+from course import Course
+from faculty import Faculty
+from room import Room
+from lab import Lab
+import config_mgmt
+from run import Run
+
+from course import run_course_management
+from faculty import run_faculty_management
+from room import run_room_management
+from lab import run_lab_management
+from config_mgmt import run_config_management
+# from run import run_scheduler_menu
+#End of important file imports.
 
 COURSES_KEY_PATH = ("config", "courses")
 ROOMS_KEY_PATH = ("config", "rooms")

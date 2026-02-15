@@ -1,15 +1,18 @@
-# Author: Damion Crawford
-# Filename: faculty.py
-# Saving, modifying, and deleting faculty
+from __future__ import annotations
+"""
+File    : faculty.py
+Author  : Damion Crawford & Shane del Villar
+Desc    : Saving, modifying, removing faculty
+"""
 
 """Faculty management module for scheduler config CLI."""
 
-from __future__ import annotations
+# from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from .common import prompt, prompt_int, prompt_list
+from common import prompt, prompt_int, prompt_list
 
 
 # Default structure matching scheduler config schema

@@ -1,17 +1,21 @@
 """
 File    : run.py
-Author  : Tyler Strohl
+Author  : Tyler Strohl & Shane del Villar
 Desc    : Run the scheduler task & display schedule task.
 """
 
 from __future__ import annotations
 
+import sys
 import csv
 import json
 from pathlib import Path
 from typing import Any, Optional
 
-from cli.common import prompt, prompt_int
+from common import prompt, prompt_int
+
+src_dir = Path(__file__).resolve().parent.parent
+sys.path.append(str(src_dir))
 from config import ConfigManager
 
 

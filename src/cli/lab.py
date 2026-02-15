@@ -1,7 +1,7 @@
 """
 Lab Management System
-Author: Mohamed Mussa
-Course: CSCI 420
+Author: Mohamed Mussa & Shane del Villar
+Course: CMSC 420
 Description:
 This program allows the user to display, add, remove, and modify lab sections
 stored in a text file (section.txt).
@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List, Optional
 
-from .common import prompt
+from common import prompt
 
 
 @dataclass

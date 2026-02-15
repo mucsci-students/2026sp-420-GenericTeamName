@@ -1,13 +1,17 @@
-"""Config management submenu: save, view summary, and related options."""
+"""
+File    : config_mgmt.py
+Author  : Shane del Villar
+Desc    : Config management submenu: 
+          save, view summary, and related options."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 
-from .common import prompt
-from .course import Course
-from .room import Room
+from common import prompt
+from course import Course
+from room import Room
 
 
 def _view_config_summary(cfg: Dict[str, Any]) -> None:

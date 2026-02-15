@@ -1,11 +1,14 @@
-"""Course management module for scheduler config CLI."""
+"""
+File    : course.py
+Author  : Shane del Villar
+Desc    : Course management module for scheduler config CLI."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional
 
-from .common import prompt, prompt_int, prompt_list
+from common import prompt, prompt_int, prompt_list
 
 
 @dataclass
