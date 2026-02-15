@@ -18,15 +18,18 @@ from typing import Any, Dict, List
 from cli import run_course_management
 from cli.room import run_room_management
 from cli.faculty import run_faculty_management
+from cli.lab import run_lab_management
 from cli.config_mgmt import run_config_management
 from cli.course import Course
 from cli.room import Room
 from cli.faculty import Faculty
+from cli.lab import Lab
 from cli.common import prompt
 
 COURSES_KEY_PATH = ("config", "courses")
 ROOMS_KEY_PATH = ("config", "rooms")
 FACULTY_KEY_PATH = ("config", "faculty")
+LABS_KEY_PATH = ("config", "labs")
 
 
 def load_config(path: Path) -> Dict[str, Any]:
@@ -70,6 +73,7 @@ def save_config(
     courses: List[Course],
     rooms: List[Room],
     faculty: List[Faculty],
+    labs: List[Lab],
     config_path: Path,
 ) -> None:
     raw_courses = ensure_key_path(cfg, COURSES_KEY_PATH)
@@ -81,6 +85,9 @@ def save_config(
     raw_faculty = ensure_key_path(cfg, FACULTY_KEY_PATH)
     raw_faculty[:] = [f.to_raw() for f in faculty]
 
+    raw_labs = ensure_key_path(cfg, LABS_KEY_PATH)
+    raw_labs[:] = [lab.to_raw() for lab in labs]
+
     backup = backup_file(config_path)
     config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     if backup is not None:
@@ -88,11 +95,6 @@ def save_config(
     else:
         print("Saved.")
 
-
-def run_lab_management(cfg: Dict[str, Any]) -> bool:
-    """Placeholder."""
-    print("Lab Management is not yet implemented.")
-    return False
 
 def main_menu(config_path: Path) -> None:
     cfg = load_config(config_path)
@@ -106,6 +108,9 @@ def main_menu(config_path: Path) -> None:
     raw_faculty = ensure_key_path(cfg, FACULTY_KEY_PATH)
     faculty: List[Faculty] = [Faculty.from_raw(f) for f in raw_faculty]
 
+    raw_labs = ensure_key_path(cfg, LABS_KEY_PATH)
+    labs: List[Lab] = [Lab.from_raw(l) for l in raw_labs]
+
     from run import Run
     run_menu = Run(config_path)
 
@@ -115,7 +120,7 @@ def main_menu(config_path: Path) -> None:
             "1) Course Management\n"
             "2) Faculty Management\n"
             "3) Room Management\n"
-            "4) Lab Management (coming soon)\n"
+            "4) Lab Management\n"
             "5) Config Management\n"
             "6) Run / display schedule\n"
             "7) Exit without saving\n"
@@ -128,14 +133,15 @@ def main_menu(config_path: Path) -> None:
         elif choice == "3":
             dirty = run_room_management(rooms) or dirty
         elif choice == "4":
-            dirty = run_lab_management(cfg) or dirty
+            dirty = run_lab_management(labs) or dirty
         elif choice == "5":
             # Sync in-memory state into cfg so "View config summary" is current
             ensure_key_path(cfg, COURSES_KEY_PATH)[:] = [c.to_raw() for c in courses]
             ensure_key_path(cfg, ROOMS_KEY_PATH)[:] = [r.to_raw() for r in rooms]
             ensure_key_path(cfg, FACULTY_KEY_PATH)[:] = [f.to_raw() for f in faculty]
+            ensure_key_path(cfg, LABS_KEY_PATH)[:] = [lab.to_raw() for lab in labs]
             def do_save() -> None:
-                save_config(cfg, courses, rooms, faculty, config_path)
+                save_config(cfg, courses, rooms, faculty, labs, config_path)
             save_and_exit, _ = run_config_management(
                 cfg, courses, rooms, config_path, do_save
             )
