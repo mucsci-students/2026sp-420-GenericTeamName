@@ -8,39 +8,30 @@
 
 import pytest
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QPushButton
+from PyQt6.QtWidgets import QSplitter
 from app.main_window import MainWindow
 
 @pytest.fixture
 def app(qtbot):
-    test_app = MainWindow()
-    qtbot.addWidget(test_app)
-    return test_app
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    return window
 
-def test_window_initial_state(app):
-    assert "Right-click" in app.label.text()
+def test_splitter_exists(app):
+    """Verify central widget is a splitter with 3 widgets."""
+    assert isinstance(app.centralWidget(), QSplitter)
+    assert app.centralWidget().count() == 3
 
-def test_panel_content_loading(app):
-    # We manually trigger the menu creation logic
-    from app.menu_widgets import ThreePanelMenu
-    panel_action = ThreePanelMenu(app)
-    
-    # Check if all 3 panels were created
-    # 1 label + 3 buttons per panel = 12 widgets total + layout items
-    buttons = panel_action.container.findChildren(QPushButton)
-    assert len(buttons) == 9  # 3 buttons * 3 panels
-    assert buttons[0].text() == "New Project"
+def test_resize_logic(app):
+    """Verify the reset_layout function updates sizes."""
+    app.splitter.setSizes([100, 100, 700])
+    app.reset_layout()
+    assert app.splitter.sizes() == [300, 300, 300]
 
-def test_action_triggering(app, qtbot):
-    # Simulate a menu click
-    from app.menu_widgets import ThreePanelMenu
-    panel_action = ThreePanelMenu(app)
-    
-    # Spy on the signal
-    with qtbot.waitSignal(panel_action.action_clicked) as blocker:
-        # Find the "Settings" button and click it
-        settings_btn = [b for b in panel_action.container.findChildren(QPushButton) 
-                       if b.text() == "Settings"][0]
-        qtbot.mouseClick(settings_btn, Qt.MouseButton.LeftButton)
-    
-    assert blocker.args == ["Settings"]
+def test_context_menu_detection(app, qtbot):
+    """Verify right-click works on the middle panel."""
+    with qtbot.waitSignal(app.customContextMenuRequested):
+        target = app.mid_panel.rect().center()
+        global_pos = app.mid_panel.mapTo(app, target)
+        qtbot.mouseClick(app, Qt.MouseButton.RightButton, pos=global_pos)
