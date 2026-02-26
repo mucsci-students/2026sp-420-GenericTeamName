@@ -1,7 +1,7 @@
 '''
     File: menu_widgets.py
-    Date: 02/24/2026
-    Author: Kyle Smith
+    Date: 02/25/2026
+    Author: Kyle Smith & Tyler Strohl
     Class: CMSC 420
     Description: GUI Components.
 '''
@@ -15,13 +15,13 @@ class ContentPanel(QFrame):
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setStyleSheet(f"background-color: {color}; border: 1px solid #bdc3c7;")
         
-        layout = QVBoxLayout(self)
+        self.layout = QVBoxLayout(self)
         label = QLabel(title)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setStyleSheet("font-weight: bold; font-size: 14px; border: none;")
         
-        layout.addWidget(label)
-        layout.addStretch()
+        self.layout.addWidget(label)
+        self.layout.addStretch()
         
-        self.btn = QPushButton("Action")
-        layout.addWidget(self.btn)
+        #self.btn = QPushButton("Action")
+        #layout.addWidget(self.btn)
