@@ -72,6 +72,7 @@ class Run:
             print("Invalid choice. Please enter yes or no.")
 
     def _run_scheduler_impl(self) -> None:
+        
         """Call course-constraint-scheduler if available."""
         try:
             from scheduler import Scheduler, load_config_from_file  # type: ignore
@@ -145,6 +146,7 @@ class Run:
                     print(getattr(course, "as_csv", lambda c=course: str(c))())
 
     def display_schedule(self) -> None:
+        
         """Display schedule (e.g. from last run or current config)."""
         path = self.config_path or self.default_config_path
         if not path.exists():
@@ -188,6 +190,6 @@ class Run:
             elif choice == "7":
                 self.display_schedule()
             elif choice == "8":
-                return
+                return 
             else:
                 print("Invalid choice. Please enter 1–8.")
