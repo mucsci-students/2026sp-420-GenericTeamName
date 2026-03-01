@@ -1,8 +1,10 @@
-#
-# File: conftest.py
-# Author: Kyle Smith
-# Description: Used for creating sample data for tests.
-#
+'''
+    File: conftest.py
+    Date: 03/01/2026
+    Author: Kyle Smith
+    Class: CMSC 420
+    Description: Injects a temporary config file for testing.
+'''
 
 import pytest
 import json
