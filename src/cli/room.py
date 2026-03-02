@@ -9,11 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional
 
-<<<<<<< HEAD
 from .common import prompt, prompt_int, prompt_list
-=======
-from common import prompt, prompt_int, prompt_list
->>>>>>> origin/develop
 
 
 @dataclass

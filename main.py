@@ -1,13 +1,3 @@
-<<<<<<< HEAD
-
-
-import scheduler
-
-
-
-def main():
-    print("Hello from 2026sp-420-genericteamname!")
-=======
 '''
     File: main.py
     Date: 02/24/2026
@@ -15,7 +5,6 @@ def main():
     Class: CMSC 420
     Description: Entry point for the main GUI.
 '''
->>>>>>> origin/develop
 
 import sys
 from PyQt6.QtWidgets import QApplication
