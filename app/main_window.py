@@ -10,12 +10,16 @@ from PyQt6.QtWidgets import QMainWindow, QSplitter, QMenu, QPushButton, QVBoxLay
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 from .menu_widgets import ContentPanel
+from .course_gui import CourseConfigManager
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Scheduler Program - GenericTeamName")
         self.resize(900, 600)
+
+        # Course management helper (loads/saves JSON config courses)
+        self.course_manager = CourseConfigManager()
 
         #most important function, along with "menu_widgets.py" class.
         self.init_menus()
@@ -162,9 +166,9 @@ class MainWindow(QMainWindow):
         ed_faculty_pref_ac.triggered.connect(lambda: print("Edit Faculty Preferences clicked"))
 
         #courses:
-        add_courses_ac.triggered.connect(lambda: print("Add Courses clicked"))
-        mod_courses_ac.triggered.connect(lambda: print("Modify Courses clicked"))
-        del_courses_ac.triggered.connect(lambda: print("Delete Courses clicked"))
+        add_courses_ac.triggered.connect(self.handle_add_course)
+        mod_courses_ac.triggered.connect(self.handle_modify_course)
+        del_courses_ac.triggered.connect(self.handle_delete_course)
 
         #rooms:
         add_rooms_ac.triggered.connect(lambda: print("Add Room clicked"))
@@ -190,4 +194,21 @@ class MainWindow(QMainWindow):
         self.view_sc_btn.clicked.connect(lambda: print("View Schedules clicked"))
         self.export_sc_btn.clicked.connect(lambda: print("Export Schedules clicked"))
         self.import_sc_btn.clicked.connect(lambda: print("Import Schedules clicked"))
+
+    #----------------------------------------------------------
+    # Course management handlers (GUI)
+    #----------------------------------------------------------
+
+    def handle_add_course(self):
+        """Add a new course via dialog and save to config."""
+        self.course_manager.add_course_via_dialog(self)
+
+    def handle_modify_course(self):
+        """Modify an existing course via dialogs."""
+        self.course_manager.modify_course_via_dialog(self)
+
+    def handle_delete_course(self):
+        """Delete an existing course via dialogs."""
+        self.course_manager.delete_course_via_dialog(self)
+
 
