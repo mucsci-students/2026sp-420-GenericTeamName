@@ -1,4 +1,8 @@
 __pycache__/
+<<<<<<< HEAD
 *.pyc
 .DS_Store
 *.bak
+=======
+*.pyc
+>>>>>>> origin/develop
