@@ -1,22 +1,26 @@
 '''
     File: main_window.py
-    Date: 02/26/2026
+    Date: 03/03/2026
     Author: Kyle Smith & Tyler Strohl
     Class: CMSC 420
     Description: The main window of the GUI.
 '''
 
-from PyQt6.QtWidgets import QMainWindow, QSplitter, QMenu, QPushButton, QVBoxLayout, QHBoxLayout, QWidget
+from PyQt6.QtWidgets import QMainWindow, QSplitter, QMenu, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QMessageBox
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QFont
 from .menu_widgets import ContentPanel
 from .course_gui import CourseConfigManager
+from config.config_mgr import ConfigManager
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Scheduler Program - GenericTeamName")
         self.resize(900, 600)
+
+        # Initialize with a default
+        self.config_mgr = ConfigManager("config/config.json")
 
         # Course management helper (loads/saves JSON config courses)
         self.course_manager = CourseConfigManager()
@@ -59,6 +63,8 @@ class MainWindow(QMainWindow):
         self.course_btn = QPushButton("Courses")
         self.room_btn = QPushButton("Rooms")
         self.lab_btn = QPushButton("Labs")
+        self.change_path_btn = QPushButton("Change Config File")
+        self.config_btn_layout.insertWidget(4, self.change_path_btn) #would like to look at this further. could reduce lines of code?
         self.view_sum_btn = QPushButton("View Config Summary")
         self.save_config_btn = QPushButton("Save Config")
 
@@ -70,6 +76,7 @@ class MainWindow(QMainWindow):
         self.config_btn_layout.addWidget(self.view_sum_btn)
         self.config_btn_layout.addWidget(self.save_config_btn)
         self.config_btn_layout.addStretch()
+
         #----------------------------------------------------------
         #Mid-Panel (Schedule Generator)
         #----------------------------------------------------------
@@ -180,8 +187,9 @@ class MainWindow(QMainWindow):
         mod_labs_ac.triggered.connect(lambda: print("Modify Labs clicked"))
         del_labs_ac.triggered.connect(lambda: print("Delete Labs clicked"))
 
-        self.view_sum_btn.clicked.connect(lambda: print("View Config Summary clicked"))
-        self.save_config_btn.clicked.connect(lambda: print("Save Config clicked"))
+        self.change_path_btn.clicked.connect(self.handle_change_path)
+        self.view_sum_btn.clicked.connect(self.handle_view_summary)
+        self.save_config_btn.clicked.connect(self.handle_save_config)
         #-------------------------------------------
         #triggers for mid panel (schedule generator)
 
@@ -194,6 +202,50 @@ class MainWindow(QMainWindow):
         self.view_sc_btn.clicked.connect(lambda: print("View Schedules clicked"))
         self.export_sc_btn.clicked.connect(lambda: print("Export Schedules clicked"))
         self.import_sc_btn.clicked.connect(lambda: print("Import Schedules clicked"))
+
+    #----------------------------------------------------------
+    # Config management handlers (GUI)
+    #----------------------------------------------------------
+
+    def handle_change_path(self):
+        """Opens a file dialog to choose or create a config JSON."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Configuration File",
+            "config/",
+            "JSON Files (*.json);;All Files (*)"
+        )
+
+        if file_path:
+            self.config_mgr.filepath = file_path
+            try:
+                self.config_mgr.load()
+                QMessageBox.information(self, "Path Changed", f"Now using: {file_path}")
+            except Exception as e:
+                QMessageBox.warning(self, "Load Warning", f"File selected, but could not load data: {e}")
+
+    def handle_save_config(self):
+        """Saves to the currently selected path."""
+        try:
+            self.config_mgr.save()
+            QMessageBox.information(self, "Success", f"Saved to: {self.config_mgr.filepath}")
+        except Exception as e:
+            QMessageBox.critical(self, "Save Error", f"Failed to save: {str(e)}")
+
+    def handle_view_summary(self):
+        """Displays summary with the current file path in the title."""
+        summary_text = self.config_mgr.get_summary_text()
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle(f"Summary: {self.config_mgr.filepath.split('/')[-1]}")
+        msg.setText(summary_text)
+
+        # Use Monospace for tabulation
+        font = QFont("Courier New", 10)
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        msg.setFont(font)
+
+        msg.exec()
 
     #----------------------------------------------------------
     # Course management handlers (GUI)
