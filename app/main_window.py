@@ -1,6 +1,6 @@
 '''
     File: main_window.py
-    Date: 02/26/2026
+    Date: 03/03/2026
     Author: Kyle Smith & Tyler Strohl
     Class: CMSC 420
     Description: The main window of the GUI.
@@ -21,7 +21,6 @@ class MainWindow(QMainWindow):
 
         # Initialize with a default
         self.config_mgr = ConfigManager("config/config.json")
-        self.course_manager = CourseConfigManager()
 
         # Course management helper (loads/saves JSON config courses)
         self.course_manager = CourseConfigManager()
@@ -65,7 +64,7 @@ class MainWindow(QMainWindow):
         self.room_btn = QPushButton("Rooms")
         self.lab_btn = QPushButton("Labs")
         self.change_path_btn = QPushButton("Change Config File")
-        self.config_btn_layout.insertWidget(4, self.change_path_btn)
+        self.config_btn_layout.insertWidget(4, self.change_path_btn) #would like to look at this further. could reduce lines of code?
         self.view_sum_btn = QPushButton("View Config Summary")
         self.save_config_btn = QPushButton("Save Config")
 
