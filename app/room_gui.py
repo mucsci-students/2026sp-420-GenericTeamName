@@ -1,9 +1,9 @@
 '''
-    File: lab_gui.py
-    Date: 3/3/2026
-    Author: Mohamed Mussa
+    File: roon_gui.py
+    Date: 3/1/2026
+    Author: Chayse Altland
     Class: CMSC 420
-    Description: Lab management dialogs and helpers for the GUI.
+    Description: Room management dialogs and helpers for the GUI.
 '''
 from __future__ import annotations
 
@@ -19,11 +19,11 @@ from PyQt6.QtWidgets import (
 )
 
 
-class LabConfigManager:
+class RoomConfigManager:
     """
-    Helper to load, modify, and save lab entries in a scheduler config JSON file.
-    Labs are stored as a list of strings:
-        "labs": ["Roddy Lab A", "Roddy Lab B", ...]
+    Helper to load, modify, and save room entries in a scheduler config JSON file.
+    Rooms are stored as a list of strings:
+        "rooms": ["Roddy 140", "Roddy 147", ...]
     """
 
     def __init__(self) -> None:
@@ -75,12 +75,12 @@ class LabConfigManager:
 
         return True
 
-    def _get_labs_list(self) -> List[str]:
+    def _get_rooms_list(self) -> List[str]:
         cfg = self._config_data.setdefault("config", {})
-        labs = cfg.setdefault("labs", [])
-        if not isinstance(labs, list):
-            cfg["labs"] = []
-        return cfg["labs"]
+        rooms = cfg.setdefault("rooms", [])
+        if not isinstance(rooms, list):
+            cfg["rooms"] = []
+        return cfg["rooms"]
 
     def _save(self, parent: QWidget) -> None:
         if self.config_path is None:
@@ -104,18 +104,18 @@ class LabConfigManager:
             f"Configuration saved to:\n{self.config_path}",
         )
 
-    def _select_lab(self, parent: QWidget) -> Tuple[Optional[int], Optional[str]]:
-        labs = self._get_labs_list()
+    def _select_room(self, parent: QWidget) -> Tuple[Optional[int], Optional[str]]:
+        rooms = self._get_rooms_list()
 
-        if not labs:
-            QMessageBox.information(parent, "No labs", "No labs found in the config.")
+        if not rooms:
+            QMessageBox.information(parent, "No rooms", "No rooms found in the config.")
             return None, None
 
         item, ok = QInputDialog.getItem(
             parent,
-            "Select Lab",
-            "Lab:",
-            labs,
+            "Select Room",
+            "Room:",
+            rooms,
             0,
             False,
         )
@@ -123,64 +123,64 @@ class LabConfigManager:
         if not ok or not item:
             return None, None
 
-        index = labs.index(item)
+        index = rooms.index(item)
         return index, item
 
     # -----------------------------
     # Public CRUD Methods
     # -----------------------------
 
-    def add_lab_via_dialog(self, parent: QWidget) -> None:
+    def add_room_via_dialog(self, parent: QWidget) -> None:
         if not self._ensure_config_loaded(parent):
             return
 
         text, ok = QInputDialog.getText(
             parent,
-            "Add Lab",
-            "Lab name:"
+            "Add Room",
+            "Room name:"
         )
 
         if not ok or not text.strip():
             return
 
-        labs = self._get_labs_list()
-        labs.append(text.strip())
+        rooms = self._get_rooms_list()
+        rooms.append(text.strip())
         self._save(parent)
 
-    def modify_lab_via_dialog(self, parent: QWidget) -> None:
+    def modify_room_via_dialog(self, parent: QWidget) -> None:
         if not self._ensure_config_loaded(parent):
             return
 
-        index, existing = self._select_lab(parent)
+        index, existing = self._select_room(parent)
         if index is None or existing is None:
             return
 
         text, ok = QInputDialog.getText(
             parent,
-            "Modify Lab",
-            "Lab name:",
+            "Modify Room",
+            "Room name:",
             text=existing
         )
 
         if not ok or not text.strip():
             return
 
-        labs = self._get_labs_list()
-        labs[index] = text.strip()
+        rooms = self._get_rooms_list()
+        rooms[index] = text.strip()
         self._save(parent)
 
-    def delete_lab_via_dialog(self, parent: QWidget) -> None:
+    def delete_room_via_dialog(self, parent: QWidget) -> None:
         if not self._ensure_config_loaded(parent):
             return
 
-        index, existing = self._select_lab(parent)
+        index, existing = self._select_room(parent)
         if index is None or existing is None:
             return
 
         reply = QMessageBox.question(
             parent,
             "Confirm delete",
-            f"Delete lab '{existing}'?",
+            f"Delete room '{existing}'?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -188,6 +188,6 @@ class LabConfigManager:
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        labs = self._get_labs_list()
-        del labs[index]
+        rooms = self._get_rooms_list()
+        del rooms[index]
         self._save(parent)
