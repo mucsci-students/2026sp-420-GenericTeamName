@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QFont
 from .menu_widgets import ContentPanel
 from .course_gui import CourseConfigManager
+from .room_gui import RoomConfigManager
 from config.config_mgr import ConfigManager
 
 class MainWindow(QMainWindow):
@@ -24,9 +25,12 @@ class MainWindow(QMainWindow):
 
         # Course management helper (loads/saves JSON config courses)
         self.course_manager = CourseConfigManager()
+        # Room management helper 
+        self.room_manager = RoomConfigManager()
 
         #most important function, along with "menu_widgets.py" class.
         self.init_menus()
+
 
 #__init__ ends here ------------------------------------------------------------------
 
@@ -178,9 +182,9 @@ class MainWindow(QMainWindow):
         del_courses_ac.triggered.connect(self.handle_delete_course)
 
         #rooms:
-        add_rooms_ac.triggered.connect(lambda: print("Add Room clicked"))
-        mod_rooms_ac.triggered.connect(lambda: print("Modify Room clicked"))
-        del_rooms_ac.triggered.connect(lambda: print("Delete Room clicked"))
+        add_rooms_ac.triggered.connect(lambda: self.room_manager.add_room_via_dialog(self))
+        mod_rooms_ac.triggered.connect(lambda: self.room_manager.modify_room_via_dialog(self))
+        del_rooms_ac.triggered.connect(lambda: self.room_manager.delete_room_via_dialog(self))
 
         #labs:
         add_labs_ac.triggered.connect(lambda: print("Add Labs clicked"))
