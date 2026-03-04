@@ -12,6 +12,7 @@ from PyQt6.QtGui import QAction, QFont
 from .menu_widgets import ContentPanel
 from .course_gui import CourseConfigManager
 from .room_gui import RoomConfigManager
+from .faculty_gui import FacultyManager
 from config.config_mgr import ConfigManager
 
 class MainWindow(QMainWindow):
@@ -27,6 +28,9 @@ class MainWindow(QMainWindow):
         self.course_manager = CourseConfigManager()
         # Room management helper 
         self.room_manager = RoomConfigManager()
+
+        # Faculty management helper
+        self.faculty_manager = FacultyManager()
 
         #most important function, along with "menu_widgets.py" class.
         self.init_menus()
@@ -170,11 +174,11 @@ class MainWindow(QMainWindow):
         #-------------------------------------------
         #triggers for left panel (config editor)
         #faculty:
-        add_faculty_ac.triggered.connect(lambda: print("Add Faculty clicked"))
-        mod_faculty_ac.triggered.connect(lambda: print("Modify Faculty clicked"))
-        del_faculty_ac.triggered.connect(lambda: print("Delete Faculty clicked"))
-        ed_faculty_times_ac.triggered.connect(lambda: print("Edit Faculty Available Times clicked"))
-        ed_faculty_pref_ac.triggered.connect(lambda: print("Edit Faculty Preferences clicked"))
+        add_faculty_ac.triggered.connect(lambda: self.faculty_manager.add_faculty_via_dialog(self))
+        mod_faculty_ac.triggered.connect(lambda: self.faculty_manager.modify_faculty_via_dialog(self))
+        del_faculty_ac.triggered.connect(lambda: self.faculty_manager.delete_faculty_via dialog(self))
+        ed_faculty_times_ac.triggered.connect(lambda: self.faculty_manager.faculty_time_via_dialog(self))
+        ed_faculty_pref_ac.triggered.connect(lambda: self.faculty_manager.faculty_preference(self))
 
         #courses:
         add_courses_ac.triggered.connect(self.handle_add_course)
