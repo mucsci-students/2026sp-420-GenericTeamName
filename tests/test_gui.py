@@ -7,13 +7,9 @@
 '''
 
 import pytest
-<<<<<<< HEAD
 from PyQt6.QtCore import Qt, QPoint
 from PyQt6.QtWidgets import QMenu
 from PyQt6.QtGui import QContextMenuEvent
-=======
-from PyQt6.QtCore import Qt
->>>>>>> fd29002d94750cc577e500581cf901b070bd3342
 from app.main_window import MainWindow
 
 @pytest.fixture
@@ -24,7 +20,6 @@ def app(qtbot):
     window.show()
     return window
 
-<<<<<<< HEAD
 # --- UI Integrity Tests ---
 
 def test_initial_state(app):
@@ -99,7 +94,6 @@ def test_faculty_menu_actions(app):
     for action_name in expected_actions:
         assert action_name in actions
         assert actions[action_name].isEnabled()
-=======
 def test_resize_logic(app):
     """Verify the reset_layout function makes panels roughly equal."""
     app.splitter.setSizes([50, 50, 800])
@@ -117,4 +111,3 @@ def test_context_menu_detection(app, qtbot):
             Qt.MouseButton.RightButton, 
             pos=app.mid_panel.rect().center()
         )
->>>>>>> fd29002d94750cc577e500581cf901b070bd3342
