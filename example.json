@@ -302,6 +302,20 @@
         ],
         "conflicts": [],
         "faculty": []
+      },
+      {
+        "course_id": "MLG 420",
+        "credits": 3,
+        "room": [
+          "210A"
+        ],
+        "lab": [
+          "Mac"
+        ],
+        "conflicts": [],
+        "faculty": [
+          "Zoppetti"
+        ]
       }
     ],
     "faculty": [

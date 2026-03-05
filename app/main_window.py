@@ -13,6 +13,7 @@ from .menu_widgets import ContentPanel
 from .course_gui import CourseConfigManager
 from .room_gui import RoomConfigManager
 from config.config_mgr import ConfigManager
+from .generator_gui import GenConfigManager
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -27,6 +28,8 @@ class MainWindow(QMainWindow):
         self.course_manager = CourseConfigManager()
         # Room management helper 
         self.room_manager = RoomConfigManager()
+        # Schedule Generator helper
+        self.gen_manager = GenConfigManager()
 
         #most important function, along with "menu_widgets.py" class.
         self.init_menus()
