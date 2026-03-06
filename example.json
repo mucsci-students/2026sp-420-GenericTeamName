@@ -636,9 +636,7 @@
           "Linux": 1
         }
       }
-    ],
-    "limit": "5",
-    "optimize": "False"
+    ]
   },
   "time_slot_config": {
     "times": {
@@ -843,7 +841,7 @@
       }
     ]
   },
-  "limit": 10,
+  "limit": 74,
   "optimizer_flags": [
     "faculty_course",
     "faculty_room",

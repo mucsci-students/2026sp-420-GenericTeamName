@@ -100,45 +100,48 @@ class GenConfigManager:
         if not self._ensure_config_loaded(parent):
             return
 
+        def_limit = self._config_data.get("limit", 2)
+
         text, ok = QInputDialog.getText(
             parent,
             "Specify Limit",
-            "# of Schedules:"
+            "# of Schedules:",
+            text=str(def_limit)
         )
 
         if not ok or not text.strip():
             return
 
-        cfg = self._config_data.setdefault("config", {})
-        def_limit = cfg.setdefault("limit", 2)
-        if not isinstance(def_limit, int):
-           cfg["limit"] = 2
-        
-        limit = text.strip()
-        cfg["limit"] = limit
-        self._save(parent)
+        try:
+            self._config_data["limit"] = int(text.strip())
+            self._save(parent)
+        except ValueError:
+            QMessageBox.warning(parent, "Invalid Input", "Please enter a valid number.")
 
     def set_optimize(self, parent: QWidget) -> None:
         
         if not self._ensure_config_loaded(parent):
             return
         
-        #may have to update similar segment for set_limit
+        full_flags = [
+            "faculty_course", "faculty_room", "faculty_lab", 
+            "same_room", "same_lab", "pack_rooms"
+        ]
+
+        current_flags = self._config_data.get("optimizer_flags", [])
+        is_currently_on = len(current_flags) > 0
+        start_index = 0 if is_currently_on else 1
+
         text, ok = QInputDialog.getItem(
-            parent,
-            "Specify Optimization",
-            "Enable/Disable:", 
-            ["True", "False"], 0, False
-    )
+            parent, "Specify Optimization", "Enable/Disable All:", 
+            ["True", "False"], start_index, False
+        )
 
-        if not ok or not text.strip():
-            return
-        
-        cfg = self._config_data.setdefault("config", {})
-        def_optimize = cfg.setdefault("optimize", True)
-        if not isinstance(def_optimize, bool):
-           cfg["optimize"] = True
+        if ok:
 
-        optimize = text.strip()
-        cfg["optimize"] = optimize
-        self._save(parent)
+            if text == "True":
+                self._config_data["optimizer_flags"] = full_flags
+            else:
+                self._config_data["optimizer_flags"] = []
+            
+            self._save(parent)
