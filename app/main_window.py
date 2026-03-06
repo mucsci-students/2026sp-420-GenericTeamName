@@ -13,6 +13,7 @@ from .menu_widgets import ContentPanel
 from .course_gui import CourseConfigManager
 from .room_gui import RoomConfigManager
 from config.config_mgr import ConfigManager
+from .lab_gui import LabConfigManager
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -23,11 +24,14 @@ class MainWindow(QMainWindow):
         # Initialize with a default
         self.config_mgr = ConfigManager("config/config.json")
 
-        # Course management helper (loads/saves JSON config courses)
+        
+        #Management helpers:
+        #---------------------------------------------------------------------------
         self.course_manager = CourseConfigManager()
-        # Room management helper 
         self.room_manager = RoomConfigManager()
-
+        self.lab_manager = LabConfigManager()
+        
+        #---------------------------------------------------------------------------
         #most important function, along with "menu_widgets.py" class.
         self.init_menus()
 
@@ -187,13 +191,15 @@ class MainWindow(QMainWindow):
         del_rooms_ac.triggered.connect(lambda: self.room_manager.delete_room_via_dialog(self))
 
         #labs:
-        add_labs_ac.triggered.connect(lambda: print("Add Labs clicked"))
-        mod_labs_ac.triggered.connect(lambda: print("Modify Labs clicked"))
-        del_labs_ac.triggered.connect(lambda: print("Delete Labs clicked"))
+        add_labs_ac.triggered.connect(lambda: self.lab_manager.add_lab_via_dialog(self))
+        mod_labs_ac.triggered.connect(lambda: self.lab_manager.modify_lab_via_dialog(self))
+        del_labs_ac.triggered.connect(lambda: self.lab_manager.delete_lab_via_dialog(self))
 
+        #config-management:
         self.change_path_btn.clicked.connect(self.handle_change_path)
         self.view_sum_btn.clicked.connect(self.handle_view_summary)
         self.save_config_btn.clicked.connect(self.handle_save_config)
+        
         #-------------------------------------------
         #triggers for mid panel (schedule generator)
 
