@@ -1,17 +1,18 @@
 '''
     File: main_window.py
-    Date: 02/26/2026
+    Date: 03/03/2026
     Author: Kyle Smith & Tyler Strohl
     Class: CMSC 420
     Description: The main window of the GUI.
 '''
 
-from PyQt6.QtWidgets import QMainWindow, QSplitter, QMenu, QPushButton, QVBoxLayout, QHBoxLayout, QWidget
+from PyQt6.QtWidgets import QMainWindow, QSplitter, QMenu, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QMessageBox
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QFont
 from .menu_widgets import ContentPanel
 from .course_gui import CourseConfigManager
 from .room_gui import RoomConfigManager
+from config.config_mgr import ConfigManager
 from .lab_gui import LabConfigManager
 
 class MainWindow(QMainWindow):
@@ -20,12 +21,17 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Scheduler Program - GenericTeamName")
         self.resize(900, 600)
 
-        # Course management helper (loads/saves JSON config courses)
+        # Initialize with a default
+        self.config_mgr = ConfigManager("config/config.json")
+
+        
+        #Management helpers:
+        #---------------------------------------------------------------------------
         self.course_manager = CourseConfigManager()
-        # Room management helper 
         self.room_manager = RoomConfigManager()
         self.lab_manager = LabConfigManager()
-
+        
+        #---------------------------------------------------------------------------
         #most important function, along with "menu_widgets.py" class.
         self.init_menus()
 
@@ -65,6 +71,8 @@ class MainWindow(QMainWindow):
         self.course_btn = QPushButton("Courses")
         self.room_btn = QPushButton("Rooms")
         self.lab_btn = QPushButton("Labs")
+        self.change_path_btn = QPushButton("Change Config File")
+        self.config_btn_layout.insertWidget(4, self.change_path_btn) #would like to look at this further. could reduce lines of code?
         self.view_sum_btn = QPushButton("View Config Summary")
         self.save_config_btn = QPushButton("Save Config")
 
@@ -76,6 +84,7 @@ class MainWindow(QMainWindow):
         self.config_btn_layout.addWidget(self.view_sum_btn)
         self.config_btn_layout.addWidget(self.save_config_btn)
         self.config_btn_layout.addStretch()
+
         #----------------------------------------------------------
         #Mid-Panel (Schedule Generator)
         #----------------------------------------------------------
@@ -186,8 +195,11 @@ class MainWindow(QMainWindow):
         mod_labs_ac.triggered.connect(lambda: self.lab_manager.modify_lab_via_dialog(self))
         del_labs_ac.triggered.connect(lambda: self.lab_manager.delete_lab_via_dialog(self))
 
-        self.view_sum_btn.clicked.connect(lambda: print("View Config Summary clicked"))
-        self.save_config_btn.clicked.connect(lambda: print("Save Config clicked"))
+        #config-management:
+        self.change_path_btn.clicked.connect(self.handle_change_path)
+        self.view_sum_btn.clicked.connect(self.handle_view_summary)
+        self.save_config_btn.clicked.connect(self.handle_save_config)
+        
         #-------------------------------------------
         #triggers for mid panel (schedule generator)
 
@@ -200,6 +212,50 @@ class MainWindow(QMainWindow):
         self.view_sc_btn.clicked.connect(lambda: print("View Schedules clicked"))
         self.export_sc_btn.clicked.connect(lambda: print("Export Schedules clicked"))
         self.import_sc_btn.clicked.connect(lambda: print("Import Schedules clicked"))
+
+    #----------------------------------------------------------
+    # Config management handlers (GUI)
+    #----------------------------------------------------------
+
+    def handle_change_path(self):
+        """Opens a file dialog to choose or create a config JSON."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Configuration File",
+            "config/",
+            "JSON Files (*.json);;All Files (*)"
+        )
+
+        if file_path:
+            self.config_mgr.filepath = file_path
+            try:
+                self.config_mgr.load()
+                QMessageBox.information(self, "Path Changed", f"Now using: {file_path}")
+            except Exception as e:
+                QMessageBox.warning(self, "Load Warning", f"File selected, but could not load data: {e}")
+
+    def handle_save_config(self):
+        """Saves to the currently selected path."""
+        try:
+            self.config_mgr.save()
+            QMessageBox.information(self, "Success", f"Saved to: {self.config_mgr.filepath}")
+        except Exception as e:
+            QMessageBox.critical(self, "Save Error", f"Failed to save: {str(e)}")
+
+    def handle_view_summary(self):
+        """Displays summary with the current file path in the title."""
+        summary_text = self.config_mgr.get_summary_text()
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle(f"Summary: {self.config_mgr.filepath.split('/')[-1]}")
+        msg.setText(summary_text)
+
+        # Use Monospace for tabulation
+        font = QFont("Courier New", 10)
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        msg.setFont(font)
+
+        msg.exec()
 
     #----------------------------------------------------------
     # Course management handlers (GUI)
@@ -216,15 +272,5 @@ class MainWindow(QMainWindow):
     def handle_delete_course(self):
         """Delete an existing course via dialogs."""
         self.course_manager.delete_course_via_dialog(self)
-        
-if __name__ == "__main__":
-    import sys
-    from PyQt6.QtWidgets import QApplication
 
-    print("Starting GUI...")  # debug
-    app = QApplication(sys.argv)
 
-    window = MainWindow()
-    window.show()
-
-    sys.exit(app.exec())

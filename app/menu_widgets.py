@@ -22,6 +22,3 @@ class ContentPanel(QFrame):
         
         self.layout.addWidget(label)
         self.layout.addStretch()
-        
-        #self.btn = QPushButton("Action")
-        #layout.addWidget(self.btn)

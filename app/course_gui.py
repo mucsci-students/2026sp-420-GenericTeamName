@@ -234,3 +234,4 @@ class CourseConfigManager:
         if 0 <= index < len(courses):
             del courses[index]
             self._save(parent)
+
