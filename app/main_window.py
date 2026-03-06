@@ -202,7 +202,7 @@ class MainWindow(QMainWindow):
 
         self.limit_btn.clicked.connect(lambda: self.gen_manager.set_limit(self))
         self.optimize_btn.clicked.connect(lambda: self.gen_manager.set_optimize(self))
-        self.generate_sc_btn.clicked.connect(lambda: print("Generate Schedules clicked"))
+        self.generate_sc_btn.clicked.connect(lambda: self.gen_manager.run_scheduler(self))
         #-------------------------------------------
         #triggers for right panel (schedule viewer)
 
