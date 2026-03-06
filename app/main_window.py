@@ -200,8 +200,8 @@ class MainWindow(QMainWindow):
         #-------------------------------------------
         #triggers for mid panel (schedule generator)
 
-        self.limit_btn.clicked.connect(lambda: print("Set Limit clicked"))
-        self.optimize_btn.clicked.connect(lambda: print("Toggle Optimization clicked"))
+        self.limit_btn.clicked.connect(lambda: self.gen_manager.set_limit(self))
+        self.optimize_btn.clicked.connect(lambda: self.gen_manager.set_optimize(self))
         self.generate_sc_btn.clicked.connect(lambda: print("Generate Schedules clicked"))
         #-------------------------------------------
         #triggers for right panel (schedule viewer)
