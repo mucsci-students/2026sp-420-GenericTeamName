@@ -203,8 +203,8 @@ class MainWindow(QMainWindow):
         #-------------------------------------------
         #triggers for right panel (schedule viewer)
 
-        self.view_sc_btn.clicked.connect(lambda: print("View Schedules clicked"))
-        self.export_sc_btn.clicked.connect(lambda: print("Export Schedules clicked"))
+        self.view_sc_btn.clicked.connect(self.handle_view_schedule)
+        self.export_sc_btn.clicked.connect(self.handle_export_schedule)
         self.import_sc_btn.clicked.connect(lambda: print("Import Schedules clicked"))
 
     #----------------------------------------------------------
@@ -250,6 +250,53 @@ class MainWindow(QMainWindow):
         msg.setFont(font)
 
         msg.exec()
+
+    def handle_view_schedule(self):
+        """Fetches generated schedule and displays it as a spreadsheet."""
+        # TODO: CHANGE THIS TO TAKE INPUT FROM SCHEDULE GEN
+        mock_schedule = [
+            {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
+            {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
+            {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
+            {'course_id': 'CS202', 'day': 'Thu', 'time': '13:00'},
+        ]
+
+        spreadsheet = self.config_mgr.get_schedule_spreadsheet(mock_schedule)
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Weekly Schedule Spreadsheet")
+        msg.setText(spreadsheet)
+
+        mono_font = QFont("Courier New", 10)
+        mono_font.setStyleHint(QFont.StyleHint.Monospace)
+        msg.setFont(mono_font)
+
+        msg.setStyleSheet("QLabel{min-width: 800px;}")
+        msg.exec()
+
+    def handle_export_schedule(self):
+        """Triggers the CSV export via a file dialog."""
+        # TODO: CHANGE THIS TO TAKE INPUT FROM SCHEDULE GEN
+        mock_schedule = [
+            {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
+            {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
+            {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
+        ]
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Schedule", "", "CSV Files (*.csv);;All Files (*)"
+        )
+
+        if file_path:
+            if not file_path.endswith('.csv'):
+                file_path += '.csv'
+
+            success = self.config_mgr.export_schedule_to_csv(mock_schedule, file_path)
+
+            if success:
+                QMessageBox.information(self, "Export Success", f"Schedule exported to:\n{file_path}")
+            else:
+                QMessageBox.critical(self, "Export Failed", "Could not write to the selected file.")
 
     #----------------------------------------------------------
     # Course management handlers (GUI)
