@@ -102,16 +102,10 @@ class MainWindow(QMainWindow):
         #----------------------------------------------------------
 
         self.view_sc_btn = QPushButton("View Schedules")
-        self.view_by_faculty_btn = QPushButton("View by Faculty")
-        self.view_by_room_btn = QPushButton("View by Room")
-        self.view_by_lab_btn = QPushButton("View by Lab")
-        self.export_sc_btn = QPushButton("Export to CSV")
+        self.export_sc_btn = QPushButton("Export Schedules")
         self.import_sc_btn = QPushButton("Import Schedules")
 
         self.sc_viewer_layout.addWidget(self.view_sc_btn)
-        self.sc_viewer_layout.addWidget(self.view_by_faculty_btn)
-        self.sc_viewer_layout.addWidget(self.view_by_room_btn)
-        self.sc_viewer_layout.addWidget(self.view_by_lab_btn)
         self.sc_viewer_layout.addWidget(self.export_sc_btn)
         self.sc_viewer_layout.addWidget(self.import_sc_btn)
         self.sc_viewer_layout.addStretch()
@@ -215,10 +209,7 @@ class MainWindow(QMainWindow):
         #-------------------------------------------
         #triggers for right panel (schedule viewer)
 
-        self.view_sc_btn.clicked.connect(self.handle_view_grid)
-        self.view_by_faculty_btn.clicked.connect(lambda: self.handle_view_grouped("faculty"))
-        self.view_by_room_btn.clicked.connect(lambda: self.handle_view_grouped("room"))
-        self.view_by_lab_btn.clicked.connect(lambda: self.handle_view_grouped("lab"))
+        self.view_sc_btn.clicked.connect(self.handle_view_schedule)
         self.export_sc_btn.clicked.connect(self.handle_export_schedule)
         self.import_sc_btn.clicked.connect(lambda: print("Import Schedules clicked"))
 
@@ -266,44 +257,52 @@ class MainWindow(QMainWindow):
 
         msg.exec()
 
-    def handle_view_grid(self):
-        """Displays the traditional week-view spreadsheet grid."""
-        data = self.get_active_schedule()
-        output = self.config_mgr.get_schedule_spreadsheet(data)
-        self._show_tabulated_msg("Weekly Schedule Grid", output)
+    def handle_view_schedule(self):
+        """Fetches generated schedule and displays it as a spreadsheet."""
+        # TODO: CHANGE THIS TO TAKE INPUT FROM SCHEDULE GEN
+        mock_schedule = [
+            {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
+            {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
+            {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
+            {'course_id': 'CS202', 'day': 'Thu', 'time': '13:00'},
+        ]
 
-    def handle_view_grouped(self, key):
-        """Displays the schedule list grouped by faculty, room, or lab."""
-        data = self.get_active_schedule()
-        output = self.config_mgr.get_grouped_schedule_text(data, key)
-        self._show_tabulated_msg(f"Schedule Grouped by {key.capitalize()}", output)
+        spreadsheet = self.config_mgr.get_schedule_spreadsheet(mock_schedule)
 
-    def handle_export_schedule(self):
-        """Exports the active schedule to a CSV file."""
-        data = self.get_active_schedule()
-        file_path, _ = QFileDialog.getSaveFileName(self, "Export CSV", "", "CSV (*.csv)")
-        if file_path:
-            if not file_path.endswith('.csv'): file_path += '.csv'
-            if self.config_mgr.export_schedule_to_csv(data, file_path):
-                QMessageBox.information(self, "Success", "Export Complete.")
-
-    def _show_tabulated_msg(self, title, text):
-        """Private helper to ensure monospaced font is used for all tables."""
         msg = QMessageBox(self)
-        msg.setWindowTitle(title)
-        msg.setText(text)
+        msg.setWindowTitle("Weekly Schedule Spreadsheet")
+        msg.setText(spreadsheet)
+
         mono_font = QFont("Courier New", 10)
         mono_font.setStyleHint(QFont.StyleHint.Monospace)
         msg.setFont(mono_font)
+
+        msg.setStyleSheet("QLabel{min-width: 800px;}")
         msg.exec()
 
-    def get_active_schedule(self):
-        """Mock data fetcher (Replace with your generator logic later)."""
-        # TODO ^
-        return [
-            {'course_id': 'CS420', 'faculty': 'Dr. Smith', 'room': 'Roddy 101', 'lab': 'N/A', 'day': 'Mon', 'time': '09:00'},
-            {'course_id': 'BIO101', 'faculty': 'Dr. Jones', 'room': 'Caputo 210', 'lab': 'Lab A', 'day': 'Tue', 'time': '10:00'}
+    def handle_export_schedule(self):
+        """Triggers the CSV export via a file dialog."""
+        # TODO: CHANGE THIS TO TAKE INPUT FROM SCHEDULE GEN
+        mock_schedule = [
+            {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
+            {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
+            {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
         ]
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Schedule", "", "CSV Files (*.csv);;All Files (*)"
+        )
+
+        if file_path:
+            if not file_path.endswith('.csv'):
+                file_path += '.csv'
+
+            success = self.config_mgr.export_schedule_to_csv(mock_schedule, file_path)
+
+            if success:
+                QMessageBox.information(self, "Export Success", f"Schedule exported to:\n{file_path}")
+            else:
+                QMessageBox.critical(self, "Export Failed", "Could not write to the selected file.")
 
     #----------------------------------------------------------
     # Course management handlers (GUI)
