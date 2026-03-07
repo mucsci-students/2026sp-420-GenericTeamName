@@ -10,7 +10,7 @@ import sys
 import csv
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from common import prompt, prompt_int
 
@@ -160,6 +160,95 @@ class Run:
             print(e)
         print("\n(To see a generated schedule, run the scheduler first and open the output file.)")
 
+    def _load_schedule_from_file(self, path: Path) -> Optional[List[dict[str, Any]]]:
+        """Load schedule from CSV or JSON; return list of {course_id, day, time} or None."""
+        path = Path(path)
+        if not path.exists():
+            print(f"File not found: {path}")
+            return None
+        suffix = path.suffix.lower()
+        try:
+            if suffix == ".json":
+                with open(path, encoding="utf-8") as f:
+                    data = json.load(f)
+                if not isinstance(data, list) or not data:
+                    return [] if data == [] else None
+                first = data[0]
+                if isinstance(first, dict):
+                    out = []
+                    for item in data:
+                        cid, day, t = item.get("course_id"), item.get("day"), item.get("time")
+                        if cid is not None and day is not None and t is not None:
+                            out.append({"course_id": str(cid), "day": str(day), "time": str(t)})
+                    return out
+                if isinstance(first, list):
+                    out = []
+                    for item in first:
+                        if not isinstance(item, dict):
+                            continue
+                        cid, day, t = item.get("course_id"), item.get("day"), item.get("time")
+                        if cid is not None and day is not None and t is not None:
+                            out.append({"course_id": str(cid), "day": str(day), "time": str(t)})
+                    return out
+                return None
+            if suffix == ".csv":
+                days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+                out = []
+                with open(path, encoding="utf-8", newline="") as f:
+                    reader = csv.reader(f)
+                    header = next(reader, None)
+                    if not header:
+                        return []
+                    time_col = 0
+                    day_cols = {}
+                    for i, cell in enumerate(header):
+                        cell = (cell or "").strip()
+                        if i == 0 and cell.upper() == "TIME":
+                            continue
+                        if cell in days:
+                            day_cols[i] = cell
+                    if not day_cols and len(header) >= 6:
+                        for j, d in enumerate(days):
+                            if j + 1 < len(header):
+                                day_cols[j + 1] = d
+                    for row in reader:
+                        if not row:
+                            continue
+                        time_slot = row[time_col].strip() if time_col < len(row) else ""
+                        for col_idx, day in day_cols.items():
+                            if col_idx < len(row) and row[col_idx].strip():
+                                out.append({
+                                    "course_id": row[col_idx].strip(),
+                                    "day": day,
+                                    "time": time_slot,
+                                })
+                return out
+        except Exception as e:
+            print(f"Import error: {e}")
+            return None
+        print("Unsupported format. Use .csv or .json.")
+        return None
+
+    def import_schedule(self) -> None:
+        """Prompt for a schedule file path and print the imported schedule."""
+        raw = prompt("Schedule file path (CSV or JSON)", "").strip()
+        if not raw:
+            return
+        path = Path(raw)
+        if not path.is_absolute() and (self.config_path or self.default_config_path).exists():
+            path = (self.config_path or self.default_config_path).parent / path
+        schedule = self._load_schedule_from_file(path)
+        if schedule is None:
+            print("Could not load schedule from file.")
+            return
+        if not schedule:
+            print("No assignments found in file.")
+            return
+        print(f"\n--- Imported schedule ({len(schedule)} assignment(s)) ---")
+        for a in schedule:
+            print(f"  {a['course_id']}  {a['day']}  {a['time']}")
+        print("---")
+
     def run_scheduler_menu(self) -> None:
         """Show Run/display schedule submenu. Does not return a dirty flag."""
         while True:
@@ -172,7 +261,8 @@ class Run:
                 "5) Specify whether to optimize schedules\n"
                 "6) Run scheduler\n"
                 "7) Display schedule / config summary\n"
-                "8) Back to main menu\n"
+                "8) Import schedule from file (CSV or JSON)\n"
+                "9) Back to main menu\n"
             )
             choice = prompt("Choose an option", "")
             if choice == "1":
@@ -190,6 +280,8 @@ class Run:
             elif choice == "7":
                 self.display_schedule()
             elif choice == "8":
-                return 
+                self.import_schedule()
+            elif choice == "9":
+                return
             else:
-                print("Invalid choice. Please enter 1–8.")
+                print("Invalid choice. Please enter 1–9.")
