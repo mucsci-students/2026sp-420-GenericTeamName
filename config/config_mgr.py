@@ -100,6 +100,49 @@ class ConfigManager:
 
         return "\n".join(lines)
 
+    def get_grouped_schedule_text(self, schedule_data, group_by_key="faculty"):
+        """
+        Returns a tabulated string of the schedule sorted by a specific attribute.
+        group_by_key: 'faculty', 'room', or 'lab'
+        """
+        if not schedule_data:
+            return "No schedule data to display."
+
+        # Label mapping for headers
+        labels = {
+            "faculty": "FACULTY",
+            "room": "ROOM",
+            "lab": "LAB/EQUIP"
+        }
+        display_label = labels.get(group_by_key, group_by_key.upper())
+
+        # Sort the data by the chosen key
+        sorted_data = sorted(schedule_data, key=lambda x: str(x.get(group_by_key, 'Unassigned')))
+
+        # Calculate dynamic widths
+        max_group_len = max([len(str(x.get(group_by_key, 'Unassigned'))) for x in sorted_data] + [len(display_label)])
+        max_c_len = max([len(str(x.get('course_id', 'N/A'))) for x in sorted_data] + [12])
+
+        g_width = max_group_len + 2
+        c_width = max_c_len + 2
+
+        # Build Header
+        header = f"{display_label:<{g_width}} | {'COURSE ID':<{c_width}} | {'DAY':<6} | {'TIME':<8}"
+        divider = "-" * len(header)
+        lines = [divider, header, divider]
+
+        # Build Rows
+        for item in sorted_data:
+            group_val = item.get(group_by_key, 'Unassigned')
+            cid = item.get('course_id', 'N/A')
+            day = item.get('day', 'N/A')
+            time = item.get('time', 'N/A')
+
+            lines.append(f"{group_val:<{g_width}} | {cid:<{c_width}} | {day:<6} | {time:<8}")
+
+        lines.append(divider)
+        return "\n".join(lines)
+
     def export_schedule_to_csv(self, schedule_data, filename="schedule.csv"):
         """Exports the schedule grid to a CSV file."""
         days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
