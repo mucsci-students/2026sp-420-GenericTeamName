@@ -14,6 +14,7 @@ from .course_gui import CourseConfigManager
 from .room_gui import RoomConfigManager
 from config.config_mgr import ConfigManager
 from .generator_gui import GenConfigManager
+from .lab_gui import LabConfigManager
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -24,13 +25,17 @@ class MainWindow(QMainWindow):
         # Initialize with a default
         self.config_mgr = ConfigManager("config/config.json")
 
-        # Course management helper (loads/saves JSON config courses)
+        
+        #Management helpers:
+        #---------------------------------------------------------------------------
         self.course_manager = CourseConfigManager()
-        # Room management helper 
         self.room_manager = RoomConfigManager()
+
         # Schedule Generator helper
         self.gen_manager = GenConfigManager()
-
+        self.lab_manager = LabConfigManager()
+        
+        #---------------------------------------------------------------------------
         #most important function, along with "menu_widgets.py" class.
         self.init_menus()
 
@@ -190,13 +195,15 @@ class MainWindow(QMainWindow):
         del_rooms_ac.triggered.connect(lambda: self.room_manager.delete_room_via_dialog(self))
 
         #labs:
-        add_labs_ac.triggered.connect(lambda: print("Add Labs clicked"))
-        mod_labs_ac.triggered.connect(lambda: print("Modify Labs clicked"))
-        del_labs_ac.triggered.connect(lambda: print("Delete Labs clicked"))
+        add_labs_ac.triggered.connect(lambda: self.lab_manager.add_lab_via_dialog(self))
+        mod_labs_ac.triggered.connect(lambda: self.lab_manager.modify_lab_via_dialog(self))
+        del_labs_ac.triggered.connect(lambda: self.lab_manager.delete_lab_via_dialog(self))
 
+        #config-management:
         self.change_path_btn.clicked.connect(self.handle_change_path)
         self.view_sum_btn.clicked.connect(self.handle_view_summary)
         self.save_config_btn.clicked.connect(self.handle_save_config)
+        
         #-------------------------------------------
         #triggers for mid panel (schedule generator)
 
@@ -206,8 +213,8 @@ class MainWindow(QMainWindow):
         #-------------------------------------------
         #triggers for right panel (schedule viewer)
 
-        self.view_sc_btn.clicked.connect(lambda: print("View Schedules clicked"))
-        self.export_sc_btn.clicked.connect(lambda: print("Export Schedules clicked"))
+        self.view_sc_btn.clicked.connect(self.handle_view_schedule)
+        self.export_sc_btn.clicked.connect(self.handle_export_schedule)
         self.import_sc_btn.clicked.connect(lambda: print("Import Schedules clicked"))
 
     #----------------------------------------------------------
@@ -253,6 +260,53 @@ class MainWindow(QMainWindow):
         msg.setFont(font)
 
         msg.exec()
+
+    def handle_view_schedule(self):
+        """Fetches generated schedule and displays it as a spreadsheet."""
+        # TODO: CHANGE THIS TO TAKE INPUT FROM SCHEDULE GEN
+        mock_schedule = [
+            {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
+            {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
+            {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
+            {'course_id': 'CS202', 'day': 'Thu', 'time': '13:00'},
+        ]
+
+        spreadsheet = self.config_mgr.get_schedule_spreadsheet(mock_schedule)
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Weekly Schedule Spreadsheet")
+        msg.setText(spreadsheet)
+
+        mono_font = QFont("Courier New", 10)
+        mono_font.setStyleHint(QFont.StyleHint.Monospace)
+        msg.setFont(mono_font)
+
+        msg.setStyleSheet("QLabel{min-width: 800px;}")
+        msg.exec()
+
+    def handle_export_schedule(self):
+        """Triggers the CSV export via a file dialog."""
+        # TODO: CHANGE THIS TO TAKE INPUT FROM SCHEDULE GEN
+        mock_schedule = [
+            {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
+            {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
+            {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
+        ]
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Schedule", "", "CSV Files (*.csv);;All Files (*)"
+        )
+
+        if file_path:
+            if not file_path.endswith('.csv'):
+                file_path += '.csv'
+
+            success = self.config_mgr.export_schedule_to_csv(mock_schedule, file_path)
+
+            if success:
+                QMessageBox.information(self, "Export Success", f"Schedule exported to:\n{file_path}")
+            else:
+                QMessageBox.critical(self, "Export Failed", "Could not write to the selected file.")
 
     #----------------------------------------------------------
     # Course management handlers (GUI)
