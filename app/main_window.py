@@ -14,6 +14,7 @@ from .course_gui import CourseConfigManager
 from .room_gui import RoomConfigManager
 from config.config_mgr import ConfigManager
 from .lab_gui import LabConfigManager
+from .generator_gui import GenConfigManager
 
 class MainWindow(QMainWindow):
     def __init__(self):
