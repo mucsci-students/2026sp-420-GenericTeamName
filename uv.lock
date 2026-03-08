@@ -1,11 +1,17 @@
 version = 1
 revision = 3
+<<<<<<< HEAD
+requires-python = ">=3.14"
+=======
 requires-python = ">=3.12"
+>>>>>>> 520d930334f070793416c54c6bf4fd46882aa51c
 
 [[package]]
 name = "2026sp-420-genericteamname"
 version = "0.1.0"
 source = { virtual = "." }
+<<<<<<< HEAD
+=======
 dependencies = [
     { name = "course-constraint-scheduler" },
     { name = "pyqt6" },
@@ -621,3 +627,4 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/75/77/da54076a584557ea34f20800c68f725fe61f1dd987493fcb410b4a26f99f/z3_solver-4.15.3.0-py3-none-win32.whl", hash = "sha256:0c603f6bad7423d6411adda6af55030b725e3d30f54ea91b714abcedd73b848a", size = 13123666, upload-time = "2025-08-16T02:27:33.309Z" },
     { url = "https://files.pythonhosted.org/packages/c1/59/abc1bad8b25e9c576484ba65ca5ed225c8ed24d601ec242712f1c370b693/z3_solver-4.15.3.0-py3-none-win_amd64.whl", hash = "sha256:06abdf6c36f97c463aea827533504fd59476d015a65cf170a88bd6a53ba13ab5", size = 16203065, upload-time = "2025-08-16T02:27:35.763Z" },
 ]
+>>>>>>> 520d930334f070793416c54c6bf4fd46882aa51c

@@ -12,6 +12,7 @@ from PyQt6.QtGui import QAction, QFont
 from .menu_widgets import ContentPanel
 from .course_gui import CourseConfigManager
 from .room_gui import RoomConfigManager
+from .faculty_gui import FacultyManager
 from config.config_mgr import ConfigManager
 from .generator_gui import GenConfigManager
 from .lab_gui import LabConfigManager
@@ -30,8 +31,7 @@ class MainWindow(QMainWindow):
         #---------------------------------------------------------------------------
         self.course_manager = CourseConfigManager()
         self.room_manager = RoomConfigManager()
-
-        # Schedule Generator helper
+        self.faculty_manager = FacultyManager()
         self.gen_manager = GenConfigManager()
         self.lab_manager = LabConfigManager()
         
@@ -171,18 +171,14 @@ class MainWindow(QMainWindow):
 
         #----------------------------------------------------------
         #Action triggers:
-            #note: 
-            # lambdas in here are placeholders.
-            # plz replace with the correct functions.
-
         #-------------------------------------------
         #triggers for left panel (config editor)
         #faculty:
-        add_faculty_ac.triggered.connect(lambda: print("Add Faculty clicked"))
-        mod_faculty_ac.triggered.connect(lambda: print("Modify Faculty clicked"))
-        del_faculty_ac.triggered.connect(lambda: print("Delete Faculty clicked"))
-        ed_faculty_times_ac.triggered.connect(lambda: print("Edit Faculty Available Times clicked"))
-        ed_faculty_pref_ac.triggered.connect(lambda: print("Edit Faculty Preferences clicked"))
+        add_faculty_ac.triggered.connect(lambda: self.faculty_manager.add_faculty_via_dialog(self))
+        mod_faculty_ac.triggered.connect(lambda: self.faculty_manager.modify_faculty_via_dialog(self))
+        del_faculty_ac.triggered.connect(lambda: self.faculty_manager.delete_faculty_via_dialog(self))
+        ed_faculty_times_ac.triggered.connect(lambda: self.faculty_manager.faculty_time_via_dialog(self))
+        ed_faculty_pref_ac.triggered.connect(lambda: self.faculty_manager.faculty_preference(self))
 
         #courses:
         add_courses_ac.triggered.connect(self.handle_add_course)
@@ -215,7 +211,7 @@ class MainWindow(QMainWindow):
 
         self.view_sc_btn.clicked.connect(self.handle_view_schedule)
         self.export_sc_btn.clicked.connect(self.handle_export_schedule)
-        self.import_sc_btn.clicked.connect(lambda: print("Import Schedules clicked"))
+        self.import_sc_btn.clicked.connect(self.handle_import_schedule)
 
     #----------------------------------------------------------
     # Config management handlers (GUI)
@@ -261,17 +257,18 @@ class MainWindow(QMainWindow):
 
         msg.exec()
 
-    def handle_view_schedule(self):
+   def handle_view_schedule(self):
         """Fetches generated schedule and displays it as a spreadsheet."""
-        # TODO: CHANGE THIS TO TAKE INPUT FROM SCHEDULE GEN
-        mock_schedule = [
-            {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
-            {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
-            {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
-            {'course_id': 'CS202', 'day': 'Thu', 'time': '13:00'},
-        ]
+        schedule = self.imported_schedule
+        if not schedule:
+            schedule = [
+                {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
+                {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
+                {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
+                {'course_id': 'CS202', 'day': 'Thu', 'time': '13:00'},
+            ]
 
-        spreadsheet = self.config_mgr.get_schedule_spreadsheet(mock_schedule)
+        spreadsheet = self.config_mgr.get_schedule_spreadsheet(schedule)
 
         msg = QMessageBox(self)
         msg.setWindowTitle("Weekly Schedule Spreadsheet")
@@ -284,14 +281,44 @@ class MainWindow(QMainWindow):
         msg.setStyleSheet("QLabel{min-width: 800px;}")
         msg.exec()
 
+    def handle_import_schedule(self):
+        """Opens a file dialog to import a schedule from CSV or JSON."""
+        file_path, selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import Schedule",
+            "",
+            "CSV Files (*.csv);;JSON Files (*.json);;All Files (*)"
+        )
+        if not file_path:
+            return
+        schedule_data = None
+        if file_path.lower().endswith(".json"):
+            schedule_data = self.config_mgr.import_schedule_from_json(file_path)
+        else:
+            schedule_data = self.config_mgr.import_schedule_from_csv(file_path)
+        if schedule_data is not None:
+            self.imported_schedule = schedule_data
+            QMessageBox.information(
+                self,
+                "Import Success",
+                f"Imported {len(schedule_data)} assignment(s) from:\n{file_path}"
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "Import Failed",
+                "Could not read a valid schedule from the selected file."
+            )
+
     def handle_export_schedule(self):
         """Triggers the CSV export via a file dialog."""
-        # TODO: CHANGE THIS TO TAKE INPUT FROM SCHEDULE GEN
-        mock_schedule = [
-            {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
-            {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
-            {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
-        ]
+        schedule = self.imported_schedule
+        if not schedule:
+            schedule = [
+                {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
+                {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
+                {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
+            ]
 
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Export Schedule", "", "CSV Files (*.csv);;All Files (*)"
@@ -301,7 +328,7 @@ class MainWindow(QMainWindow):
             if not file_path.endswith('.csv'):
                 file_path += '.csv'
 
-            success = self.config_mgr.export_schedule_to_csv(mock_schedule, file_path)
+            success = self.config_mgr.export_schedule_to_csv(schedule, file_path)
 
             if success:
                 QMessageBox.information(self, "Export Success", f"Schedule exported to:\n{file_path}")
