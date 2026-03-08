@@ -13,6 +13,7 @@ from .menu_widgets import ContentPanel
 from .course_gui import CourseConfigManager
 from .room_gui import RoomConfigManager
 from config.config_mgr import ConfigManager
+from .generator_gui import GenConfigManager
 from .lab_gui import LabConfigManager
 
 class MainWindow(QMainWindow):
@@ -29,6 +30,9 @@ class MainWindow(QMainWindow):
         #---------------------------------------------------------------------------
         self.course_manager = CourseConfigManager()
         self.room_manager = RoomConfigManager()
+
+        # Schedule Generator helper
+        self.gen_manager = GenConfigManager()
         self.lab_manager = LabConfigManager()
         
         #---------------------------------------------------------------------------
@@ -203,9 +207,9 @@ class MainWindow(QMainWindow):
         #-------------------------------------------
         #triggers for mid panel (schedule generator)
 
-        self.limit_btn.clicked.connect(lambda: print("Set Limit clicked"))
-        self.optimize_btn.clicked.connect(lambda: print("Toggle Optimization clicked"))
-        self.generate_sc_btn.clicked.connect(lambda: print("Generate Schedules clicked"))
+        self.limit_btn.clicked.connect(lambda: self.gen_manager.set_limit(self))
+        self.optimize_btn.clicked.connect(lambda: self.gen_manager.set_optimize(self))
+        self.generate_sc_btn.clicked.connect(lambda: self.gen_manager.run_scheduler(self))
         #-------------------------------------------
         #triggers for right panel (schedule viewer)
 
