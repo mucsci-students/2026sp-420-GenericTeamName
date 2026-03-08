@@ -2,14 +2,11 @@
     Author: Damion Crawford
     Date: 2 March 2026
     Filename: faculty_gui.py
-    Saving, modifying, removing faculty
+    Faculty management module for scheduler config CLI.
 '''
-
-"""Faculty management module for scheduler config CLI."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -18,10 +15,9 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QInputDialog,
     QMessageBox,
-    QWidget
+    QWidget,
 )
 
-@dataclass
 class FacultyManager:
 
     def __init__(self) -> None:
@@ -46,10 +42,10 @@ class FacultyManager:
                 return False
             self.config_path = Path(filename)
 
-        if not self._config_data:
+        if not self.config_data:
             try:
                 text = self.config_path.read_text(encoding="utf-8")
-                self._config_data = json.loads(text)
+                self.config_data = json.loads(text)
             except FileNotFoundError:
                 QMessageBox.critical(
                     parent,
@@ -57,7 +53,7 @@ class FacultyManager:
                     f"Config file not found:\n{self.config_path}",
                 )
                 self.config_path = None
-                self._config_data = {}
+                self.config_data = {}
                 return False
             except json.JSONDecodeError as e:
                 QMessageBox.critical(
@@ -66,14 +62,14 @@ class FacultyManager:
                     f"Failed to parse JSON:\n{e}",
                 )
                 self.config_path = None
-                self._config_data = {}
+                self.config_data = {}
                 return False
 
         return True
     
 
     def list_faculty(self) -> List[str]:
-        cfg = self._config_data.setdefault("config", {})
+        cfg = self.config_data.setdefault("config", {})
         faculty = cfg.setdefault("faculty", [])
         if not isinstance(faculty, list):
             cfg["faculty"] = []
@@ -84,7 +80,7 @@ class FacultyManager:
             return
         try:
             self.config_path.write_text(
-                json.dumps(self._config_data, indent=2),
+                json.dumps(self.config_data, indent=2),
                 encoding="utf-8"
             )
         except OSError as e:
@@ -146,7 +142,7 @@ class FacultyManager:
         if not self._ensure_config_loaded(parent):
             return
 
-        index, existing = self._select_room(parent)
+        index, existing = self.list_faculty(parent)
         if index is None or existing is None:
             return
 
@@ -203,9 +199,11 @@ class FacultyManager:
 
         if not ok or not text.strip():
             return
-
+    
         faculty = self.list_faculty
-        faculty.time = text.strip()
+        time = text.strip()
+
+        
         self.save(parent)
 
 

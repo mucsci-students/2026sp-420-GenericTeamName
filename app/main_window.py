@@ -176,7 +176,7 @@ class MainWindow(QMainWindow):
         #faculty:
         add_faculty_ac.triggered.connect(lambda: self.faculty_manager.add_faculty_via_dialog(self))
         mod_faculty_ac.triggered.connect(lambda: self.faculty_manager.modify_faculty_via_dialog(self))
-        del_faculty_ac.triggered.connect(lambda: self.faculty_manager.delete_faculty_via dialog(self))
+        del_faculty_ac.triggered.connect(lambda: self.faculty_manager.delete_faculty_via_dialog(self))
         ed_faculty_times_ac.triggered.connect(lambda: self.faculty_manager.faculty_time_via_dialog(self))
         ed_faculty_pref_ac.triggered.connect(lambda: self.faculty_manager.faculty_preference(self))
 

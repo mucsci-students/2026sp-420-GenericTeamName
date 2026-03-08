@@ -3,13 +3,5 @@ name = "2026sp-420-genericteamname"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-<<<<<<< HEAD
 requires-python = ">=3.14"
 dependencies = []
-=======
-requires-python = ">=3.12"
-dependencies = [
-    "course-constraint-scheduler>=2.6.1",
-    "pyqt6>=6.10.2",
-]
->>>>>>> 520d930334f070793416c54c6bf4fd46882aa51c
