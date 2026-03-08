@@ -33,43 +33,27 @@ class GenConfigManager:
 
     def _ensure_config_loaded(self, parent: QWidget) -> bool:
         """
-        Ensure a config file is loaded.
-        If none is loaded yet, prompt the user to choose one.
+        Use the config file selected via the Change Config File button.
         """
-        if self.config_path is None:
-            filename, _ = QFileDialog.getOpenFileName(
+        config_mgr = getattr(parent, "config_mgr", None)
+        if config_mgr is None or not getattr(config_mgr, "filepath", None):
+            QMessageBox.warning(
                 parent,
-                "Select Scheduler Config JSON",
-                "",
-                "JSON Files (*.json);;All Files (*)",
+                "No Config",
+                "Please select a config file first using the Change Config File button."
             )
-            if not filename:
-                return False
-            self.config_path = Path(filename)
-
-        if not self._config_data:
-            try:
-                text = self.config_path.read_text(encoding="utf-8")
-                self._config_data = json.loads(text)
-            except FileNotFoundError:
-                QMessageBox.critical(
-                    parent,
-                    "Config not found",
-                    f"Config file not found:\n{self.config_path}",
-                )
-                self.config_path = None
-                self._config_data = {}
-                return False
-            except json.JSONDecodeError as e:
-                QMessageBox.critical(
-                    parent,
-                    "Invalid JSON",
-                    f"Failed to parse JSON:\n{e}",
-                )
-                self.config_path = None
-                self._config_data = {}
-                return False
-
+            return False
+        try:
+            config_mgr.load()
+        except Exception as e:
+            QMessageBox.critical(
+                parent,
+                "Config Error",
+                f"Could not load config:\n{e}",
+            )
+            return False
+        self.config_path = Path(config_mgr.filepath)
+        self._config_data = config_mgr.data
         return True
     
     def _save(self, parent: QWidget) -> None:
@@ -97,7 +81,6 @@ class GenConfigManager:
 
     #modify the limit variable in the config file.
     def set_limit(self, parent: QWidget) -> None:
-        
         if not self._ensure_config_loaded(parent):
             return
 
@@ -115,7 +98,12 @@ class GenConfigManager:
 
         try:
             self._config_data["limit"] = int(text.strip())
-            self._save(parent)
+            config_mgr = getattr(parent, "config_mgr", None)
+            if config_mgr:
+                config_mgr.data = self._config_data
+                config_mgr.save()
+            else:
+                self._save(parent)
         except ValueError:
             QMessageBox.warning(parent, "Invalid Input", "Please enter a valid number.")
 
@@ -140,17 +128,21 @@ class GenConfigManager:
         )
 
         if ok:
-
             if text == "True":
                 self._config_data["optimizer_flags"] = full_flags
             else:
                 self._config_data["optimizer_flags"] = []
-            
-            self._save(parent)
+
+            config_mgr = getattr(parent, "config_mgr", None)
+            if config_mgr:
+                config_mgr.data = self._config_data
+                config_mgr.save()
+            else:
+                self._save(parent)
 
     #the generate schedules option.
     def run_scheduler(self, parent: QWidget) -> None:
-        """Runs the scheduler, saves results to new specified json file."""
+        """Runs the scheduler and displays results in Schedule Viewer. Use Export to save to file."""
         if not self._ensure_config_loaded(parent):
             return
 
@@ -161,50 +153,52 @@ class GenConfigManager:
             QMessageBox.critical(parent, "Import Error", "Scheduler package not found.")
             return
 
-        #Load Scheduler
         try:
             path_str = str(self.config_path.resolve())
             config = load_config_from_file(CombinedConfig, path_str)
             scheduler = Scheduler(config)
-            
-            #generates up to this many schedules
+
             limit = self._config_data.get("limit", 2)
-            schedules = []
+            raw_schedules = []
 
             for index, schedule in enumerate(scheduler.get_models()):
                 if index >= limit:
                     break
-                schedules.append(schedule)
-            
-            if not schedules:
+                raw_schedules.append(schedule)
+
+            if not raw_schedules:
                 QMessageBox.warning(parent, "No Results", "No schedules were generated.")
                 return
 
-            #Prompt for new file location
-            default_name = str(self.config_path.parent / "results.json")
-            save_path, _ = QFileDialog.getSaveFileName(
-                parent, "Save Generated Schedules", default_name, "JSON Files (*.json)"
-            )
-            
-            if not save_path:
+            # Convert to viewer format using parent's config_mgr
+            config_mgr = getattr(parent, "config_mgr", None)
+            if config_mgr is None:
+                QMessageBox.critical(parent, "Config Error", "Config manager not available.")
                 return
 
-            #Convert objects
             def course_to_dict(c: Any) -> Any:
-                if hasattr(c, "model_dump"): return c.model_dump()
-                if hasattr(c, "as_dict"): return c.as_dict()
-                if hasattr(c, "__dict__"): return c.__dict__
+                if hasattr(c, "model_dump"):
+                    return c.model_dump()
+                if hasattr(c, "as_dict"):
+                    return c.as_dict()
+                if hasattr(c, "__dict__"):
+                    return c.__dict__
                 return str(c)
 
-            out_data = [[course_to_dict(c) for c in sched] for sched in schedules]
-            
-            out_path = Path(save_path)
-            out_path.write_text(json.dumps(out_data, indent=2), encoding="utf-8")
-            
+            viewer_schedules = []
+            for sched in raw_schedules:
+                sched_dicts = [course_to_dict(c) for c in sched]
+                viewer_format = config_mgr.scheduler_output_to_viewer_format(sched_dicts)
+                viewer_schedules.append(viewer_format)
+
+            # Store in parent for Schedule Viewer
+            parent.schedules = parent.schedules + viewer_schedules
+            parent.current_schedule_index = len(parent.schedules) - len(viewer_schedules)
+
             QMessageBox.information(
-                parent, "Success", 
-                f"Generated {len(schedules)} schedules.\nSaved to: {out_path.name}"
+                parent, "Success",
+                f"Generated {len(viewer_schedules)} schedule(s). View them in Schedule Viewer. Use Export to save to file."
             )
 
         except Exception as e:
-            QMessageBox.critical(parent, "Scheduler Error", f"Execution or Save failed:\n{e}")
+            QMessageBox.critical(parent, "Scheduler Error", f"Execution failed:\n{e}")
