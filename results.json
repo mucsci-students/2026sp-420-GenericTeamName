@@ -1,0 +1,397 @@
+[
+  [
+    {
+      "faculty": "Hardy",
+      "room": "Roddy 147",
+      "lab": null,
+      "course_str": "CMSC 140.01",
+      "times": [
+        {
+          "day": 1,
+          "start": 660,
+          "duration": 50
+        },
+        {
+          "day": 4,
+          "start": 600,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 660,
+          "duration": 50
+        }
+      ],
+      "lab_index": null
+    },
+    {
+      "faculty": "Hardy",
+      "room": "Roddy 147",
+      "lab": null,
+      "course_str": "CMSC 140.02",
+      "times": [
+        {
+          "day": 1,
+          "start": 720,
+          "duration": 50
+        },
+        {
+          "day": 3,
+          "start": 720,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 720,
+          "duration": 50
+        }
+      ],
+      "lab_index": null
+    },
+    {
+      "faculty": "Hardy",
+      "room": "Roddy 147",
+      "lab": "Mac",
+      "course_str": "CMSC 152.01",
+      "times": [
+        {
+          "day": 1,
+          "start": 540,
+          "duration": 50
+        },
+        {
+          "day": 3,
+          "start": 540,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 540,
+          "duration": 50
+        }
+      ],
+      "lab_index": 1
+    },
+    {
+      "faculty": "Zoppetti",
+      "room": "Roddy 136",
+      "lab": "Linux",
+      "course_str": "CMSC 161.01",
+      "times": [
+        {
+          "day": 1,
+          "start": 900,
+          "duration": 50
+        },
+        {
+          "day": 4,
+          "start": 850,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 900,
+          "duration": 50
+        }
+      ],
+      "lab_index": 1
+    },
+    {
+      "faculty": "Wertz",
+      "room": "Roddy 147",
+      "lab": "Linux",
+      "course_str": "CMSC 161.02",
+      "times": [
+        {
+          "day": 2,
+          "start": 480,
+          "duration": 110
+        },
+        {
+          "day": 4,
+          "start": 480,
+          "duration": 110
+        }
+      ],
+      "lab_index": 0
+    },
+    {
+      "faculty": "Rogers",
+      "room": "Roddy 136",
+      "lab": "Linux",
+      "course_str": "CMSC 161.03",
+      "times": [
+        {
+          "day": 1,
+          "start": 1020,
+          "duration": 110
+        },
+        {
+          "day": 3,
+          "start": 1020,
+          "duration": 110
+        }
+      ],
+      "lab_index": 0
+    },
+    {
+      "faculty": "Hogg",
+      "room": "Roddy 140",
+      "lab": "Linux",
+      "course_str": "CMSC 162.01",
+      "times": [
+        {
+          "day": 1,
+          "start": 540,
+          "duration": 50
+        },
+        {
+          "day": 3,
+          "start": 540,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 540,
+          "duration": 50
+        }
+      ],
+      "lab_index": 1
+    },
+    {
+      "faculty": "Xie",
+      "room": "Roddy 147",
+      "lab": "Mac",
+      "course_str": "CMSC 330.01",
+      "times": [
+        {
+          "day": 1,
+          "start": 600,
+          "duration": 50
+        },
+        {
+          "day": 2,
+          "start": 600,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 600,
+          "duration": 50
+        }
+      ],
+      "lab_index": 1
+    },
+    {
+      "faculty": "Yang",
+      "room": "Roddy 136",
+      "lab": "Linux",
+      "course_str": "CMSC 340.01",
+      "times": [
+        {
+          "day": 1,
+          "start": 840,
+          "duration": 50
+        },
+        {
+          "day": 2,
+          "start": 790,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 840,
+          "duration": 50
+        }
+      ],
+      "lab_index": 1
+    },
+    {
+      "faculty": "Yang",
+      "room": "Roddy 136",
+      "lab": "Linux",
+      "course_str": "CMSC 340.02",
+      "times": [
+        {
+          "day": 1,
+          "start": 960,
+          "duration": 50
+        },
+        {
+          "day": 2,
+          "start": 910,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 960,
+          "duration": 50
+        }
+      ],
+      "lab_index": 1
+    },
+    {
+      "faculty": "Zoppetti",
+      "room": "Roddy 136",
+      "lab": "Linux",
+      "course_str": "CMSC 362.01",
+      "times": [
+        {
+          "day": 1,
+          "start": 660,
+          "duration": 50
+        },
+        {
+          "day": 4,
+          "start": 600,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 660,
+          "duration": 50
+        }
+      ],
+      "lab_index": 1
+    },
+    {
+      "faculty": "Xie",
+      "room": "Roddy 140",
+      "lab": "Mac",
+      "course_str": "CMSC 366.01",
+      "times": [
+        {
+          "day": 1,
+          "start": 780,
+          "duration": 50
+        },
+        {
+          "day": 3,
+          "start": 780,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 780,
+          "duration": 50
+        }
+      ],
+      "lab_index": 1
+    },
+    {
+      "faculty": "Xie",
+      "room": "Roddy 140",
+      "lab": "Mac",
+      "course_str": "CMSC 366.02",
+      "times": [
+        {
+          "day": 1,
+          "start": 720,
+          "duration": 50
+        },
+        {
+          "day": 3,
+          "start": 660,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 720,
+          "duration": 50
+        }
+      ],
+      "lab_index": 1
+    },
+    {
+      "faculty": "Hogg",
+      "room": "Roddy 140",
+      "lab": "Linux",
+      "course_str": "CMSC 380.01",
+      "times": [
+        {
+          "day": 1,
+          "start": 660,
+          "duration": 50
+        },
+        {
+          "day": 2,
+          "start": 600,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 660,
+          "duration": 50
+        }
+      ],
+      "lab_index": 1
+    },
+    {
+      "faculty": "Hobbs",
+      "room": "Roddy 140",
+      "lab": "Mac",
+      "course_str": "CMSC 420.01",
+      "times": [
+        {
+          "day": 1,
+          "start": 960,
+          "duration": 110
+        },
+        {
+          "day": 3,
+          "start": 960,
+          "duration": 110
+        }
+      ],
+      "lab_index": 0
+    },
+    {
+      "faculty": "Yang",
+      "room": "Roddy 136",
+      "lab": "Linux",
+      "course_str": "CMSC 453.01",
+      "times": [
+        {
+          "day": 1,
+          "start": 720,
+          "duration": 50
+        },
+        {
+          "day": 3,
+          "start": 660,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 720,
+          "duration": 50
+        }
+      ],
+      "lab_index": 1
+    },
+    {
+      "faculty": "Zoppetti",
+      "room": "Roddy 136",
+      "lab": "Linux",
+      "course_str": "CMSC 476.01",
+      "times": [
+        {
+          "day": 1,
+          "start": 780,
+          "duration": 50
+        },
+        {
+          "day": 3,
+          "start": 780,
+          "duration": 110
+        },
+        {
+          "day": 5,
+          "start": 780,
+          "duration": 50
+        }
+      ],
+      "lab_index": 1
+    }
+  ]
+]
