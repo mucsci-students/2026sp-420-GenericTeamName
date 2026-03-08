@@ -22,13 +22,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Scheduler Program - GenericTeamName")
         self.resize(900, 600)
-        # Dark theme
-        self.setStyleSheet(
-            "QMainWindow, QWidget { background-color: #000000; } "
-            "QPushButton { background-color: #333; color: #e0e0e0; border: 1px solid #555; } "
-            "QPushButton:hover { background-color: #444; } "
-            "QPushButton:disabled { background-color: #222; color: #888; } "
-        )
+        self.dark_mode = True
 
         # Initialize with a default
         self.config_mgr = ConfigManager("config/config.json")
@@ -54,7 +48,27 @@ class MainWindow(QMainWindow):
 
         #most important function, along with "menu_widgets.py" class.
         self.init_menus()
+        self.apply_theme()
 
+    def apply_theme(self) -> None:
+        if self.dark_mode:
+            self.setStyleSheet(
+                "QMainWindow, QWidget { background-color: #000000; } "
+                "QPushButton { background-color: #333; color: #e0e0e0; border: 1px solid #555; } "
+                "QPushButton:hover { background-color: #444; } "
+                "QPushButton:disabled { background-color: #222; color: #888; } "
+            )
+            self.theme_toggle_btn.setText("☀ Light")
+        else:
+            self.setStyleSheet(
+                "QMainWindow, QWidget { background-color: #f0f0f0; } "
+                "QPushButton { background-color: #e0e0e0; color: #333; border: 1px solid #bdc3c7; } "
+                "QPushButton:hover { background-color: #d0d0d0; } "
+                "QPushButton:disabled { background-color: #eee; color: #888; } "
+            )
+            self.theme_toggle_btn.setText("🌙 Dark")
+        for panel in (self.left_panel, self.mid_panel, self.right_panel):
+            panel.set_theme(self.dark_mode)
 
 #__init__ ends here ------------------------------------------------------------------
 
@@ -62,6 +76,10 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         menu.addAction("Reset Layout").triggered.connect(self.reset_layout)
         menu.exec(self.splitter.mapToGlobal(position))
+
+    def toggle_theme(self) -> None:
+        self.dark_mode = not self.dark_mode
+        self.apply_theme()
 
     def reset_layout(self):
         total_width = sum(self.splitter.sizes())
@@ -91,6 +109,11 @@ class MainWindow(QMainWindow):
         self.course_btn = QPushButton("Courses")
         self.room_btn = QPushButton("Rooms")
         self.lab_btn = QPushButton("Labs")
+        self.theme_toggle_btn = QPushButton("☀ Light")
+        self.theme_toggle_btn.clicked.connect(self.toggle_theme)
+        self.theme_toggle_btn.setMaximumWidth(100)
+        self.theme_toggle_btn.setMaximumHeight(28)
+        self.theme_toggle_btn.setFont(QFont("", 9))
         self.change_path_btn = QPushButton("Change Config File")
         self.config_btn_layout.addWidget(self.change_path_btn)
         self.view_sum_btn = QPushButton("View Config Summary")
@@ -104,6 +127,7 @@ class MainWindow(QMainWindow):
         self.config_btn_layout.addWidget(self.view_sum_btn)
         self.config_btn_layout.addWidget(self.save_config_btn)
         self.config_btn_layout.addStretch()
+        self.config_btn_layout.addWidget(self.theme_toggle_btn)
 
         #----------------------------------------------------------
         #Mid-Panel (Schedule Generator)
