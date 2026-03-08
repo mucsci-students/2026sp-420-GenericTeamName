@@ -808,6 +808,13 @@
       }
     ]
   },
-  "limit": 10,
-  "optimizer_flags": []
+  "limit": 5,
+  "optimizer_flags": [
+    "faculty_course",
+    "faculty_room",
+    "faculty_lab",
+    "same_room",
+    "same_lab",
+    "pack_rooms"
+  ]
 }
