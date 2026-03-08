@@ -1,5 +1,9 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 3.9
 =======
 3.12
 >>>>>>> origin/cli
+=======
+3.14
+>>>>>>> 0b1fd2a (Working on fixing pyproject.toml to include scheduler repo dependency.)
