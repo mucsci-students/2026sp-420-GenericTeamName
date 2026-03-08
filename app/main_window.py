@@ -36,8 +36,17 @@ class MainWindow(QMainWindow):
         self.lab_manager = LabConfigManager()
         
         #---------------------------------------------------------------------------
+        self.schedules = []
+        self.current_schedule_index = 0
+
         #most important function, along with "menu_widgets.py" class.
         self.init_menus()
+        # used for testing right now when switching between schedules after clicking "View Schedules"
+        self.schedules = [
+            ["CS101", "MATH201"],
+            ["CS102", "PHYS202"],
+            ["CS103", "BIO210"]
+]
 
 
 #__init__ ends here ------------------------------------------------------------------
@@ -76,7 +85,7 @@ class MainWindow(QMainWindow):
         self.room_btn = QPushButton("Rooms")
         self.lab_btn = QPushButton("Labs")
         self.change_path_btn = QPushButton("Change Config File")
-        self.config_btn_layout.insertWidget(4, self.change_path_btn) #would like to look at this further. could reduce lines of code?
+        self.config_btn_layout.addWidget(self.change_path_btn)
         self.view_sum_btn = QPushButton("View Config Summary")
         self.save_config_btn = QPushButton("Save Config")
 
@@ -208,8 +217,7 @@ class MainWindow(QMainWindow):
         self.generate_sc_btn.clicked.connect(lambda: self.gen_manager.run_scheduler(self))
         #-------------------------------------------
         #triggers for right panel (schedule viewer)
-
-        self.view_sc_btn.clicked.connect(self.handle_view_schedule)
+        self.view_sc_btn.clicked.connect(self.open_schedule_viewer)
         self.export_sc_btn.clicked.connect(self.handle_export_schedule)
         self.import_sc_btn.clicked.connect(self.handle_import_schedule)
 
@@ -255,30 +263,6 @@ class MainWindow(QMainWindow):
         font.setStyleHint(QFont.StyleHint.Monospace)
         msg.setFont(font)
 
-        msg.exec()
-
-   def handle_view_schedule(self):
-        """Fetches generated schedule and displays it as a spreadsheet."""
-        schedule = self.imported_schedule
-        if not schedule:
-            schedule = [
-                {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
-                {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
-                {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
-                {'course_id': 'CS202', 'day': 'Thu', 'time': '13:00'},
-            ]
-
-        spreadsheet = self.config_mgr.get_schedule_spreadsheet(schedule)
-
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Weekly Schedule Spreadsheet")
-        msg.setText(spreadsheet)
-
-        mono_font = QFont("Courier New", 10)
-        mono_font.setStyleHint(QFont.StyleHint.Monospace)
-        msg.setFont(mono_font)
-
-        msg.setStyleSheet("QLabel{min-width: 800px;}")
         msg.exec()
 
     def handle_import_schedule(self):
@@ -351,4 +335,72 @@ class MainWindow(QMainWindow):
         """Delete an existing course via dialogs."""
         self.course_manager.delete_course_via_dialog(self)
 
+    #----------------------------------------------------------
+    # Schedule Viewer Functions
+    #----------------------------------------------------------
+
+    def open_schedule_viewer(self):
+        if not self.schedules:
+            QMessageBox.warning(self, "No schedules", "No schedules loaded.")
+            return
+
+        self.viewer = QWidget()
+        self.viewer.setWindowTitle("Schedule Viewer")
+        self.viewer.resize(400, 300)
+
+        layout = QVBoxLayout()
+
+        self.schedule_display = QPushButton(
+            str(self.schedules[self.current_schedule_index])
+        )
+        self.schedule_display.setEnabled(False)
+
+        nav_layout = QHBoxLayout()
+
+        prev_btn = QPushButton("Previous")
+        next_btn = QPushButton("Next")
+
+        prev_btn.clicked.connect(self.show_prev_schedule)
+        next_btn.clicked.connect(self.show_next_schedule)
+
+        nav_layout.addWidget(prev_btn)
+        nav_layout.addWidget(next_btn)
+
+        layout.addWidget(self.schedule_display)
+        layout.addLayout(nav_layout)
+
+        self.viewer.setLayout(layout)
+        self.viewer.show()
+
+
+    def show_current_schedule(self):
+        if not self.schedules:
+            return
+
+        schedule = self.schedules[self.current_schedule_index]
+
+        if hasattr(self, "schedule_display"):
+            self.schedule_display.setText(str(schedule))
+
+
+    def show_next_schedule(self):
+        if not self.schedules:
+            return
+
+        self.current_schedule_index = (
+            self.current_schedule_index + 1
+        ) % len(self.schedules)
+
+        self.show_current_schedule()
+
+
+    def show_prev_schedule(self):
+        if not self.schedules:
+            return
+
+        self.current_schedule_index = (
+            self.current_schedule_index - 1
+        ) % len(self.schedules)
+
+        self.show_current_schedule()
 
