@@ -2,16 +2,11 @@
   "config": {
     "rooms": [
       "Roddy 140",
-      "Roddy 147",
-      "LOL 74",
-      "MINE",
-      "ROOM 67"
+      "Roddy 147"
     ],
     "labs": [
       "Linux",
-      "Mac",
-      "SCIENCE",
-      "Pops"
+      "Mac"
     ],
     "courses": [
       {
@@ -27,6 +22,36 @@
           "CMSC 161",
           "CMSC 162"
         ],
+        "faculty": []
+      },
+      {
+        "course_id": "CMSC 140",
+        "credits": 4,
+        "room": [
+          "Roddy 136",
+          "Roddy 140",
+          "Roddy 147"
+        ],
+        "lab": [],
+        "conflicts": [
+          "CMSC 161",
+          "CMSC 162"
+        ],
+        "faculty": []
+      },
+      {
+        "course_id": "CMSC 152",
+        "credits": 4,
+        "room": [
+          "Roddy 136",
+          "Roddy 140",
+          "Roddy 147"
+        ],
+        "lab": [
+          "Mac",
+          "Linux"
+        ],
+        "conflicts": [],
         "faculty": []
       },
       {
@@ -86,6 +111,24 @@
         ],
         "conflicts": [
           "CMSC 140"
+        ],
+        "faculty": []
+      },
+      {
+        "course_id": "CMSC 330",
+        "credits": 4,
+        "room": [
+          "Roddy 136",
+          "Roddy 140",
+          "Roddy 147"
+        ],
+        "lab": [
+          "Linux",
+          "Mac"
+        ],
+        "conflicts": [
+          "CMSC 362",
+          "CMSC 366"
         ],
         "faculty": []
       },
@@ -249,18 +292,16 @@
         "faculty": []
       },
       {
-        "course_id": "BALLIN 101",
+        "course_id": "MMM 101",
         "credits": 3,
         "room": [
-          "MINE"
+          "RODDY 136"
         ],
         "lab": [
-          "SCIENCE"
+          "MAC"
         ],
         "conflicts": [],
-        "faculty": [
-          "Strohl"
-        ]
+        "faculty": []
       }
     ],
     "faculty": [
@@ -269,6 +310,7 @@
         "maximum_credits": 12,
         "minimum_credits": 12,
         "unique_course_limit": 3,
+        "maximum_days": 4,
         "times": {
           "MON": [
             "11:00-16:00"
@@ -297,14 +339,19 @@
         "lab_preferences": {
           "Linux": 5,
           "Mac": 1
-        },
-        "maximum_days": 4
+        }
       },
       {
         "name": "Hardy",
         "maximum_credits": 14,
         "minimum_credits": 12,
         "unique_course_limit": 2,
+        "maximum_days": 4,
+        "mandatory_days": [
+          "MON",
+          "WED",
+          "FRI"
+        ],
         "times": {
           "MON": [
             "09:00-15:00"
@@ -334,19 +381,18 @@
         "lab_preferences": {
           "Linux": 3,
           "Mac": 3
-        },
-        "maximum_days": 4,
-        "mandatory_days": [
-          "MON",
-          "WED",
-          "FRI"
-        ]
+        }
       },
       {
         "name": "Hogg",
         "maximum_credits": 8,
         "minimum_credits": 8,
         "unique_course_limit": 2,
+        "maximum_days": 4,
+        "mandatory_days": [
+          "MON",
+          "WED"
+        ],
         "times": {
           "MON": [
             "09:00-13:00"
@@ -376,18 +422,17 @@
         "lab_preferences": {
           "Linux": 5,
           "Mac": 1
-        },
-        "maximum_days": 4,
-        "mandatory_days": [
-          "MON",
-          "WED"
-        ]
+        }
       },
       {
         "name": "Xie",
         "maximum_credits": 12,
         "minimum_credits": 12,
         "unique_course_limit": 2,
+        "maximum_days": 4,
+        "mandatory_days": [
+          "WED"
+        ],
         "times": {
           "MON": [
             "09:00-15:00"
@@ -417,11 +462,7 @@
         "lab_preferences": {
           "Linux": 3,
           "Mac": 3
-        },
-        "maximum_days": 4,
-        "mandatory_days": [
-          "WED"
-        ]
+        }
       },
       {
         "name": "Rogers",
@@ -523,6 +564,10 @@
         "maximum_credits": 12,
         "minimum_credits": 12,
         "unique_course_limit": 2,
+        "maximum_days": 4,
+        "mandatory_days": [
+          "WED"
+        ],
         "times": {
           "MON": [
             "09:00-17:00"
@@ -541,7 +586,7 @@
           ]
         },
         "course_preferences": {
-          "CMSC 340": 8,
+          "CMSC 340": 5,
           "CMSC 453": 4
         },
         "room_preferences": {
@@ -552,15 +597,11 @@
         "lab_preferences": {
           "Mac": 3,
           "Linux": 3
-        },
-        "maximum_days": 4,
-        "mandatory_days": [
-          "WED"
-        ]
+        }
       },
       {
         "name": "Schwartz",
-        "maximum_credits": 12,
+        "maximum_credits": 0,
         "minimum_credits": 0,
         "unique_course_limit": 1,
         "times": {
@@ -580,28 +621,6 @@
           "Mac": 5,
           "Linux": 1
         }
-      },
-      {
-        "name": "Strohl",
-        "maximum_credits": 12,
-        "minimum_credits": 0,
-        "unique_course_limit": 3,
-        "times": {
-          "MON": [
-            "10:00-17:00"
-          ],
-          "TUE": [],
-          "WED": [
-            "10:00-17:00"
-          ],
-          "THU": [
-            "10:00-17:00"
-          ],
-          "FRI": []
-        },
-        "course_preferences": {},
-        "room_preferences": {},
-        "lab_preferences": {}
       }
     ]
   },
@@ -809,5 +828,12 @@
     ]
   },
   "limit": 10,
-  "optimizer_flags": []
+  "optimizer_flags": [
+    "faculty_course",
+    "faculty_room",
+    "faculty_lab",
+    "same_room",
+    "same_lab",
+    "pack_rooms"
+  ]
 }
