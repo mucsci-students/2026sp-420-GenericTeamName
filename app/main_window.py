@@ -257,7 +257,7 @@ class MainWindow(QMainWindow):
 
         msg.exec()
 
-   def handle_view_schedule(self):
+    def handle_view_schedule(self):
         """Fetches generated schedule and displays it as a spreadsheet."""
         schedule = self.imported_schedule
         if not schedule:
