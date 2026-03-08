@@ -16,7 +16,6 @@ from .faculty_gui import FacultyManager
 from config.config_mgr import ConfigManager
 from .generator_gui import GenConfigManager
 from .lab_gui import LabConfigManager
-from .generator_gui import GenConfigManager
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -37,9 +36,6 @@ class MainWindow(QMainWindow):
         self.lab_manager = LabConfigManager()
         
         #---------------------------------------------------------------------------
-        # Schedule Generator helper
-        self.gen_manager = GenConfigManager()
-        # Schedule viewing state
         self.schedules = []
         self.current_schedule_index = 0
 
@@ -223,12 +219,7 @@ class MainWindow(QMainWindow):
         #triggers for right panel (schedule viewer)
         self.view_sc_btn.clicked.connect(self.open_schedule_viewer)
         self.export_sc_btn.clicked.connect(self.handle_export_schedule)
-<<<<<<< HEAD
-
-        self.import_sc_btn.clicked.connect(lambda: print("Import Schedules clicked"))
-=======
         self.import_sc_btn.clicked.connect(self.handle_import_schedule)
->>>>>>> develop
 
     #----------------------------------------------------------
     # Config management handlers (GUI)
@@ -272,30 +263,6 @@ class MainWindow(QMainWindow):
         font.setStyleHint(QFont.StyleHint.Monospace)
         msg.setFont(font)
 
-        msg.exec()
-
-    def handle_view_schedule(self):
-        """Fetches generated schedule and displays it as a spreadsheet."""
-        schedule = self.imported_schedule
-        if not schedule:
-            schedule = [
-                {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
-                {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
-                {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
-                {'course_id': 'CS202', 'day': 'Thu', 'time': '13:00'},
-            ]
-
-        spreadsheet = self.config_mgr.get_schedule_spreadsheet(schedule)
-
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Weekly Schedule Spreadsheet")
-        msg.setText(spreadsheet)
-
-        mono_font = QFont("Courier New", 10)
-        mono_font.setStyleHint(QFont.StyleHint.Monospace)
-        msg.setFont(mono_font)
-
-        msg.setStyleSheet("QLabel{min-width: 800px;}")
         msg.exec()
 
     def handle_import_schedule(self):
