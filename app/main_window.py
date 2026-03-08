@@ -12,8 +12,10 @@ from PyQt6.QtGui import QAction, QFont
 from .menu_widgets import ContentPanel
 from .course_gui import CourseConfigManager
 from .room_gui import RoomConfigManager
+from .faculty_gui import FacultyManager
 from config.config_mgr import ConfigManager
 from .generator_gui import GenConfigManager
+from .lab_gui import LabConfigManager
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -23,16 +25,29 @@ class MainWindow(QMainWindow):
 
         # Initialize with a default
         self.config_mgr = ConfigManager("config/config.json")
+        self.imported_schedule = None  # list of {course_id, day, time} or None
 
-        # Course management helper (loads/saves JSON config courses)
+        
+        #Management helpers:
+        #---------------------------------------------------------------------------
         self.course_manager = CourseConfigManager()
-        # Room management helper 
         self.room_manager = RoomConfigManager()
-        # Schedule Generator helper
+        self.faculty_manager = FacultyManager()
         self.gen_manager = GenConfigManager()
+        self.lab_manager = LabConfigManager()
+        
+        #---------------------------------------------------------------------------
+        self.schedules = []
+        self.current_schedule_index = 0
 
         #most important function, along with "menu_widgets.py" class.
         self.init_menus()
+        # used for testing right now when switching between schedules after clicking "View Schedules"
+        self.schedules = [
+            ["CS101", "MATH201"],
+            ["CS102", "PHYS202"],
+            ["CS103", "BIO210"]
+]
 
 
 #__init__ ends here ------------------------------------------------------------------
@@ -71,7 +86,7 @@ class MainWindow(QMainWindow):
         self.room_btn = QPushButton("Rooms")
         self.lab_btn = QPushButton("Labs")
         self.change_path_btn = QPushButton("Change Config File")
-        self.config_btn_layout.insertWidget(4, self.change_path_btn) #would like to look at this further. could reduce lines of code?
+        self.config_btn_layout.addWidget(self.change_path_btn)
         self.view_sum_btn = QPushButton("View Config Summary")
         self.save_config_btn = QPushButton("Save Config")
 
@@ -166,18 +181,14 @@ class MainWindow(QMainWindow):
 
         #----------------------------------------------------------
         #Action triggers:
-            #note: 
-            # lambdas in here are placeholders.
-            # plz replace with the correct functions.
-
         #-------------------------------------------
         #triggers for left panel (config editor)
         #faculty:
-        add_faculty_ac.triggered.connect(lambda: print("Add Faculty clicked"))
-        mod_faculty_ac.triggered.connect(lambda: print("Modify Faculty clicked"))
-        del_faculty_ac.triggered.connect(lambda: print("Delete Faculty clicked"))
-        ed_faculty_times_ac.triggered.connect(lambda: print("Edit Faculty Available Times clicked"))
-        ed_faculty_pref_ac.triggered.connect(lambda: print("Edit Faculty Preferences clicked"))
+        add_faculty_ac.triggered.connect(lambda: self.faculty_manager.add_faculty_via_dialog(self))
+        mod_faculty_ac.triggered.connect(lambda: self.faculty_manager.modify_faculty_via_dialog(self))
+        del_faculty_ac.triggered.connect(lambda: self.faculty_manager.delete_faculty_via_dialog(self))
+        ed_faculty_times_ac.triggered.connect(lambda: self.faculty_manager.faculty_time_via_dialog(self))
+        ed_faculty_pref_ac.triggered.connect(lambda: self.faculty_manager.faculty_preference(self))
 
         #courses:
         add_courses_ac.triggered.connect(self.handle_add_course)
@@ -190,13 +201,15 @@ class MainWindow(QMainWindow):
         del_rooms_ac.triggered.connect(lambda: self.room_manager.delete_room_via_dialog(self))
 
         #labs:
-        add_labs_ac.triggered.connect(lambda: print("Add Labs clicked"))
-        mod_labs_ac.triggered.connect(lambda: print("Modify Labs clicked"))
-        del_labs_ac.triggered.connect(lambda: print("Delete Labs clicked"))
+        add_labs_ac.triggered.connect(lambda: self.lab_manager.add_lab_via_dialog(self))
+        mod_labs_ac.triggered.connect(lambda: self.lab_manager.modify_lab_via_dialog(self))
+        del_labs_ac.triggered.connect(lambda: self.lab_manager.delete_lab_via_dialog(self))
 
+        #config-management:
         self.change_path_btn.clicked.connect(self.handle_change_path)
         self.view_sum_btn.clicked.connect(self.handle_view_summary)
         self.save_config_btn.clicked.connect(self.handle_save_config)
+        
         #-------------------------------------------
         #triggers for mid panel (schedule generator)
 
@@ -205,10 +218,9 @@ class MainWindow(QMainWindow):
         self.generate_sc_btn.clicked.connect(lambda: self.gen_manager.run_scheduler(self))
         #-------------------------------------------
         #triggers for right panel (schedule viewer)
-
-        self.view_sc_btn.clicked.connect(lambda: print("View Schedules clicked"))
-        self.export_sc_btn.clicked.connect(lambda: print("Export Schedules clicked"))
-        self.import_sc_btn.clicked.connect(lambda: print("Import Schedules clicked"))
+        self.view_sc_btn.clicked.connect(self.open_schedule_viewer)
+        self.export_sc_btn.clicked.connect(self.handle_export_schedule)
+        self.import_sc_btn.clicked.connect(self.handle_import_schedule)
 
     #----------------------------------------------------------
     # Config management handlers (GUI)
@@ -254,6 +266,112 @@ class MainWindow(QMainWindow):
 
         msg.exec()
 
+    def handle_view_schedule(self):
+        """Fetches generated schedule and displays it as a spreadsheet."""
+        schedule = self.imported_schedule
+        if not schedule:
+            schedule = [
+                {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
+                {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
+                {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
+                {'course_id': 'CS202', 'day': 'Thu', 'time': '13:00'},
+            ]
+
+        spreadsheet = self.config_mgr.get_schedule_spreadsheet(schedule)
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Weekly Schedule Spreadsheet")
+        msg.setText(spreadsheet)
+
+        mono_font = QFont("Courier New", 10)
+        mono_font.setStyleHint(QFont.StyleHint.Monospace)
+        msg.setFont(mono_font)
+
+        msg.setStyleSheet("QLabel{min-width: 800px;}")
+        msg.exec()
+    def handle_import_schedule(self):
+        """Opens a file dialog to import a schedule from CSV or JSON."""
+        file_path, selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import Schedule",
+            "",
+            "CSV Files (*.csv);;JSON Files (*.json);;All Files (*)"
+        )
+        if not file_path:
+            return
+        schedule_data = None
+        if file_path.lower().endswith(".json"):
+            schedule_data = self.config_mgr.import_schedule_from_json(file_path)
+        else:
+            schedule_data = self.config_mgr.import_schedule_from_csv(file_path)
+        if schedule_data is not None:
+            self.imported_schedule = schedule_data
+            QMessageBox.information(
+                self,
+                "Import Success",
+                f"Imported {len(schedule_data)} assignment(s) from:\n{file_path}"
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "Import Failed",
+                "Could not read a valid schedule from the selected file."
+            )
+
+    def handle_import_schedule(self):
+        """Opens a file dialog to import a schedule from CSV or JSON."""
+        file_path, selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import Schedule",
+            "",
+            "CSV Files (*.csv);;JSON Files (*.json);;All Files (*)"
+        )
+        if not file_path:
+            return
+        schedule_data = None
+        if file_path.lower().endswith(".json"):
+            schedule_data = self.config_mgr.import_schedule_from_json(file_path)
+        else:
+            schedule_data = self.config_mgr.import_schedule_from_csv(file_path)
+        if schedule_data is not None:
+            self.imported_schedule = schedule_data
+            QMessageBox.information(
+                self,
+                "Import Success",
+                f"Imported {len(schedule_data)} assignment(s) from:\n{file_path}"
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "Import Failed",
+                "Could not read a valid schedule from the selected file."
+            )
+
+    def handle_export_schedule(self):
+        """Triggers the CSV export via a file dialog."""
+        schedule = self.imported_schedule
+        if not schedule:
+            schedule = [
+                {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
+                {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
+                {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
+            ]
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Schedule", "", "CSV Files (*.csv);;All Files (*)"
+        )
+
+        if file_path:
+            if not file_path.endswith('.csv'):
+                file_path += '.csv'
+
+            success = self.config_mgr.export_schedule_to_csv(schedule, file_path)
+
+            if success:
+                QMessageBox.information(self, "Export Success", f"Schedule exported to:\n{file_path}")
+            else:
+                QMessageBox.critical(self, "Export Failed", "Could not write to the selected file.")
+
     #----------------------------------------------------------
     # Course management handlers (GUI)
     #----------------------------------------------------------
@@ -270,4 +388,72 @@ class MainWindow(QMainWindow):
         """Delete an existing course via dialogs."""
         self.course_manager.delete_course_via_dialog(self)
 
+    #----------------------------------------------------------
+    # Schedule Viewer Functions
+    #----------------------------------------------------------
+
+    def open_schedule_viewer(self):
+        if not self.schedules:
+            QMessageBox.warning(self, "No schedules", "No schedules loaded.")
+            return
+
+        self.viewer = QWidget()
+        self.viewer.setWindowTitle("Schedule Viewer")
+        self.viewer.resize(400, 300)
+
+        layout = QVBoxLayout()
+
+        self.schedule_display = QPushButton(
+            str(self.schedules[self.current_schedule_index])
+        )
+        self.schedule_display.setEnabled(False)
+
+        nav_layout = QHBoxLayout()
+
+        prev_btn = QPushButton("Previous")
+        next_btn = QPushButton("Next")
+
+        prev_btn.clicked.connect(self.show_prev_schedule)
+        next_btn.clicked.connect(self.show_next_schedule)
+
+        nav_layout.addWidget(prev_btn)
+        nav_layout.addWidget(next_btn)
+
+        layout.addWidget(self.schedule_display)
+        layout.addLayout(nav_layout)
+
+        self.viewer.setLayout(layout)
+        self.viewer.show()
+
+
+    def show_current_schedule(self):
+        if not self.schedules:
+            return
+
+        schedule = self.schedules[self.current_schedule_index]
+
+        if hasattr(self, "schedule_display"):
+            self.schedule_display.setText(str(schedule))
+
+
+    def show_next_schedule(self):
+        if not self.schedules:
+            return
+
+        self.current_schedule_index = (
+            self.current_schedule_index + 1
+        ) % len(self.schedules)
+
+        self.show_current_schedule()
+
+
+    def show_prev_schedule(self):
+        if not self.schedules:
+            return
+
+        self.current_schedule_index = (
+            self.current_schedule_index - 1
+        ) % len(self.schedules)
+
+        self.show_current_schedule()
 
