@@ -210,6 +210,35 @@ class ConfigManager:
             print(f"CSV Import Error: {e}")
             return None
 
+    def scheduler_output_to_viewer_format(self, schedule_list):
+        """
+        Converts scheduler output (list of dicts with course_str, times) to
+        [{'course_id', 'day', 'time'}, ...] for the schedule viewer.
+        Scheduler uses: course_str, times=[{day: 1-5, start: minutes}]
+        day 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri
+        start: minutes from midnight (e.g. 720 = 12:00)
+        """
+        days_map = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri"}
+        result = []
+        for item in schedule_list:
+            if not isinstance(item, dict):
+                continue
+            cid = item.get("course_str") or item.get("course_id")
+            times = item.get("times", [])
+            for t in times:
+                if not isinstance(t, dict):
+                    continue
+                day_num = t.get("day")
+                start_mins = t.get("start", 0)
+                if day_num is None:
+                    continue
+                day_str = days_map.get(day_num, f"Day{day_num}")
+                h = start_mins // 60
+                m = start_mins % 60
+                time_str = f"{h:02d}:{m:02d}"
+                result.append({"course_id": str(cid or ""), "day": day_str, "time": time_str})
+        return result
+
     def import_schedule_from_json(self, filename):
         """
         Imports schedule from a JSON file.
@@ -236,9 +265,12 @@ class ConfigManager:
                     if cid is not None and day is not None and time_val is not None:
                         result.append({"course_id": str(cid), "day": str(day), "time": str(time_val)})
                 return result
-            # List of schedules (CLI export): list of lists of course dicts
+            # List of schedules (CLI export or scheduler format): list of lists
             if isinstance(first, list):
                 schedule = first
+                first_item = schedule[0] if schedule else {}
+                if isinstance(first_item, dict) and "course_str" in first_item and "times" in first_item:
+                    return self.scheduler_output_to_viewer_format(schedule)
                 result = []
                 for item in schedule:
                     if not isinstance(item, dict):
