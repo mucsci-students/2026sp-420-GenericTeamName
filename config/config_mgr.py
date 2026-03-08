@@ -1,7 +1,7 @@
 '''
     File: config_mgr.py
     Date: 02/28/2026
-    Author: Kyle Smith
+    Author: Kyle Smith & Shane del Villar
     Class: CMSC 420
     Description: Implements saving, loading and displaying a config for the scheduler.
     Implements displaying the schedule in a tabulated format and saving as a CSV.
@@ -165,3 +165,91 @@ class ConfigManager:
         except Exception as e:
             print(f"CSV Export Error: {e}")
             return False
+
+    def import_schedule_from_csv(self, filename):
+        """
+        Imports schedule from a CSV file (same format as export_schedule_to_csv).
+        Returns list of dicts [{'course_id': str, 'day': str, 'time': str}, ...] or None on error.
+        """
+        days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+        try:
+            schedule_data = []
+            with open(filename, mode='r', newline='', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                header = next(reader, None)
+                if not header:
+                    return None
+                # Header: TIME, Mon, Tue, Wed, Thu, Fri (or similar)
+                time_col = 0
+                day_cols = {}
+                for i, cell in enumerate(header):
+                    cell = (cell or "").strip()
+                    if i == 0 and cell.upper() == "TIME":
+                        time_col = 0
+                        continue
+                    if cell in days:
+                        day_cols[i] = cell
+                if not day_cols:
+                    # Fallback: assume columns 1..5 are Mon..Fri
+                    for j, d in enumerate(days):
+                        if j + 1 < len(header):
+                            day_cols[j + 1] = d
+                for row in reader:
+                    if not row:
+                        continue
+                    time_slot = row[time_col].strip() if time_col < len(row) else ""
+                    for col_idx, day in day_cols.items():
+                        if col_idx < len(row) and row[col_idx].strip():
+                            schedule_data.append({
+                                "course_id": row[col_idx].strip(),
+                                "day": day,
+                                "time": time_slot,
+                            })
+            return schedule_data
+        except Exception as e:
+            print(f"CSV Import Error: {e}")
+            return None
+
+    def import_schedule_from_json(self, filename):
+        """
+        Imports schedule from a JSON file.
+        Accepts:
+          - List of assignments: [{"course_id": "...", "day": "...", "time": "..."}, ...]
+          - List of schedules (CLI-style): [[{...}, ...], ...] — uses first schedule and normalizes keys.
+        Returns list of dicts [{'course_id', 'day', 'time'}, ...] or None on error.
+        """
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if not isinstance(data, list):
+                return None
+            if not data:
+                return []
+            first = data[0]
+            # Single schedule: list of assignment dicts
+            if isinstance(first, dict):
+                result = []
+                for item in data:
+                    cid = item.get("course_id")
+                    day = item.get("day")
+                    time_val = item.get("time")
+                    if cid is not None and day is not None and time_val is not None:
+                        result.append({"course_id": str(cid), "day": str(day), "time": str(time_val)})
+                return result
+            # List of schedules (CLI export): list of lists of course dicts
+            if isinstance(first, list):
+                schedule = first
+                result = []
+                for item in schedule:
+                    if not isinstance(item, dict):
+                        continue
+                    cid = item.get("course_id")
+                    day = item.get("day")
+                    time_val = item.get("time")
+                    if cid is not None and day is not None and time_val is not None:
+                        result.append({"course_id": str(cid), "day": str(day), "time": str(time_val)})
+                return result
+            return None
+        except Exception as e:
+            print(f"JSON Import Error: {e}")
+            return None
