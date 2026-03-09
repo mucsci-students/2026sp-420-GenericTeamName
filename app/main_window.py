@@ -27,6 +27,7 @@ class MainWindow(QMainWindow):
             "Light": "#f3f4f6",
             "Autumn": "#8a5a44",
             "Crimson": "#8b2e3c",
+            "Marathon": "#c2fe0b",
             "Summer": "#f4c95d",
             "Spring": "#98c379",
             "Winter": "#cfddeb",
