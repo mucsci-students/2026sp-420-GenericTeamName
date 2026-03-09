@@ -89,7 +89,7 @@ After startup you’ll see 3 panels:
 
 NOTE: Schedule Generation can be long. If generation fails, use "uv sync" to ensure the scheduler dependency has been added properly.
 
-**Schedule Viewer [Right-Panel**
+**Schedule Viewer [Right-Panel]**
 1. **View Schedules** - Displays schedules in a table format. Users can switch between multiple schedules (if applicable).
 2. **Export Schedules** - Export the generated schedules to a new file.
 3. **Import Schedules** - Import pre-existing schedules to view or modify.
