@@ -22,7 +22,20 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Scheduler Program - GenericTeamName")
         self.resize(900, 600)
-        self.dark_mode = True
+        self.theme_colors = {
+            "Dark": "#1f1f24",
+            "Light": "#f3f4f6",
+            "Autumn": "#8a5a44",
+            "Crimson": "#8b2e3c",
+            "Summer": "#f4c95d",
+            "Spring": "#98c379",
+            "Winter": "#cfddeb",
+            "Ocean": "#1f6f8b",
+            "Land": "#6b8f71",
+            "Sky": "#7fb7e6",
+        }
+        self.current_theme = "Dark"
+        self.theme_color = self.theme_colors[self.current_theme]
 
         # Initialize with a default
         self.config_mgr = ConfigManager("config/config.json")
@@ -50,25 +63,49 @@ class MainWindow(QMainWindow):
         self.init_menus()
         self.apply_theme()
 
+    def _is_dark(self, hex_color: str) -> bool:
+        """Return True if color is dark (use light text)."""
+        hex_color = hex_color.lstrip("#")
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+        luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        return luminance < 0.5
+
     def apply_theme(self) -> None:
-        if self.dark_mode:
-            self.setStyleSheet(
-                "QMainWindow, QWidget { background-color: #000000; } "
-                "QPushButton { background-color: #333; color: #e0e0e0; border: 1px solid #555; } "
-                "QPushButton:hover { background-color: #444; } "
-                "QPushButton:disabled { background-color: #222; color: #888; } "
-            )
-            self.theme_toggle_btn.setText("☀ Light")
-        else:
-            self.setStyleSheet(
-                "QMainWindow, QWidget { background-color: #f0f0f0; } "
-                "QPushButton { background-color: #e0e0e0; color: #333; border: 1px solid #bdc3c7; } "
-                "QPushButton:hover { background-color: #d0d0d0; } "
-                "QPushButton:disabled { background-color: #eee; color: #888; } "
-            )
-            self.theme_toggle_btn.setText("🌙 Dark")
+        dark = self._is_dark(self.theme_color)
+        text_color = "#e0e0e0" if dark else "#333333"
+        btn_bg = self._darken(self.theme_color, 0.15) if dark else self._lighten(self.theme_color, 0.1)
+        btn_hover = self._darken(self.theme_color, 0.1) if dark else self._lighten(self.theme_color, 0.05)
+        btn_disabled = self._darken(self.theme_color, 0.25) if dark else self._lighten(self.theme_color, 0.2)
+        btn_border = self._lighten(self.theme_color, 0.22) if dark else self._darken(self.theme_color, 0.18)
+        panel_border = self._lighten(self.theme_color, 0.16) if dark else self._darken(self.theme_color, 0.12)
+
+        self.setStyleSheet(
+            f"QMainWindow, QWidget {{ background-color: {self.theme_color}; }} "
+            f"QPushButton {{ background-color: {btn_bg}; color: {text_color}; border: 1px solid {btn_border}; }} "
+            f"QPushButton:hover {{ background-color: {btn_hover}; }} "
+            f"QPushButton:disabled {{ background-color: {btn_disabled}; color: #888; }} "
+        )
+        text_c = "#e0e0e0" if dark else "#333333"
+        self.theme_btn.setStyleSheet(
+            f"background-color: {self.theme_color}; color: {text_c}; border: 2px solid {btn_border};"
+        )
+        self.theme_btn.setText(self.current_theme)
         for panel in (self.left_panel, self.mid_panel, self.right_panel):
-            panel.set_theme(self.dark_mode)
+            panel.set_color(self.theme_color, panel_border)
+
+    def _darken(self, hex_color: str, amount: float) -> str:
+        hex_color = hex_color.lstrip("#")
+        r = max(0, int(int(hex_color[0:2], 16) * (1 - amount)))
+        g = max(0, int(int(hex_color[2:4], 16) * (1 - amount)))
+        b = max(0, int(int(hex_color[4:6], 16) * (1 - amount)))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _lighten(self, hex_color: str, amount: float) -> str:
+        hex_color = hex_color.lstrip("#")
+        r = min(255, int(int(hex_color[0:2], 16) + 255 * amount))
+        g = min(255, int(int(hex_color[2:4], 16) + 255 * amount))
+        b = min(255, int(int(hex_color[4:6], 16) + 255 * amount))
+        return f"#{r:02x}{g:02x}{b:02x}"
 
 #__init__ ends here ------------------------------------------------------------------
 
@@ -77,8 +114,11 @@ class MainWindow(QMainWindow):
         menu.addAction("Reset Layout").triggered.connect(self.reset_layout)
         menu.exec(self.splitter.mapToGlobal(position))
 
-    def toggle_theme(self) -> None:
-        self.dark_mode = not self.dark_mode
+    def set_theme(self, theme_name: str) -> None:
+        if theme_name not in self.theme_colors:
+            return
+        self.current_theme = theme_name
+        self.theme_color = self.theme_colors[theme_name]
         self.apply_theme()
 
     def reset_layout(self):
@@ -109,11 +149,16 @@ class MainWindow(QMainWindow):
         self.course_btn = QPushButton("Courses")
         self.room_btn = QPushButton("Rooms")
         self.lab_btn = QPushButton("Labs")
-        self.theme_toggle_btn = QPushButton("☀ Light")
-        self.theme_toggle_btn.clicked.connect(self.toggle_theme)
-        self.theme_toggle_btn.setMaximumWidth(100)
-        self.theme_toggle_btn.setMaximumHeight(28)
-        self.theme_toggle_btn.setFont(QFont("", 9))
+        self.theme_btn = QPushButton(self.current_theme)
+        self.theme_btn.setMaximumWidth(90)
+        self.theme_btn.setMaximumHeight(28)
+        self.theme_btn.setFont(QFont("", 9))
+        theme_menu = QMenu(self)
+        for theme_name in self.theme_colors:
+            theme_menu.addAction(theme_name).triggered.connect(
+                lambda checked=False, name=theme_name: self.set_theme(name)
+            )
+        self.theme_btn.setMenu(theme_menu)
         self.change_path_btn = QPushButton("Change Config File")
         self.config_btn_layout.addWidget(self.change_path_btn)
         self.view_sum_btn = QPushButton("View Config Summary")
@@ -127,7 +172,7 @@ class MainWindow(QMainWindow):
         self.config_btn_layout.addWidget(self.view_sum_btn)
         self.config_btn_layout.addWidget(self.save_config_btn)
         self.config_btn_layout.addStretch()
-        self.config_btn_layout.addWidget(self.theme_toggle_btn)
+        self.config_btn_layout.addWidget(self.theme_btn)
 
         #----------------------------------------------------------
         #Mid-Panel (Schedule Generator)
