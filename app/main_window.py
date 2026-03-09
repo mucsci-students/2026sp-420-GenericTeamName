@@ -146,10 +146,16 @@ class MainWindow(QMainWindow):
         #----------------------------------------------------------
 
         self.view_sc_btn = QPushButton("View Schedules")
+        self.view_by_faculty_btn = QPushButton("View by Faculty")
+        self.view_by_room_btn = QPushButton("View by Room")
+        self.view_by_lab_btn = QPushButton("View by Lab")
         self.export_sc_btn = QPushButton("Export Schedules")
         self.import_sc_btn = QPushButton("Import Schedules")
 
         self.sc_viewer_layout.addWidget(self.view_sc_btn)
+        self.sc_viewer_layout.addWidget(self.view_by_faculty_btn)
+        self.sc_viewer_layout.addWidget(self.view_by_room_btn)
+        self.sc_viewer_layout.addWidget(self.view_by_lab_btn)
         self.sc_viewer_layout.addWidget(self.export_sc_btn)
         self.sc_viewer_layout.addWidget(self.import_sc_btn)
         self.sc_viewer_layout.addStretch()
@@ -249,6 +255,9 @@ class MainWindow(QMainWindow):
         #-------------------------------------------
         #triggers for right panel (schedule viewer)
         self.view_sc_btn.clicked.connect(self.open_schedule_viewer)
+        self.view_by_faculty_btn.clicked.connect(lambda: self.handle_view_grouped("faculty"))
+        self.view_by_room_btn.clicked.connect(lambda: self.handle_view_grouped("room"))
+        self.view_by_lab_btn.clicked.connect(lambda: self.handle_view_grouped("lab"))
         self.export_sc_btn.clicked.connect(self.handle_export_schedule)
         self.import_sc_btn.clicked.connect(self.handle_import_schedule)
 
@@ -296,6 +305,18 @@ class MainWindow(QMainWindow):
 
         msg.exec()
 
+    def handle_view_grid(self):
+        """Displays the traditional week-view spreadsheet grid."""
+        data = self.get_active_schedule()
+        output = self.config_mgr.get_schedule_spreadsheet(data)
+        self._show_tabulated_msg("Weekly Schedule Grid", output)
+
+    def handle_view_grouped(self, key):
+        """Displays the schedule list grouped by faculty, room, or lab."""
+        data = self.get_active_schedule()
+        output = self.config_mgr.get_grouped_schedule_text(data, key)
+        self._show_tabulated_msg(f"Schedule Grouped by {key.capitalize()}", output)
+
     def handle_view_schedule(self):
         """Fetches generated schedule and displays it as a spreadsheet."""
         schedule = self.imported_schedule
@@ -319,6 +340,7 @@ class MainWindow(QMainWindow):
 
         msg.setStyleSheet("QLabel{min-width: 800px;}")
         msg.exec()
+
     def handle_import_schedule(self):
         """Opens a file dialog to import a schedule from CSV or JSON. Schedule is viewable in Schedule Viewer."""
         file_path, selected_filter = QFileDialog.getOpenFileName(
@@ -377,6 +399,27 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Export Success", f"Schedule exported to:\n{file_path}")
             else:
                 QMessageBox.critical(self, "Export Failed", "Could not write to the selected file.")
+
+    def _show_tabulated_msg(self, title, text):
+        """Private helper to ensure monospaced font is used for all tables."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle(title)
+        msg.setText(text)
+        mono_font = QFont("Courier New", 10)
+        mono_font.setStyleHint(QFont.StyleHint.Monospace)
+        msg.setFont(mono_font)
+        msg.exec()
+
+    def get_active_schedule(self):
+        """Get the schedule."""
+        schedule = self.imported_schedule
+        if schedule:
+            return schedule
+        
+        return [
+            {'course_id': 'CS420', 'faculty': 'Dr. Smith', 'room': 'Roddy 101', 'lab': 'N/A', 'day': 'Mon', 'time': '09:00'},
+            {'course_id': 'BIO101', 'faculty': 'Dr. Jones', 'room': 'Caputo 210', 'lab': 'Lab A', 'day': 'Tue', 'time': '10:00'}
+        ]
 
     #----------------------------------------------------------
     # Course management handlers (GUI)
