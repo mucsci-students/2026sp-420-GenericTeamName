@@ -26,10 +26,25 @@ class ContentPanel(QFrame):
         self.setStyleSheet(f"background-color: {color}; border: 1px solid {border}; color: {text_color};")
         self.label.setStyleSheet(f"font-weight: bold; font-size: 14px; border: none; color: {text_color};")
 
-    def set_theme(self, dark: bool) -> None:
-        if dark:
-            colors = {"#1a1a1a": ("#1a1a1a", "#e0e0e0", "#444"), "#000000": ("#000000", "#e0e0e0", "#444")}
+    def _is_dark(self, hex_color: str) -> bool:
+        hex_color = hex_color.lstrip("#")
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+        luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        return luminance < 0.5
+
+    def _adjust(self, hex_color: str, amount: float, darken: bool) -> str:
+        hex_color = hex_color.lstrip("#")
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+        if darken:
+            r, g, b = max(0, int(r * (1 - amount))), max(0, int(g * (1 - amount))), max(0, int(b * (1 - amount)))
         else:
-            colors = {"#1a1a1a": ("#f5f5f5", "#333", "#bdc3c7"), "#000000": ("#ffffff", "#333", "#bdc3c7")}
-        c, t, b = colors.get(self._base_color, colors["#1a1a1a"])
-        self._apply_color(c, t, b)
+            r, g, b = min(255, int(r + 255 * amount)), min(255, int(g + 255 * amount)), min(255, int(b + 255 * amount))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def set_color(self, hex_color: str, border: str = None) -> None:
+        dark = self._is_dark(hex_color)
+        text_color = "#e0e0e0" if dark else "#333333"
+        panel_color = self._adjust(hex_color, 0.03, dark) if self._base_color == "#000000" else hex_color
+        if border is None:
+            border = "#ffffff" if dark else "#000000"
+        self._apply_color(panel_color, text_color, border)
