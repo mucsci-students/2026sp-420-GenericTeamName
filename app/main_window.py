@@ -6,7 +6,7 @@
     Description: The main window of the GUI.
 '''
 
-from PyQt6.QtWidgets import QMainWindow, QSplitter, QMenu, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QMessageBox
+from PyQt6.QtWidgets import QMainWindow, QSplitter, QMenu, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QMessageBox, QDialog, QPlainTextEdit
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QFont
 from .menu_widgets import ContentPanel
@@ -22,9 +22,28 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Scheduler Program - GenericTeamName")
         self.resize(900, 600)
+        self.theme_colors = {
+            "Dark": "#1f1f24",
+            "Light": "#f3f4f6",
+            "Autumn": "#8a5a44",
+            "Crimson": "#8b2e3c",
+            "Marathon": "#c2fe0b",
+            "Summer": "#f4c95d",
+            "Spring": "#98c379",
+            "Winter": "#cfddeb",
+            "Ocean": "#1f6f8b",
+            "Land": "#6b8f71",
+            "Sky": "#7fb7e6",
+        }
+        self.current_theme = "Dark"
+        self.theme_color = self.theme_colors[self.current_theme]
 
         # Initialize with a default
         self.config_mgr = ConfigManager("config/config.json")
+        try:
+            self.config_mgr.load()
+        except Exception:
+            pass
         self.imported_schedule = None  # list of {course_id, day, time} or None
 
         
@@ -37,18 +56,57 @@ class MainWindow(QMainWindow):
         self.lab_manager = LabConfigManager()
         
         #---------------------------------------------------------------------------
+        # schedules: list of schedules; each schedule is list of {course_id, day, time}
         self.schedules = []
         self.current_schedule_index = 0
 
         #most important function, along with "menu_widgets.py" class.
         self.init_menus()
-        # used for testing right now when switching between schedules after clicking "View Schedules"
-        self.schedules = [
-            ["CS101", "MATH201"],
-            ["CS102", "PHYS202"],
-            ["CS103", "BIO210"]
-]
+        self.apply_theme()
 
+    def _is_dark(self, hex_color: str) -> bool:
+        """Return True if color is dark (use light text)."""
+        hex_color = hex_color.lstrip("#")
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+        luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        return luminance < 0.5
+
+    def apply_theme(self) -> None:
+        dark = self._is_dark(self.theme_color)
+        text_color = "#e0e0e0" if dark else "#333333"
+        btn_bg = self._darken(self.theme_color, 0.15) if dark else self._lighten(self.theme_color, 0.1)
+        btn_hover = self._darken(self.theme_color, 0.1) if dark else self._lighten(self.theme_color, 0.05)
+        btn_disabled = self._darken(self.theme_color, 0.25) if dark else self._lighten(self.theme_color, 0.2)
+        btn_border = self._lighten(self.theme_color, 0.22) if dark else self._darken(self.theme_color, 0.18)
+        panel_border = self._lighten(self.theme_color, 0.16) if dark else self._darken(self.theme_color, 0.12)
+
+        self.setStyleSheet(
+            f"QMainWindow, QWidget {{ background-color: {self.theme_color}; }} "
+            f"QPushButton {{ background-color: {btn_bg}; color: {text_color}; border: 1px solid {btn_border}; }} "
+            f"QPushButton:hover {{ background-color: {btn_hover}; }} "
+            f"QPushButton:disabled {{ background-color: {btn_disabled}; color: #888; }} "
+        )
+        text_c = "#e0e0e0" if dark else "#333333"
+        self.theme_btn.setStyleSheet(
+            f"background-color: {self.theme_color}; color: {text_c}; border: 2px solid {btn_border};"
+        )
+        self.theme_btn.setText(self.current_theme)
+        for panel in (self.left_panel, self.mid_panel, self.right_panel):
+            panel.set_color(self.theme_color, panel_border)
+
+    def _darken(self, hex_color: str, amount: float) -> str:
+        hex_color = hex_color.lstrip("#")
+        r = max(0, int(int(hex_color[0:2], 16) * (1 - amount)))
+        g = max(0, int(int(hex_color[2:4], 16) * (1 - amount)))
+        b = max(0, int(int(hex_color[4:6], 16) * (1 - amount)))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _lighten(self, hex_color: str, amount: float) -> str:
+        hex_color = hex_color.lstrip("#")
+        r = min(255, int(int(hex_color[0:2], 16) + 255 * amount))
+        g = min(255, int(int(hex_color[2:4], 16) + 255 * amount))
+        b = min(255, int(int(hex_color[4:6], 16) + 255 * amount))
+        return f"#{r:02x}{g:02x}{b:02x}"
 
 #__init__ ends here ------------------------------------------------------------------
 
@@ -56,6 +114,13 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         menu.addAction("Reset Layout").triggered.connect(self.reset_layout)
         menu.exec(self.splitter.mapToGlobal(position))
+
+    def set_theme(self, theme_name: str) -> None:
+        if theme_name not in self.theme_colors:
+            return
+        self.current_theme = theme_name
+        self.theme_color = self.theme_colors[theme_name]
+        self.apply_theme()
 
     def reset_layout(self):
         total_width = sum(self.splitter.sizes())
@@ -74,9 +139,9 @@ class MainWindow(QMainWindow):
         #splitter for panels
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        self.left_panel = ContentPanel("Config Editor", "#ecf0f1")
-        self.mid_panel = ContentPanel("Schedule Generator", "#ffffff")
-        self.right_panel = ContentPanel("Schedule Viewer", "#f4f7f6")
+        self.left_panel = ContentPanel("Config Editor", "#1a1a1a")
+        self.mid_panel = ContentPanel("Schedule Generator", "#000000")
+        self.right_panel = ContentPanel("Schedule Viewer", "#1a1a1a")
         
         #----------------------------------------------------------
         #Left-Panel (Config Editor)
@@ -85,6 +150,16 @@ class MainWindow(QMainWindow):
         self.course_btn = QPushButton("Courses")
         self.room_btn = QPushButton("Rooms")
         self.lab_btn = QPushButton("Labs")
+        self.theme_btn = QPushButton(self.current_theme)
+        self.theme_btn.setMaximumWidth(90)
+        self.theme_btn.setMaximumHeight(28)
+        self.theme_btn.setFont(QFont("", 9))
+        theme_menu = QMenu(self)
+        for theme_name in self.theme_colors:
+            theme_menu.addAction(theme_name).triggered.connect(
+                lambda checked=False, name=theme_name: self.set_theme(name)
+            )
+        self.theme_btn.setMenu(theme_menu)
         self.change_path_btn = QPushButton("Change Config File")
         self.config_btn_layout.addWidget(self.change_path_btn)
         self.view_sum_btn = QPushButton("View Config Summary")
@@ -98,6 +173,7 @@ class MainWindow(QMainWindow):
         self.config_btn_layout.addWidget(self.view_sum_btn)
         self.config_btn_layout.addWidget(self.save_config_btn)
         self.config_btn_layout.addStretch()
+        self.config_btn_layout.addWidget(self.theme_btn)
 
         #----------------------------------------------------------
         #Mid-Panel (Schedule Generator)
@@ -116,10 +192,16 @@ class MainWindow(QMainWindow):
         #----------------------------------------------------------
 
         self.view_sc_btn = QPushButton("View Schedules")
+        self.view_by_faculty_btn = QPushButton("View by Faculty")
+        self.view_by_room_btn = QPushButton("View by Room")
+        self.view_by_lab_btn = QPushButton("View by Lab")
         self.export_sc_btn = QPushButton("Export Schedules")
         self.import_sc_btn = QPushButton("Import Schedules")
 
         self.sc_viewer_layout.addWidget(self.view_sc_btn)
+        self.sc_viewer_layout.addWidget(self.view_by_faculty_btn)
+        self.sc_viewer_layout.addWidget(self.view_by_room_btn)
+        self.sc_viewer_layout.addWidget(self.view_by_lab_btn)
         self.sc_viewer_layout.addWidget(self.export_sc_btn)
         self.sc_viewer_layout.addWidget(self.import_sc_btn)
         self.sc_viewer_layout.addStretch()
@@ -219,6 +301,9 @@ class MainWindow(QMainWindow):
         #-------------------------------------------
         #triggers for right panel (schedule viewer)
         self.view_sc_btn.clicked.connect(self.open_schedule_viewer)
+        self.view_by_faculty_btn.clicked.connect(lambda: self.handle_view_grouped("faculty"))
+        self.view_by_room_btn.clicked.connect(lambda: self.handle_view_grouped("room"))
+        self.view_by_lab_btn.clicked.connect(lambda: self.handle_view_grouped("lab"))
         self.export_sc_btn.clicked.connect(self.handle_export_schedule)
         self.import_sc_btn.clicked.connect(self.handle_import_schedule)
 
@@ -266,6 +351,18 @@ class MainWindow(QMainWindow):
 
         msg.exec()
 
+    def handle_view_grid(self):
+        """Displays the traditional week-view spreadsheet grid."""
+        data = self.get_active_schedule()
+        output = self.config_mgr.get_schedule_spreadsheet(data)
+        self._show_tabulated_msg("Weekly Schedule Grid", output)
+
+    def handle_view_grouped(self, key):
+        """Displays the schedule list grouped by faculty, room, or lab."""
+        data = self.get_active_schedule()
+        output = self.config_mgr.get_grouped_schedule_text(data, key)
+        self._show_tabulated_msg(f"Schedule Grouped by {key.capitalize()}", output)
+
     def handle_view_schedule(self):
         """Fetches generated schedule and displays it as a spreadsheet."""
         schedule = self.imported_schedule
@@ -289,37 +386,9 @@ class MainWindow(QMainWindow):
 
         msg.setStyleSheet("QLabel{min-width: 800px;}")
         msg.exec()
-    def handle_import_schedule(self):
-        """Opens a file dialog to import a schedule from CSV or JSON."""
-        file_path, selected_filter = QFileDialog.getOpenFileName(
-            self,
-            "Import Schedule",
-            "",
-            "CSV Files (*.csv);;JSON Files (*.json);;All Files (*)"
-        )
-        if not file_path:
-            return
-        schedule_data = None
-        if file_path.lower().endswith(".json"):
-            schedule_data = self.config_mgr.import_schedule_from_json(file_path)
-        else:
-            schedule_data = self.config_mgr.import_schedule_from_csv(file_path)
-        if schedule_data is not None:
-            self.imported_schedule = schedule_data
-            QMessageBox.information(
-                self,
-                "Import Success",
-                f"Imported {len(schedule_data)} assignment(s) from:\n{file_path}"
-            )
-        else:
-            QMessageBox.warning(
-                self,
-                "Import Failed",
-                "Could not read a valid schedule from the selected file."
-            )
 
     def handle_import_schedule(self):
-        """Opens a file dialog to import a schedule from CSV or JSON."""
+        """Opens a file dialog to import a schedule from CSV or JSON. Schedule is viewable in Schedule Viewer."""
         file_path, selected_filter = QFileDialog.getOpenFileName(
             self,
             "Import Schedule",
@@ -335,10 +404,12 @@ class MainWindow(QMainWindow):
             schedule_data = self.config_mgr.import_schedule_from_csv(file_path)
         if schedule_data is not None:
             self.imported_schedule = schedule_data
+            self.schedules.append(schedule_data)
+            self.current_schedule_index = len(self.schedules) - 1
             QMessageBox.information(
                 self,
                 "Import Success",
-                f"Imported {len(schedule_data)} assignment(s) from:\n{file_path}"
+                f"Imported {len(schedule_data)} assignment(s) from:\n{file_path}\nView in Schedule Viewer."
             )
         else:
             QMessageBox.warning(
@@ -348,14 +419,17 @@ class MainWindow(QMainWindow):
             )
 
     def handle_export_schedule(self):
-        """Triggers the CSV export via a file dialog."""
-        schedule = self.imported_schedule
-        if not schedule:
-            schedule = [
-                {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
-                {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
-                {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
-            ]
+        """Triggers the CSV export via a file dialog. Exports the currently viewed schedule."""
+        schedule = None
+        if self.schedules and 0 <= self.current_schedule_index < len(self.schedules):
+            schedule = self.schedules[self.current_schedule_index]
+        if not schedule or not isinstance(schedule, list):
+            QMessageBox.warning(
+                self,
+                "No Schedule",
+                "No schedule to export. Generate or import a schedule first, then use Schedule Viewer to select which one to export."
+            )
+            return
 
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Export Schedule", "", "CSV Files (*.csv);;All Files (*)"
@@ -371,6 +445,27 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Export Success", f"Schedule exported to:\n{file_path}")
             else:
                 QMessageBox.critical(self, "Export Failed", "Could not write to the selected file.")
+
+    def _show_tabulated_msg(self, title, text):
+        """Private helper to ensure monospaced font is used for all tables."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle(title)
+        msg.setText(text)
+        mono_font = QFont("Courier New", 10)
+        mono_font.setStyleHint(QFont.StyleHint.Monospace)
+        msg.setFont(mono_font)
+        msg.exec()
+
+    def get_active_schedule(self):
+        """Get the schedule."""
+        schedule = self.imported_schedule
+        if schedule:
+            return schedule
+        
+        return [
+            {'course_id': 'CS420', 'faculty': 'Dr. Smith', 'room': 'Roddy 101', 'lab': 'N/A', 'day': 'Mon', 'time': '09:00'},
+            {'course_id': 'BIO101', 'faculty': 'Dr. Jones', 'room': 'Caputo 210', 'lab': 'Lab A', 'day': 'Tue', 'time': '10:00'}
+        ]
 
     #----------------------------------------------------------
     # Course management handlers (GUI)
@@ -394,46 +489,55 @@ class MainWindow(QMainWindow):
 
     def open_schedule_viewer(self):
         if not self.schedules:
-            QMessageBox.warning(self, "No schedules", "No schedules loaded.")
+            QMessageBox.warning(
+                self,
+                "No schedules",
+                "No schedules to view. Generate schedules or import a schedule first."
+            )
             return
 
-        self.viewer = QWidget()
+        self.viewer = QDialog(self)
         self.viewer.setWindowTitle("Schedule Viewer")
-        self.viewer.resize(400, 300)
+        self.viewer.resize(900, 500)
+        layout = QVBoxLayout(self.viewer)
+        self.schedule_display = QPlainTextEdit()
+        self.schedule_display.setReadOnly(True)
+        self.schedule_display.setFont(QFont("Courier New", 10))
+        self.schedule_display.setStyleSheet("background-color: #1a1a1a; color: #e0e0e0;")
 
-        layout = QVBoxLayout()
-
-        self.schedule_display = QPushButton(
-            str(self.schedules[self.current_schedule_index])
-        )
-        self.schedule_display.setEnabled(False)
+        def refresh_display():
+            self._refresh_schedule_display()
 
         nav_layout = QHBoxLayout()
-
         prev_btn = QPushButton("Previous")
         next_btn = QPushButton("Next")
-
-        prev_btn.clicked.connect(self.show_prev_schedule)
-        next_btn.clicked.connect(self.show_next_schedule)
-
+        prev_btn.clicked.connect(lambda: (self.show_prev_schedule(), refresh_display()))
+        next_btn.clicked.connect(lambda: (self.show_next_schedule(), refresh_display()))
         nav_layout.addWidget(prev_btn)
         nav_layout.addWidget(next_btn)
-
         layout.addWidget(self.schedule_display)
         layout.addLayout(nav_layout)
+        self._refresh_schedule_display()
+        self.viewer.exec()
 
-        self.viewer.setLayout(layout)
-        self.viewer.show()
-
+    def _refresh_schedule_display(self):
+        if not self.schedules or not (0 <= self.current_schedule_index < len(self.schedules)):
+            return
+        schedule = self.schedules[self.current_schedule_index]
+        schedule_data = schedule if isinstance(schedule, list) and schedule else []
+        if schedule_data and isinstance(schedule_data[0], dict):
+            text = self.config_mgr.get_schedule_spreadsheet(schedule_data)
+        else:
+            text = str(schedule)
+        if hasattr(self, "schedule_display"):
+            self.schedule_display.setPlainText(text)
+        if hasattr(self, "viewer") and self.viewer is not None:
+            self.viewer.setWindowTitle(f"Schedule Viewer ({self.current_schedule_index + 1}/{len(self.schedules)})")
 
     def show_current_schedule(self):
         if not self.schedules:
             return
-
-        schedule = self.schedules[self.current_schedule_index]
-
-        if hasattr(self, "schedule_display"):
-            self.schedule_display.setText(str(schedule))
+        self._refresh_schedule_display()
 
 
     def show_next_schedule(self):

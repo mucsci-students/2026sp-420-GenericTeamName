@@ -3,7 +3,8 @@ name = "2026sp-420-genericteamname"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
-    "package-name @ git+https://github.com/mucsci/Scheduler"
+    "pyqt6>=6.10.2",
+    "course-constraint-scheduler @ git+https://github.com/mucsci/Scheduler@5d904d0156cce60cd8ea4c333f26229019119487"
 ]

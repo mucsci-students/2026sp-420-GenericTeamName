@@ -28,73 +28,68 @@ class FacultyManager:
     
     def _ensure_config_loaded(self, parent: QWidget) -> bool:
         """
-        Ensure a config file is loaded.
-        If none is loaded yet, prompt the user to choose one.
+        Use the config file selected via the Change Config File button.
         """
-        if self.config_path is None:
-            filename, _ = QFileDialog.getOpenFileName(
+        config_mgr = getattr(parent, "config_mgr", None)
+        if config_mgr is None or not getattr(config_mgr, "filepath", None):
+            QMessageBox.warning(
                 parent,
-                "Select Scheduler Config JSON",
-                "",
-                "JSON Files (*.json);;All Files (*)",
+                "No Config",
+                "Please select a config file first using the Change Config File button."
             )
-            if not filename:
-                return False
-            self.config_path = Path(filename)
-
-        if not self.config_data:
-            try:
-                text = self.config_path.read_text(encoding="utf-8")
-                self.config_data = json.loads(text)
-            except FileNotFoundError:
-                QMessageBox.critical(
-                    parent,
-                    "Config not found",
-                    f"Config file not found:\n{self.config_path}",
-                )
-                self.config_path = None
-                self.config_data = {}
-                return False
-            except json.JSONDecodeError as e:
-                QMessageBox.critical(
-                    parent,
-                    "Invalid JSON",
-                    f"Failed to parse JSON:\n{e}",
-                )
-                self.config_path = None
-                self.config_data = {}
-                return False
-
+            return False
+        try:
+            config_mgr.load()
+        except Exception as e:
+            QMessageBox.critical(
+                parent,
+                "Config Error",
+                f"Could not load config:\n{e}",
+            )
+            return False
+        self.config_path = Path(config_mgr.filepath)
+        self.config_data = config_mgr.data
         return True
     
 
-    def list_faculty(self) -> List[str]:
+    def list_faculty(self) -> List[Any]:
         cfg = self.config_data.setdefault("config", {})
         faculty = cfg.setdefault("faculty", [])
         if not isinstance(faculty, list):
             cfg["faculty"] = []
         return cfg["faculty"]
+
+    def _faculty_display_name(self, f: Any) -> str:
+        """Get display string for a faculty item (string or dict with 'name')."""
+        if isinstance(f, dict):
+            return str(f.get("name", f))
+        return str(f)
     
     def save(self, parent: QWidget) -> None:
-        if self.config_path is None:
-            return
-        try:
-            self.config_path.write_text(
-                json.dumps(self.config_data, indent=2),
-                encoding="utf-8"
-            )
-        except OSError as e:
-            QMessageBox.critical(
-                parent,
-                "Save failed",
-                f"Failed to save config:\n{e}",
-            )
-            return
+        config_mgr = getattr(parent, "config_mgr", None)
+        if config_mgr:
+            config_mgr.data = self.config_data
+            config_mgr.save()
+        else:
+            if self.config_path is None:
+                return
+            try:
+                self.config_path.write_text(
+                    json.dumps(self.config_data, indent=2),
+                    encoding="utf-8"
+                )
+            except OSError as e:
+                QMessageBox.critical(
+                    parent,
+                    "Save failed",
+                    f"Failed to save config:\n{e}",
+                )
+                return
 
         QMessageBox.information(
             parent,
             "Config saved",
-            f"Configuration saved to:\n{self.config_path}",
+            "Configuration saved.",
         )
 
     def select_faculty(self, parent: QWidget) -> Tuple[Optional[int], Optional[str]]:
@@ -104,11 +99,13 @@ class FacultyManager:
             QMessageBox.information(parent, "No faculty", "No faculty found in the config.")
             return None, None
 
+        labels = [self._faculty_display_name(f) for f in faculty]
+
         item, ok = QInputDialog.getItem(
             parent,
             "Select Faculty",
             "Faculty:",
-            faculty,
+            labels,
             0,
             False,
         )
@@ -116,7 +113,7 @@ class FacultyManager:
         if not ok or not item:
             return None, None
 
-        index = faculty.index(item)
+        index = labels.index(item)
         return index, item
     
     # Public Methods
@@ -142,7 +139,7 @@ class FacultyManager:
         if not self._ensure_config_loaded(parent):
             return
 
-        index, existing = self.list_faculty(parent)
+        index, existing = self.select_faculty(parent)
         if index is None or existing is None:
             return
 
@@ -157,14 +154,18 @@ class FacultyManager:
             return
 
         faculty = self.list_faculty()
-        faculty[index] = text.strip()
+        existing_item = faculty[index]
+        if isinstance(existing_item, dict):
+            faculty[index] = {**existing_item, "name": text.strip()}
+        else:
+            faculty[index] = text.strip()
         self.save(parent)
 
     def delete_faculty_via_dialog(self, parent: QWidget) -> None:
         if not self._ensure_config_loaded(parent):
             return
 
-        index, existing = self.list_faculty(parent)
+        index, existing = self.select_faculty(parent)
         if index is None or existing is None:
             return
 
@@ -187,7 +188,7 @@ class FacultyManager:
         if not self._ensure_config_loaded(parent):
             return
 
-        index, existing = self.list_faculty(parent)
+        index, existing = self.select_faculty(parent)
         if index is None or existing is None:
             return
 
@@ -199,11 +200,7 @@ class FacultyManager:
 
         if not ok or not text.strip():
             return
-    
-        faculty = self.list_faculty
-        time = text.strip()
 
-        
         self.save(parent)
 
 
@@ -211,7 +208,7 @@ class FacultyManager:
         if not self._ensure_config_loaded(parent):
             return
         
-        index, existing = self.list_faculty(parent)
+        index, existing = self.select_faculty(parent)
         if index is None or existing is None:
             return
 
@@ -232,9 +229,5 @@ class FacultyManager:
 
         if not ok2 or not text2.strip():
             return
-        
-        faculty = self.list_faculty(parent)
-        course = text.strip()
-        weight = text2.strip()
 
         self.save(parent)

@@ -3,6 +3,8 @@
         "rooms": [],
         "labs": [],
         "courses": [],
-        "faculty": []
+        "faculty": [
+            "Strohl"
+        ]
     }
 }

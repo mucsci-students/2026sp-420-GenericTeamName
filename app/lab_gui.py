@@ -36,43 +36,27 @@ class LabConfigManager:
 
     def _ensure_config_loaded(self, parent: QWidget) -> bool:
         """
-        Ensure a config file is loaded.
-        If none is loaded yet, prompt the user to choose one.
+        Use the config file selected via the Change Config File button.
         """
-        if self.config_path is None:
-            filename, _ = QFileDialog.getOpenFileName(
+        config_mgr = getattr(parent, "config_mgr", None)
+        if config_mgr is None or not getattr(config_mgr, "filepath", None):
+            QMessageBox.warning(
                 parent,
-                "Select Scheduler Config JSON",
-                "",
-                "JSON Files (*.json);;All Files (*)",
+                "No Config",
+                "Please select a config file first using the Change Config File button."
             )
-            if not filename:
-                return False
-            self.config_path = Path(filename)
-
-        if not self._config_data:
-            try:
-                text = self.config_path.read_text(encoding="utf-8")
-                self._config_data = json.loads(text)
-            except FileNotFoundError:
-                QMessageBox.critical(
-                    parent,
-                    "Config not found",
-                    f"Config file not found:\n{self.config_path}",
-                )
-                self.config_path = None
-                self._config_data = {}
-                return False
-            except json.JSONDecodeError as e:
-                QMessageBox.critical(
-                    parent,
-                    "Invalid JSON",
-                    f"Failed to parse JSON:\n{e}",
-                )
-                self.config_path = None
-                self._config_data = {}
-                return False
-
+            return False
+        try:
+            config_mgr.load()
+        except Exception as e:
+            QMessageBox.critical(
+                parent,
+                "Config Error",
+                f"Could not load config:\n{e}",
+            )
+            return False
+        self.config_path = Path(config_mgr.filepath)
+        self._config_data = config_mgr.data
         return True
 
     def _get_labs_list(self) -> List[str]:
@@ -83,25 +67,30 @@ class LabConfigManager:
         return cfg["labs"]
 
     def _save(self, parent: QWidget) -> None:
-        if self.config_path is None:
-            return
-        try:
-            self.config_path.write_text(
-                json.dumps(self._config_data, indent=2),
-                encoding="utf-8"
-            )
-        except OSError as e:
-            QMessageBox.critical(
-                parent,
-                "Save failed",
-                f"Failed to save config:\n{e}",
-            )
-            return
+        config_mgr = getattr(parent, "config_mgr", None)
+        if config_mgr:
+            config_mgr.data = self._config_data
+            config_mgr.save()
+        else:
+            if self.config_path is None:
+                return
+            try:
+                self.config_path.write_text(
+                    json.dumps(self._config_data, indent=2),
+                    encoding="utf-8"
+                )
+            except OSError as e:
+                QMessageBox.critical(
+                    parent,
+                    "Save failed",
+                    f"Failed to save config:\n{e}",
+                )
+                return
 
         QMessageBox.information(
             parent,
             "Config saved",
-            f"Configuration saved to:\n{self.config_path}",
+            "Configuration saved.",
         )
 
     def _select_lab(self, parent: QWidget) -> Tuple[Optional[int], Optional[str]]:
