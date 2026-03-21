@@ -136,7 +136,7 @@ class CourseConfigManager:
         config_mgr = getattr(parent, "config_mgr", None)
         if config_mgr:
             config_mgr.data = self._config_data
-            config_mgr.save()
+            config_mgr.save(parent)
         else:
             if self.config_path is None:
                 return
