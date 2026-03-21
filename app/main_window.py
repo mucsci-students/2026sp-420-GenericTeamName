@@ -273,9 +273,9 @@ class MainWindow(QMainWindow):
         ed_faculty_pref_ac.triggered.connect(lambda: self.faculty_manager.faculty_preference(self))
 
         #courses:
-        add_courses_ac.triggered.connect(self.handle_add_course)
-        mod_courses_ac.triggered.connect(self.handle_modify_course)
-        del_courses_ac.triggered.connect(self.handle_delete_course)
+        add_courses_ac.triggered.connect(lambda: self.course_manager.add_course_via_dialog(self))
+        mod_courses_ac.triggered.connect(lambda: self.course_manager.modify_course_via_dialog(self))
+        del_courses_ac.triggered.connect(lambda: self.course_manager.delete_course_via_dialog(self))
 
         #rooms:
         add_rooms_ac.triggered.connect(lambda: self.room_manager.add_room_via_dialog(self))
@@ -290,7 +290,7 @@ class MainWindow(QMainWindow):
         #config-management:
         self.change_path_btn.clicked.connect(self.handle_change_path)
         self.view_sum_btn.clicked.connect(self.handle_view_summary)
-        self.save_config_btn.clicked.connect(self.handle_save_config)
+        self.save_config_btn.clicked.connect(lambda: self.config_mgr.save(self))
         
         #-------------------------------------------
         #triggers for mid panel (schedule generator)
@@ -327,14 +327,6 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Path Changed", f"Now using: {file_path}")
             except Exception as e:
                 QMessageBox.warning(self, "Load Warning", f"File selected, but could not load data: {e}")
-
-    def handle_save_config(self):
-        """Saves to the currently selected path."""
-        try:
-            self.config_mgr.save()
-            QMessageBox.information(self, "Success", f"Saved to: {self.config_mgr.filepath}")
-        except Exception as e:
-            QMessageBox.critical(self, "Save Error", f"Failed to save: {str(e)}")
 
     def handle_view_summary(self):
         """Displays summary with the current file path in the title."""
@@ -471,17 +463,18 @@ class MainWindow(QMainWindow):
     # Course management handlers (GUI)
     #----------------------------------------------------------
 
-    def handle_add_course(self):
-        """Add a new course via dialog and save to config."""
+    """def handle_add_course(self):
+
         self.course_manager.add_course_via_dialog(self)
 
     def handle_modify_course(self):
-        """Modify an existing course via dialogs."""
+
         self.course_manager.modify_course_via_dialog(self)
 
     def handle_delete_course(self):
-        """Delete an existing course via dialogs."""
+  
         self.course_manager.delete_course_via_dialog(self)
+    """
 
     #----------------------------------------------------------
     # Schedule Viewer Functions

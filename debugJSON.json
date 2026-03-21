@@ -1,0 +1,38 @@
+{
+    "config": {
+        "rooms": [
+            "210"
+        ],
+        "labs": [
+            "DanTDM"
+        ],
+        "courses": [
+            {
+                "course_id": "MOD 101",
+                "credits": 4,
+                "room": [
+                    "210"
+                ],
+                "lab": [
+                    "DanTDM"
+                ],
+                "conflicts": [],
+                "faculty": [
+                    "Dan"
+                ]
+            }
+        ],
+        "faculty": [
+            "Dan"
+        ]
+    },
+    "limit": 3,
+    "optimizer_flags": [
+        "faculty_course",
+        "faculty_room",
+        "faculty_lab",
+        "same_room",
+        "same_lab",
+        "pack_rooms"
+    ]
+}

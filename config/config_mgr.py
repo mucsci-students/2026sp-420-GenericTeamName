@@ -10,6 +10,7 @@
 import json
 import os
 import csv
+from PyQt6.QtWidgets import QMessageBox, QWidget
 
 class ConfigManager:
     def __init__(self, filepath="config.json"):
@@ -24,10 +25,14 @@ class ConfigManager:
             self.data = json.load(f)
         return self.data
 
-    def save(self):
+    def save(self, parent: QWidget): #QWidget?
         """Save JSON data with 4 space indent."""
-        with open(self.filepath, 'w') as f:
-            json.dump(self.data, f, indent=4)
+        try:
+            with open(self.filepath, 'w') as f:
+                json.dump(self.data, f, indent=4)
+                QMessageBox.information(parent, "Success", f"Saved to: {self.filepath}")
+        except Exception as e:
+            QMessageBox.critical(parent, "Save Error", f"Failed to save: {str(e)}")
 
     def get_summary_text(self):
         """Returns a string formatted as a table with dynamic padding."""

@@ -1,11 +1,7 @@
-<<<<<<< HEAD
-"""Shared CLI helpers: prompts and input parsing."""
-=======
 """
 File    : common.py
 Author  : Shane del Villar
 Desc    : Shared CLI helpers: prompts and input parsing."""
->>>>>>> origin/develop
 
 from __future__ import annotations
 
