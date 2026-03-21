@@ -12,13 +12,49 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QFileDialog,
     QInputDialog,
     QMessageBox,
     QWidget,
+    QProgressDialog,
+    QApplication,
+    QProgressBar,
 )
 
+#the work-around for scheduler function blocking main GUI thread.
+class ScheduleWorker(QThread):
+    
+    #communicate with the main GUI thread
+    progress = pyqtSignal(int)
+    finished_schedules = pyqtSignal(list)
+    error = pyqtSignal(str)
+
+    def __init__(self, scheduler, limit):
+        super().__init__()
+        self.scheduler = scheduler
+        self.limit = limit
+        self._is_cancelled = False
+
+    def run(self):
+        """This runs in the background thread."""
+        try:
+            raw_schedules = []
+            for index, schedule in enumerate(self.scheduler.get_models()):
+                if self._is_cancelled or index >= self.limit:
+                    break
+                raw_schedules.append(schedule)
+                #Tell main thread to update the progress bar
+                self.progress.emit(index + 1)
+            
+            #Send final list of schedules back to the main thread
+            self.finished_schedules.emit(raw_schedules)
+        except Exception as e:
+            self.error.emit(str(e))
+
+    def cancel(self):
+        self._is_cancelled = True
 
 class GenConfigManager:
 
@@ -142,6 +178,7 @@ class GenConfigManager:
 
     #the generate schedules option.
     def run_scheduler(self, parent: QWidget) -> None:
+        
         """Runs the scheduler and displays results in Schedule Viewer. Use Export to save to file."""
         if not self._ensure_config_loaded(parent):
             return
@@ -156,49 +193,67 @@ class GenConfigManager:
         try:
             path_str = str(self.config_path.resolve())
             config = load_config_from_file(CombinedConfig, path_str)
+            
             scheduler = Scheduler(config)
-
             limit = self._config_data.get("limit", 2)
-            raw_schedules = []
 
-            for index, schedule in enumerate(scheduler.get_models()):
-                if index >= limit:
-                    break
-                raw_schedules.append(schedule)
+            #the progress bar setup.
+            self.gen_progress = QProgressDialog("Generating Schedules:", "Cancel", 0, limit, parent)
+            #progress bar prevents user from interacting with other windows in program.
+            self.gen_progress.setWindowModality(Qt.WindowModality.WindowModal)
+            self.gen_progress.setMinimumDuration(0)
+            self.gen_progress.setValue(0)
 
-            if not raw_schedules:
-                QMessageBox.warning(parent, "No Results", "No schedules were generated.")
-                return
+            #format: M/N schedules
+            bar = self.gen_progress.findChild(QProgressBar)
+            if bar:
+                bar.setFormat("%v / %m")
+            
+            self.worker = ScheduleWorker(scheduler, limit)
+            
+            self.worker.progress.connect(self.gen_progress.setValue)
+            self.gen_progress.canceled.connect(self.worker.cancel)
+            
+            def on_finished(raw_schedules):
+                self.gen_progress.close()
+                if not raw_schedules:
+                    QMessageBox.warning(parent, "No Results", "No schedules were generated.")
+                    return
 
-            # Convert to viewer format using parent's config_mgr
-            config_mgr = getattr(parent, "config_mgr", None)
-            if config_mgr is None:
-                QMessageBox.critical(parent, "Config Error", "Config manager not available.")
-                return
+                config_mgr = getattr(parent, "config_mgr", None)
+                if config_mgr is None:
+                    QMessageBox.critical(parent, "Config Error", "Config manager not available.")
+                    return
 
-            def course_to_dict(c: Any) -> Any:
-                if hasattr(c, "model_dump"):
-                    return c.model_dump()
-                if hasattr(c, "as_dict"):
-                    return c.as_dict()
-                if hasattr(c, "__dict__"):
-                    return c.__dict__
-                return str(c)
+                def course_to_dict(c: Any) -> Any:
+                    if hasattr(c, "model_dump"): return c.model_dump()
+                    if hasattr(c, "as_dict"): return c.as_dict()
+                    if hasattr(c, "__dict__"): return c.__dict__
+                    return str(c)
 
-            viewer_schedules = []
-            for sched in raw_schedules:
-                sched_dicts = [course_to_dict(c) for c in sched]
-                viewer_format = config_mgr.scheduler_output_to_viewer_format(sched_dicts)
-                viewer_schedules.append(viewer_format)
+                viewer_schedules = []
+                for sched in raw_schedules:
+                    sched_dicts = [course_to_dict(c) for c in sched]
+                    viewer_format = config_mgr.scheduler_output_to_viewer_format(sched_dicts)
+                    viewer_schedules.append(viewer_format)
 
-            # Store in parent for Schedule Viewer
-            parent.schedules = parent.schedules + viewer_schedules
-            parent.current_schedule_index = len(parent.schedules) - len(viewer_schedules)
+                parent.schedules = parent.schedules + viewer_schedules
+                parent.current_schedule_index = len(parent.schedules) - len(viewer_schedules)
 
-            QMessageBox.information(
-                parent, "Success",
-                f"Generated {len(viewer_schedules)} schedule(s). View them in Schedule Viewer. Use Export to save to file."
-            )
+                QMessageBox.information(
+                    parent, "Success",
+                    f"Generated {len(viewer_schedules)} schedule(s). View them in Schedule Viewer."
+                )
+
+            def on_error(err_msg):
+                self.gen_progress.close()
+                QMessageBox.critical(parent, "Scheduler Error", f"Execution failed:\n{err_msg}")
+
+            self.worker.finished_schedules.connect(on_finished)
+            self.worker.error.connect(on_error)
+
+            self.gen_progress.show()
+            self.worker.start()
 
         except Exception as e:
-            QMessageBox.critical(parent, "Scheduler Error", f"Execution failed:\n{e}")
+            QMessageBox.critical(parent, "Scheduler Error", f"Setup failed:\n{e}")
