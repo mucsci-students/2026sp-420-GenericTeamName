@@ -1,12 +1,26 @@
 '''
     File: main_window.py
-    Date: 03/03/2026
+    Date: 03/21/2026
     Author: Kyle Smith & Tyler Strohl
     Class: CMSC 420
     Description: The main window of the GUI.
 '''
 
-from PyQt6.QtWidgets import QMainWindow, QSplitter, QMenu, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, QMessageBox, QDialog, QPlainTextEdit
+from PyQt6.QtWidgets import (
+    QMainWindow, 
+    QSplitter, 
+    QMenu, 
+    QPushButton, 
+    QVBoxLayout, 
+    QHBoxLayout, 
+    QWidget, 
+    QFileDialog, 
+    QMessageBox, 
+    QDialog, 
+    QPlainTextEdit,
+    QLabel,
+    QMenuBar
+    )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QFont
 from .menu_widgets import ContentPanel
@@ -23,8 +37,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Scheduler Program - GenericTeamName")
         self.resize(900, 600)
         self.theme_colors = {
-            "Dark": "#1f1f24",
             "Light": "#f3f4f6",
+            "Dark": "#1f1f24",
             "Autumn": "#8a5a44",
             "Crimson": "#8b2e3c",
             "Marathon": "#c2fe0b",
@@ -35,7 +49,7 @@ class MainWindow(QMainWindow):
             "Land": "#6b8f71",
             "Sky": "#7fb7e6",
         }
-        self.current_theme = "Dark"
+        self.current_theme = "Light"
         self.theme_color = self.theme_colors[self.current_theme]
 
         # Initialize with a default
@@ -45,7 +59,6 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self.imported_schedule = None  # list of {course_id, day, time} or None
-
         
         #Management helpers:
         #---------------------------------------------------------------------------
@@ -129,29 +142,12 @@ class MainWindow(QMainWindow):
 
     def init_menus(self):
 
-        #can maybe turn some of these things into a loop & arrays.
+        #TODO: Implement a design pattern to improve this code.
 
-        #----------------------------------------------------------
-        #box-layout for buttons
-        self.config_btn_layout = QVBoxLayout()
-        self.sc_generator_layout = QVBoxLayout()
-        self.sc_viewer_layout = QVBoxLayout()
-        #splitter for panels
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        menubar = self.menuBar()
 
-        self.left_panel = ContentPanel("Config Editor", "#1a1a1a")
-        self.mid_panel = ContentPanel("Schedule Generator", "#000000")
-        self.right_panel = ContentPanel("Schedule Viewer", "#1a1a1a")
-        
-        #----------------------------------------------------------
-        #Left-Panel (Config Editor)
-        #----------------------------------------------------------
-        self.faculty_btn = QPushButton("Faculty")
-        self.course_btn = QPushButton("Courses")
-        self.room_btn = QPushButton("Rooms")
-        self.lab_btn = QPushButton("Labs")
         self.theme_btn = QPushButton(self.current_theme)
-        self.theme_btn.setMaximumWidth(90)
+        self.theme_btn.setMaximumWidth(180)
         self.theme_btn.setMaximumHeight(28)
         self.theme_btn.setFont(QFont("", 9))
         theme_menu = QMenu(self)
@@ -160,33 +156,93 @@ class MainWindow(QMainWindow):
                 lambda checked=False, name=theme_name: self.set_theme(name)
             )
         self.theme_btn.setMenu(theme_menu)
-        self.change_path_btn = QPushButton("Change Config File")
-        self.config_btn_layout.addWidget(self.change_path_btn)
-        self.view_sum_btn = QPushButton("View Config Summary")
-        self.save_config_btn = QPushButton("Save Config")
 
-        #above panels & buttons are displayed in widgets.
-        self.config_btn_layout.addWidget(self.faculty_btn)
-        self.config_btn_layout.addWidget(self.course_btn)
-        self.config_btn_layout.addWidget(self.room_btn)
-        self.config_btn_layout.addWidget(self.lab_btn)
-        self.config_btn_layout.addWidget(self.view_sum_btn)
-        self.config_btn_layout.addWidget(self.save_config_btn)
-        self.config_btn_layout.addStretch()
-        self.config_btn_layout.addWidget(self.theme_btn)
+        menubar.setCornerWidget(self.theme_btn, Qt.Corner.TopLeftCorner)
+
+        #--------------------------------------------
+        #Config Editor MENU-BAR Options:
+        #Menus & Actions: [note: only applies to buttons with sub-menus]
+
+        #menus for config editor
+        faculty_menu = menubar.addMenu("Faculty")
+        courses_menu = menubar.addMenu("Courses")
+        rooms_menu = menubar.addMenu("Rooms")
+        labs_menu = menubar.addMenu("Labs")
+        #-------------------------------------------
+        #actions for config editor
+        #faculty:
+        add_faculty_ac = faculty_menu.addAction("Add Faculty")
+        mod_faculty_ac = faculty_menu.addAction("Modify Faculty")
+        del_faculty_ac = faculty_menu.addAction("Delete Faculty")
+        ed_faculty_times_ac = faculty_menu.addAction("Edit Faculty Available Times")
+        ed_faculty_pref_ac = faculty_menu.addAction("Edit Faculty Preferences")
+
+        #courses:
+        add_courses_ac = courses_menu.addAction("Add Courses")
+        mod_courses_ac = courses_menu.addAction("Modify Courses")
+        del_courses_ac = courses_menu.addAction("Delete Courses")
+
+        #rooms:
+        add_rooms_ac = rooms_menu.addAction("Add Rooms")
+        mod_rooms_ac = rooms_menu.addAction("Modify Rooms")
+        del_rooms_ac = rooms_menu.addAction("Delete Rooms")
+
+        #labs:
+        add_labs_ac = labs_menu.addAction("Add Labs")
+        mod_labs_ac = labs_menu.addAction("Modify Labs")
+        del_labs_ac = labs_menu.addAction("Delete Labs")
+
+        #--------------------------------------------
+
+        #TODO: Move the location of the filepath declaration
+        self.filepath = self.config_mgr.filepath
+        display_path = f"Active Config: <b>{self.filepath}</b>"
+
+        #box-layout for buttons
+        self.sc_generator_layout = QVBoxLayout()
+        self.config_btn_layout = QHBoxLayout()
+        self.sc_viewer_layout = QVBoxLayout()
+        #splitter for panels
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.left_panel = ContentPanel("Schedule Generator", "#1a1a1a")
+        self.mid_panel = ContentPanel(display_path, "#000000")
+        self.right_panel = ContentPanel("Schedule Viewer", "#1a1a1a")
 
         #----------------------------------------------------------
-        #Mid-Panel (Schedule Generator)
+        #Left-Panel (Schedule Generator)
         #----------------------------------------------------------
-
-        self.limit_btn = QPushButton("Set Limit (# Of Schedules)")
+        
+        self.limit_btn = QPushButton("Limit # Of Schedules")
         self.optimize_btn = QPushButton("Toggle Optimization")
         self.generate_sc_btn = QPushButton("Generate Schedules")
 
+        #above panels & buttons are displayed in widgets.
         self.sc_generator_layout.addWidget(self.limit_btn)
         self.sc_generator_layout.addWidget(self.optimize_btn)
         self.sc_generator_layout.addWidget(self.generate_sc_btn)
         self.sc_generator_layout.addStretch()
+
+        #----------------------------------------------------------
+        #Mid-Panel (Config Editor)
+        #----------------------------------------------------------
+
+        self.change_path_btn = QPushButton("Change Config File")
+        #self.faculty_btn = QPushButton("Faculty")
+        #self.course_btn = QPushButton("Courses")
+        #self.room_btn = QPushButton("Rooms")
+        #self.lab_btn = QPushButton("Labs")
+        self.view_sum_btn = QPushButton("View Config Summary")
+        self.save_config_btn = QPushButton("Save Config")
+
+        self.config_btn_layout.addWidget(self.change_path_btn)
+        #self.config_btn_layout.addWidget(self.faculty_btn)
+        #self.config_btn_layout.addWidget(self.course_btn)
+        #self.config_btn_layout.addWidget(self.room_btn)
+        #self.config_btn_layout.addWidget(self.lab_btn)
+        self.config_btn_layout.addWidget(self.view_sum_btn)
+        self.config_btn_layout.addWidget(self.save_config_btn)
+        self.config_btn_layout.addStretch()
+
         #----------------------------------------------------------
         #Right-Panel (Schedule Viewer)
         #----------------------------------------------------------
@@ -213,9 +269,9 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.mid_panel)
         self.splitter.addWidget(self.right_panel)
         #sizes in order of declarations above ^^
-        self.splitter.setSizes([300, 300, 300])
-        self.left_panel.layout.insertLayout(1, self.config_btn_layout)
-        self.mid_panel.layout.insertLayout(1, self.sc_generator_layout)
+        self.splitter.setSizes([100, 400, 100])
+        self.left_panel.layout.insertLayout(1, self.sc_generator_layout)
+        self.mid_panel.layout.insertLayout(1, self.config_btn_layout)
         self.right_panel.layout.insertLayout(1, self.sc_viewer_layout)
         
         self.setCentralWidget(self.splitter)
@@ -223,50 +279,23 @@ class MainWindow(QMainWindow):
         self.splitter.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.splitter.customContextMenuRequested.connect(self.show_context_menu)
 
-        #----------------------------------------------------------
-        #Menus & Actions: [note: only applies to buttons with sub-menus]
-        #-------------------------------------------
-        #menus for left panel (config editor)
-        faculty_menu = QMenu(self)
-        courses_menu = QMenu(self)
-        rooms_menu = QMenu(self)
-        labs_menu = QMenu(self)
-
-        self.faculty_btn.setMenu(faculty_menu)
-        self.course_btn.setMenu(courses_menu)
-        self.room_btn.setMenu(rooms_menu)
-        self.lab_btn.setMenu(labs_menu)
-
-        #-------------------------------------------
-        #actions for left panel (config editor)
-        #faculty:
-        add_faculty_ac = faculty_menu.addAction("Add Faculty")
-        mod_faculty_ac = faculty_menu.addAction("Modify Faculty")
-        del_faculty_ac = faculty_menu.addAction("Delete Faculty")
-        ed_faculty_times_ac = faculty_menu.addAction("Edit Faculty Available Times")
-        ed_faculty_pref_ac = faculty_menu.addAction("Edit Faculty Preferences")
-
-        #courses:
-        add_courses_ac = courses_menu.addAction("Add Courses")
-        mod_courses_ac = courses_menu.addAction("Modify Courses")
-        del_courses_ac = courses_menu.addAction("Delete Courses")
-
-        #rooms:
-        add_rooms_ac = rooms_menu.addAction("Add Rooms")
-        mod_rooms_ac = rooms_menu.addAction("Modify Rooms")
-        del_rooms_ac = rooms_menu.addAction("Delete Rooms")
-
-        #labs:
-        add_labs_ac = labs_menu.addAction("Add Labs")
-        mod_labs_ac = labs_menu.addAction("Modify Labs")
-        del_labs_ac = labs_menu.addAction("Delete Labs")
-
+  
         #----------------------------------------------------------
         #Action triggers:
+
+        #btn.clicked.connect = one button click
+        #ac.triggered.connect = drop-down option clicked
+
         #-------------------------------------------
-        #triggers for left panel (config editor)
+        #triggers for left panel (schedule generator)
+        self.limit_btn.clicked.connect(lambda: self.gen_manager.set_limit(self))
+        self.optimize_btn.clicked.connect(lambda: self.gen_manager.set_optimize(self))
+        self.generate_sc_btn.clicked.connect(lambda: self.gen_manager.run_scheduler(self))
+        
+        #-------------------------------------------
+        #triggers for mid panel (config editor)
         #faculty:
-        add_faculty_ac.triggered.connect(lambda: self.faculty_manager.add_faculty_via_dialog(self))
+        #add_faculty_ac.triggered.connect(lambda: self.faculty_manager.add_faculty_via_dialog(self))
         mod_faculty_ac.triggered.connect(lambda: self.faculty_manager.modify_faculty_via_dialog(self))
         del_faculty_ac.triggered.connect(lambda: self.faculty_manager.delete_faculty_via_dialog(self))
         ed_faculty_times_ac.triggered.connect(lambda: self.faculty_manager.faculty_time_via_dialog(self))
@@ -292,12 +321,6 @@ class MainWindow(QMainWindow):
         self.view_sum_btn.clicked.connect(self.handle_view_summary)
         self.save_config_btn.clicked.connect(lambda: self.config_mgr.save(self))
         
-        #-------------------------------------------
-        #triggers for mid panel (schedule generator)
-
-        self.limit_btn.clicked.connect(lambda: self.gen_manager.set_limit(self))
-        self.optimize_btn.clicked.connect(lambda: self.gen_manager.set_optimize(self))
-        self.generate_sc_btn.clicked.connect(lambda: self.gen_manager.run_scheduler(self))
         #-------------------------------------------
         #triggers for right panel (schedule viewer)
         self.view_sc_btn.clicked.connect(self.open_schedule_viewer)
@@ -458,23 +481,6 @@ class MainWindow(QMainWindow):
             {'course_id': 'CS420', 'faculty': 'Dr. Smith', 'room': 'Roddy 101', 'lab': 'N/A', 'day': 'Mon', 'time': '09:00'},
             {'course_id': 'BIO101', 'faculty': 'Dr. Jones', 'room': 'Caputo 210', 'lab': 'Lab A', 'day': 'Tue', 'time': '10:00'}
         ]
-
-    #----------------------------------------------------------
-    # Course management handlers (GUI)
-    #----------------------------------------------------------
-
-    """def handle_add_course(self):
-
-        self.course_manager.add_course_via_dialog(self)
-
-    def handle_modify_course(self):
-
-        self.course_manager.modify_course_via_dialog(self)
-
-    def handle_delete_course(self):
-  
-        self.course_manager.delete_course_via_dialog(self)
-    """
 
     #----------------------------------------------------------
     # Schedule Viewer Functions

@@ -25,7 +25,7 @@ class ConfigManager:
             self.data = json.load(f)
         return self.data
 
-    def save(self, parent: QWidget): #QWidget?
+    def save(self, parent: QWidget):
         """Save JSON data with 4 space indent."""
         try:
             with open(self.filepath, 'w') as f:
