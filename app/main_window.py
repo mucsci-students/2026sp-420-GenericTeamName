@@ -1,352 +1,583 @@
-"""
+'''
     File: main_window.py
-    Date: 03/22/2026
+    Date: 03/23/2026
     Author: Kyle Smith & Tyler Strohl
     Class: CMSC 420
-    Description: Primary GUI controller for the Scheduler Pro system. 
-    Handles event loops, theme switching, and data visualization.
-"""
+    Description: The main window of the GUI.
+'''
 
 import random
 import copy
 import json
 import csv
 from PyQt6.QtWidgets import (
-    QMainWindow, QSplitter, QMenu, QPushButton, QVBoxLayout, 
-    QHBoxLayout, QWidget, QFileDialog, QMessageBox, QTableWidget, 
-    QTableWidgetItem, QTreeWidget, QTreeWidgetItem, QMenuBar, 
-    QStatusBar, QHeaderView, QPlainTextEdit, QAbstractItemView, QLineEdit
-)
+    QMainWindow, QSplitter, QMenu, QPushButton, 
+    QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, 
+    QMessageBox, QDialog, QPlainTextEdit, QLabel,
+    QMenuBar
+    )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QBrush, QPainter
-from PyQt6.QtPrintSupport import QPrinter
-
+from PyQt6.QtGui import QAction, QFont
 from .menu_widgets import ContentPanel
-from config.config_mgr import ConfigManager
 from .course_gui import CourseConfigManager
 from .room_gui import RoomConfigManager
 from .faculty_gui import FacultyManager
+from config.config_mgr import ConfigManager
 from .generator_gui import GenConfigManager
 from .lab_gui import LabConfigManager
 
 class MainWindow(QMainWindow):
-    """
-    Main application window for Scheduler Pro.
-
-    This class manages the lifecycle of the GUI, coordinates between 
-    different configuration managers, and provides the interface for 
-    generating and exporting academic schedules.
-
-    Attributes:
-        is_dark_mode (bool): Tracks the current theme state.
-        schedules (list): Stores generated schedule result sets.
-        history_stack (list): Stores previous states for Undo functionality.
-        view_mode (str): Current grid perspective (DAY, ROOM, FACULTY, or LAB).
-    """
-
     def __init__(self):
-        """Initializes the MainWindow, managers, and UI components."""
         super().__init__()
-        self.setWindowTitle("Scheduler Pro v4.3 - GenericTeamName")
-        self.resize(1400, 900) 
+        self.setWindowTitle("Scheduler Program - GenericTeamName")
+        self.resize(900, 600)
+        self.theme_colors = {
+            "Light": "#f3f4f6",
+            "Dark": "#1f1f24",
+            "Autumn": "#8a5a44",
+            "Crimson": "#8b2e3c",
+            "Marathon": "#c2fe0b",
+            "Summer": "#f4c95d",
+            "Spring": "#98c379",
+            "Winter": "#cfddeb",
+            "Ocean": "#1f6f8b",
+            "Land": "#6b8f71",
+            "Sky": "#7fb7e6",
+        }
+        self.current_theme = "Light"
+        self.theme_color = self.theme_colors[self.current_theme]
 
-        # State Initialization
-        self.is_dark_mode = True
-        self.schedules = []
-        self.history_stack = [] 
-        self.view_mode = "DAY" 
-        self.color_cache = {}
-
-        # Core Logic Managers
+        # Initialize with a default
         self.config_mgr = ConfigManager("config/config.json")
-        try: 
+        try:
             self.config_mgr.load()
-        except Exception: 
+        except Exception:
             pass
-
+        self.imported_schedule = None  # list of {course_id, day, time} or None
+        
+        #Management helpers:
+        #---------------------------------------------------------------------------
         self.course_manager = CourseConfigManager()
         self.room_manager = RoomConfigManager()
         self.faculty_manager = FacultyManager()
         self.gen_manager = GenConfigManager()
         self.lab_manager = LabConfigManager()
         
-        self.init_ui()
-        self.create_menus()
-        self.apply_global_theme()
-        self.render_config_tree()
+        #---------------------------------------------------------------------------
+        # schedules: list of schedules; each schedule is list of {course_id, day, time}
+        self.schedules = []
+        self.current_schedule_index = 0
 
-    def init_ui(self):
-        """Constructs the primary layout including the Explorer, Grid, and Inspector."""
-        self.setStatusBar(QStatusBar())
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        
-        # Data Explorer Panel
-        self.left_panel = ContentPanel("Data Explorer", "#1a1a1a")
-        self.search_bar = QLineEdit()
-        self.search_bar.setPlaceholderText("Search items...")
-        self.search_bar.textChanged.connect(self.filter_tree)
-        self.config_tree = QTreeWidget()
-        self.config_tree.setHeaderLabel("Configuration Hierarchy")
-        self.config_tree.itemClicked.connect(self.handle_tree_selection)
-        self.left_panel.layout.addWidget(self.search_bar)
-        self.left_panel.layout.addWidget(self.config_tree)
+        #most important function, along with "menu_widgets.py" class.
+        self.init_menus()
+        self.apply_theme()
 
-        # Weekly Schedule Grid Panel
-        self.mid_panel = ContentPanel("Schedule Grid", "#000000")
-        grid_ctrl = QHBoxLayout()
-        self.undo_btn = QPushButton("Undo")
-        self.undo_btn.clicked.connect(self.undo_move)
-        self.undo_btn.setEnabled(False)
-        
-        self.view_btn = QPushButton("View Mode: Day")
-        self.view_menu = QMenu(self)
-        for m in ["DAY", "ROOM", "FACULTY", "LAB"]:
-            self.view_menu.addAction(f"{m.title()} View").triggered.connect(
-                lambda chk, mode=m: self.set_view_mode(mode)
+    def _is_dark(self, hex_color: str) -> bool:
+        """Return True if color is dark (use light text)."""
+        hex_color = hex_color.lstrip("#")
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+        luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        return luminance < 0.5
+
+    def apply_theme(self) -> None:
+        dark = self._is_dark(self.theme_color)
+        text_color = "#e0e0e0" if dark else "#333333"
+        btn_bg = self._darken(self.theme_color, 0.15) if dark else self._lighten(self.theme_color, 0.1)
+        btn_hover = self._darken(self.theme_color, 0.1) if dark else self._lighten(self.theme_color, 0.05)
+        btn_disabled = self._darken(self.theme_color, 0.25) if dark else self._lighten(self.theme_color, 0.2)
+        btn_border = self._lighten(self.theme_color, 0.22) if dark else self._darken(self.theme_color, 0.18)
+        panel_border = self._lighten(self.theme_color, 0.16) if dark else self._darken(self.theme_color, 0.12)
+
+        self.setStyleSheet(
+            f"QMainWindow, QWidget {{ background-color: {self.theme_color}; }} "
+            f"QPushButton {{ background-color: {btn_bg}; color: {text_color}; border: 1px solid {btn_border}; }} "
+            f"QPushButton:hover {{ background-color: {btn_hover}; }} "
+            f"QPushButton:disabled {{ background-color: {btn_disabled}; color: #888; }} "
+        )
+        text_c = "#e0e0e0" if dark else "#333333"
+        self.theme_btn.setStyleSheet(
+            f"background-color: {self.theme_color}; color: {text_c}; border: 2px solid {btn_border};"
+        )
+        self.theme_btn.setText(self.current_theme)
+        for panel in (self.left_panel, self.mid_panel, self.right_panel):
+            panel.set_color(self.theme_color, panel_border)
+
+    def _darken(self, hex_color: str, amount: float) -> str:
+        hex_color = hex_color.lstrip("#")
+        r = max(0, int(int(hex_color[0:2], 16) * (1 - amount)))
+        g = max(0, int(int(hex_color[2:4], 16) * (1 - amount)))
+        b = max(0, int(int(hex_color[4:6], 16) * (1 - amount)))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _lighten(self, hex_color: str, amount: float) -> str:
+        hex_color = hex_color.lstrip("#")
+        r = min(255, int(int(hex_color[0:2], 16) + 255 * amount))
+        g = min(255, int(int(hex_color[2:4], 16) + 255 * amount))
+        b = min(255, int(int(hex_color[4:6], 16) + 255 * amount))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+#__init__ ends here ------------------------------------------------------------------
+
+    def show_context_menu(self, position):
+        menu = QMenu(self)
+        menu.addAction("Reset Layout").triggered.connect(self.reset_layout)
+        menu.exec(self.splitter.mapToGlobal(position))
+
+    def set_theme(self, theme_name: str) -> None:
+        if theme_name not in self.theme_colors:
+            return
+        self.current_theme = theme_name
+        self.theme_color = self.theme_colors[theme_name]
+        self.apply_theme()
+
+    def reset_layout(self):
+        total_width = sum(self.splitter.sizes())
+        third = total_width // 3
+        self.splitter.setSizes([third, third, total_width - (2 * third)])
+
+    def init_menus(self):
+
+        #TODO: Implement a design pattern to improve this code.
+
+        menubar = self.menuBar()
+
+        self.theme_btn = QPushButton(self.current_theme)
+        self.theme_btn.setMaximumWidth(180)
+        self.theme_btn.setMaximumHeight(28)
+        self.theme_btn.setFont(QFont("", 9))
+        theme_menu = QMenu(self)
+        for theme_name in self.theme_colors:
+            theme_menu.addAction(theme_name).triggered.connect(
+                lambda checked=False, name=theme_name: self.set_theme(name)
             )
-        self.view_btn.setMenu(self.view_menu)
-        
-        self.theme_btn = QPushButton("Switch Theme")
-        self.theme_btn.clicked.connect(self.toggle_theme)
-        
-        grid_ctrl.addWidget(self.undo_btn)
-        grid_ctrl.addWidget(self.view_btn)
-        grid_ctrl.addWidget(self.theme_btn)
-        grid_ctrl.addStretch()
-        
-        self.sched_table = QTableWidget()
-        self.sched_table.model().dataChanged.connect(self.handle_manual_move)
-        
-        self.mid_panel.layout.addLayout(grid_ctrl)
-        self.mid_panel.layout.addWidget(self.sched_table)
+        self.theme_btn.setMenu(theme_menu)
 
-        # Object Inspector Panel
-        self.right_panel = ContentPanel("Inspector & Limits", "#1a1a1a")
+        menubar.setCornerWidget(self.theme_btn, Qt.Corner.TopLeftCorner)
+
+        #--------------------------------------------
+        #Config Editor MENU-BAR Options:
+        #Menus & Actions: [note: only applies to buttons with sub-menus]
+
+        #menus for config editor
+        file_menu = menubar.addMenu("File")
+        faculty_menu = menubar.addMenu("Faculty")
+        courses_menu = menubar.addMenu("Courses")
+        rooms_menu = menubar.addMenu("Rooms")
+        labs_menu = menubar.addMenu("Labs")
+        #-------------------------------------------
+        #actions for config editor
+        #file:
+        change_file_ac = file_menu.addAction("Change Config File")
+        view_sum_ac = file_menu.addAction("View Summary")
+        save_config_ac = file_menu.addAction("Save Config")
+        save_config_as_ac = file_menu.addAction("Save Config As")
+
+        #faculty:
+        add_faculty_ac = faculty_menu.addAction("Add Faculty")
+        mod_faculty_ac = faculty_menu.addAction("Modify Faculty")
+        del_faculty_ac = faculty_menu.addAction("Delete Faculty")
+        ed_faculty_times_ac = faculty_menu.addAction("Edit Faculty Available Times")
+        ed_faculty_pref_ac = faculty_menu.addAction("Edit Faculty Preferences")
+
+        #courses:
+        add_courses_ac = courses_menu.addAction("Add Courses")
+        mod_courses_ac = courses_menu.addAction("Modify Courses")
+        del_courses_ac = courses_menu.addAction("Delete Courses")
+
+        #rooms:
+        add_rooms_ac = rooms_menu.addAction("Add Rooms")
+        mod_rooms_ac = rooms_menu.addAction("Modify Rooms")
+        del_rooms_ac = rooms_menu.addAction("Delete Rooms")
+
+        #labs:
+        add_labs_ac = labs_menu.addAction("Add Labs")
+        mod_labs_ac = labs_menu.addAction("Modify Labs")
+        del_labs_ac = labs_menu.addAction("Delete Labs")
+
+        #--------------------------------------------
+
+        #box-layout for buttons
+        self.sc_generator_layout = QVBoxLayout()
+        self.config_btn_layout = QHBoxLayout()
+        self.sc_viewer_layout = QVBoxLayout()
+        #splitter for panels
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.left_panel = ContentPanel("Schedule Generator", "#1a1a1a")
+        self.mid_panel = ContentPanel(f"Active Config: <b>{self.config_mgr.filepath}</b>", "#000000")
+        #self.right_panel = ContentPanel("Schedule Viewer", "#1a1a1a")
+        
+        #TODO: TEMPORARY, FIX OR MOVE LATER:
+        #------------------------------------------------------------
+        
+        self.right_panel = ContentPanel("Viewer & Inspector", "#1a1a1a")
         self.detail_view = QPlainTextEdit()
         self.save_cfg_btn = QPushButton("Apply JSON Changes")
         self.save_cfg_btn.clicked.connect(self.save_inspector_changes)
         self.right_panel.layout.addWidget(self.detail_view)
         self.right_panel.layout.addWidget(self.save_cfg_btn)
 
+        #------------------------------------------------------------
+
+        #----------------------------------------------------------
+        #Left-Panel (Schedule Generator)
+        #----------------------------------------------------------
+        
+        self.limit_btn = QPushButton("Limit # Of Schedules")
+        self.optimize_btn = QPushButton("Toggle Optimization")
+        self.generate_sc_btn = QPushButton("Generate Schedules")
+
+        #above panels & buttons are displayed in widgets.
+        self.sc_generator_layout.addWidget(self.limit_btn)
+        self.sc_generator_layout.addWidget(self.optimize_btn)
+        self.sc_generator_layout.addWidget(self.generate_sc_btn)
+        self.sc_generator_layout.addStretch()
+
+        #----------------------------------------------------------
+        #Mid-Panel (Config Editor)
+        #----------------------------------------------------------
+
+        #self.change_path_btn = QPushButton("Change Config File")
+        #self.faculty_btn = QPushButton("Faculty")
+        #self.course_btn = QPushButton("Courses")
+        #self.room_btn = QPushButton("Rooms")
+        #self.lab_btn = QPushButton("Labs")
+        #self.view_sum_btn = QPushButton("View Config Summary")
+        #self.save_config_btn = QPushButton("Save Config")
+
+        #self.config_btn_layout.addWidget(self.change_path_btn)
+        #self.config_btn_layout.addWidget(self.faculty_btn)
+        #self.config_btn_layout.addWidget(self.course_btn)
+        #self.config_btn_layout.addWidget(self.room_btn)
+        #self.config_btn_layout.addWidget(self.lab_btn)
+        #self.config_btn_layout.addWidget(self.view_sum_btn)
+        #self.config_btn_layout.addWidget(self.save_config_btn)
+        self.config_btn_layout.addStretch()
+
+        #----------------------------------------------------------
+        #Right-Panel (Schedule Viewer)
+        #----------------------------------------------------------
+
+        self.view_sc_btn = QPushButton("View Schedules")
+        self.view_by_faculty_btn = QPushButton("View by Faculty")
+        self.view_by_room_btn = QPushButton("View by Room")
+        self.view_by_lab_btn = QPushButton("View by Lab")
+        self.export_sc_btn = QPushButton("Export Schedules")
+        self.import_sc_btn = QPushButton("Import Schedules")
+
+        self.sc_viewer_layout.addWidget(self.view_sc_btn)
+        self.sc_viewer_layout.addWidget(self.view_by_faculty_btn)
+        self.sc_viewer_layout.addWidget(self.view_by_room_btn)
+        self.sc_viewer_layout.addWidget(self.view_by_lab_btn)
+        self.sc_viewer_layout.addWidget(self.export_sc_btn)
+        self.sc_viewer_layout.addWidget(self.import_sc_btn)
+        self.sc_viewer_layout.addStretch()
+
+        #----------------------------------------------------------
+        #Splitter for 3 Main Panels:
+        #----------------------------------------------------------
         self.splitter.addWidget(self.left_panel)
         self.splitter.addWidget(self.mid_panel)
         self.splitter.addWidget(self.right_panel)
-        self.splitter.setSizes([300, 800, 300])
+        #sizes in order of declarations above ^^
+        self.splitter.setSizes([100, 400, 100])
+        self.left_panel.layout.insertLayout(1, self.sc_generator_layout)
+        self.mid_panel.layout.insertLayout(1, self.config_btn_layout)
+        self.right_panel.layout.insertLayout(1, self.sc_viewer_layout)
+        
         self.setCentralWidget(self.splitter)
 
-    def open_manager_gui(self, manager):
-        """
-        Safely opens a manager's sub-window.
+        self.splitter.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.splitter.customContextMenuRequested.connect(self.show_context_menu)
 
-        Args:
-            manager: An instance of a ConfigManager (Course, Room, or Faculty).
-        """
-        if hasattr(manager, 'show'): 
-            manager.show()
-        elif hasattr(manager, 'gui'): 
-            manager.gui.show()
+  
+        #----------------------------------------------------------
+        #Action triggers:
 
-    def run_generation_and_render(self):
-        """Executes the scheduling algorithm and updates the table view."""
-        self.gen_manager.run_scheduler(self)
-        if self.schedules:
-            self.render_schedule_table(self.schedules[0])
-            self.statusBar().showMessage("Generation Complete", 3000)
+        #btn.clicked.connect = one button click
+        #ac.triggered.connect = drop-down option clicked
 
-    def render_schedule_table(self, schedule):
-        """
-        Populates the QTableWidget based on the current view mode and schedule data.
-
-        Args:
-            schedule (list): A list of dictionaries representing scheduled courses.
-        """
-        self.sched_table.blockSignals(True)
-        self.sched_table.setRowCount(0)
+        #-------------------------------------------
+        #triggers for left panel (schedule generator)
+        self.limit_btn.clicked.connect(lambda: self.gen_manager.set_limit(self))
+        self.optimize_btn.clicked.connect(lambda: self.gen_manager.set_optimize(self))
+        self.generate_sc_btn.clicked.connect(lambda: self.gen_manager.run_scheduler(self))
         
-        if not schedule:
-            self.sched_table.setColumnCount(0)
-            self.sched_table.blockSignals(False)
+        #-------------------------------------------
+        #triggers for mid panel (config editor)
+        #file:
+        change_file_ac.triggered.connect(self.handle_change_path)
+        view_sum_ac.triggered.connect(self.handle_view_summary)
+        save_config_ac.triggered.connect(lambda: self.config_mgr.save(self))
+        save_config_as_ac.triggered.connect(lambda: self.save_config_to_file())
+        
+        #faculty:
+        add_faculty_ac.triggered.connect(lambda: self.faculty_manager.add_faculty_via_dialog(self))
+        mod_faculty_ac.triggered.connect(lambda: self.faculty_manager.modify_faculty_via_dialog(self))
+        del_faculty_ac.triggered.connect(lambda: self.faculty_manager.delete_faculty_via_dialog(self))
+        ed_faculty_times_ac.triggered.connect(lambda: self.faculty_manager.faculty_time_via_dialog(self))
+        ed_faculty_pref_ac.triggered.connect(lambda: self.faculty_manager.faculty_preference(self))
+
+        #courses:
+        add_courses_ac.triggered.connect(lambda: self.course_manager.add_course_via_dialog(self))
+        mod_courses_ac.triggered.connect(lambda: self.course_manager.modify_course_via_dialog(self))
+        del_courses_ac.triggered.connect(lambda: self.course_manager.delete_course_via_dialog(self))
+
+        #rooms:
+        add_rooms_ac.triggered.connect(lambda: self.room_manager.add_room_via_dialog(self))
+        mod_rooms_ac.triggered.connect(lambda: self.room_manager.modify_room_via_dialog(self))
+        del_rooms_ac.triggered.connect(lambda: self.room_manager.delete_room_via_dialog(self))
+
+        #labs:
+        add_labs_ac.triggered.connect(lambda: self.lab_manager.add_lab_via_dialog(self))
+        mod_labs_ac.triggered.connect(lambda: self.lab_manager.modify_lab_via_dialog(self))
+        del_labs_ac.triggered.connect(lambda: self.lab_manager.delete_lab_via_dialog(self))
+
+        #config-management:
+        #self.change_path_btn.clicked.connect(self.handle_change_path)
+        #self.view_sum_btn.clicked.connect(self.handle_view_summary)
+        #self.save_config_btn.clicked.connect(lambda: self.config_mgr.save(self))
+        
+        #-------------------------------------------
+        #triggers for right panel (schedule viewer)
+        self.view_sc_btn.clicked.connect(lambda: self.open_schedule_viewer("all"))
+        self.view_by_faculty_btn.clicked.connect(lambda: self.open_schedule_viewer("faculty"))
+        self.view_by_room_btn.clicked.connect(lambda: self.open_schedule_viewer("room"))
+        self.view_by_lab_btn.clicked.connect(lambda: self.open_schedule_viewer("lab"))
+        self.export_sc_btn.clicked.connect(self.handle_export_schedule)
+        self.import_sc_btn.clicked.connect(self.handle_import_schedule)
+
+    #----------------------------------------------------------
+    # Config management handlers (GUI)
+    #----------------------------------------------------------
+
+    def handle_change_path(self):
+        """Opens a file dialog to choose or create a config JSON."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Configuration File",
+            "config/",
+            "JSON Files (*.json);;All Files (*)"
+        )
+
+        if file_path:
+            self.config_mgr.filepath = file_path
+            try:
+                self.config_mgr.load()
+                self.mid_panel.update_title(file_path)
+                QMessageBox.information(self, "Path Changed", f"Now using: {file_path}")
+            except Exception as e:
+                QMessageBox.warning(self, "Load Warning", f"File selected, but could not load data: {e}")
+
+    def handle_view_summary(self):
+        """Displays summary with the current file path in the title."""
+        summary_text = self.config_mgr.get_summary_text()
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle(f"Summary: {self.config_mgr.filepath.split('/')[-1]}")
+        msg.setText(summary_text)
+
+        # Use Monospace for tabulation
+        font = QFont("Courier New", 10)
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        msg.setFont(font)
+
+        msg.exec()
+
+    def handle_import_schedule(self):
+        """Opens a file dialog to import a schedule from CSV or JSON. Schedule is viewable in Schedule Viewer."""
+        file_path, selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Import Schedule",
+            "",
+            "CSV Files (*.csv);;JSON Files (*.json);;All Files (*)"
+        )
+        if not file_path:
+            return
+        schedule_data = None
+        if file_path.lower().endswith(".json"):
+            schedule_data = self.config_mgr.import_schedule_from_json(file_path)
+        else:
+            schedule_data = self.config_mgr.import_schedule_from_csv(file_path)
+        if schedule_data is not None:
+            self.imported_schedule = schedule_data
+            self.schedules.append(schedule_data)
+            self.current_schedule_index = len(self.schedules) - 1
+            QMessageBox.information(
+                self,
+                "Import Success",
+                f"Imported {len(schedule_data)} assignment(s) from:\n{file_path}\nView in Schedule Viewer."
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "Import Failed",
+                "Could not read a valid schedule from the selected file."
+            )
+
+    def handle_export_schedule(self):
+        """Triggers the CSV export via a file dialog. Exports the currently viewed schedule."""
+        schedule = None
+        if self.schedules and 0 <= self.current_schedule_index < len(self.schedules):
+            schedule = self.schedules[self.current_schedule_index]
+        if not schedule or not isinstance(schedule, list):
+            QMessageBox.warning(
+                self,
+                "No Schedule",
+                "No schedule to export. Generate or import a schedule first, then use Schedule Viewer to select which one to export."
+            )
             return
 
-        slots = sorted(list(set(i['time'] for i in schedule)))
-        self.sched_table.setRowCount(len(slots))
-        
-        view_map = {
-            "DAY": ("day", ["Mon", "Tue", "Wed", "Thu", "Fri"]),
-            "ROOM": ("room", sorted(list(set(i.get('room', 'N/A') for i in schedule)))),
-            "FACULTY": ("faculty", sorted(list(set(i.get('faculty', 'TBD') for i in schedule)))),
-            "LAB": ("lab", sorted(list(set(i.get('lab', 'None') for i in schedule))))
-        }
-        key, cols = view_map.get(self.view_mode, view_map["DAY"])
-        
-        self.sched_table.setColumnCount(len(cols) + 1)
-        self.sched_table.setHorizontalHeaderLabels(["Time"] + cols)
-        
-        for row, t in enumerate(slots):
-            self.sched_table.setItem(row, 0, QTableWidgetItem(t))
-            for entry in schedule:
-                if entry['time'] == t:
-                    try:
-                        col_val = entry.get(key)
-                        if col_val in cols:
-                            c_idx = cols.index(col_val) + 1
-                            cell = QTableWidgetItem(f"{entry['course_id']}\n{entry.get('faculty','TBD')}")
-                            cell.setBackground(QBrush(self.get_color_for_id(entry.get('faculty'))))
-                            cell.setData(Qt.ItemDataRole.UserRole, entry)
-                            self.sched_table.setItem(row, c_idx, cell)
-                    except (ValueError, KeyError): 
-                        continue
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Schedule", "", "CSV Files (*.csv);;All Files (*)"
+        )
 
-        self.sched_table.resizeRowsToContents()
-        self.sched_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.sched_table.blockSignals(False)
+        if file_path:
+            if not file_path.endswith('.csv'):
+                file_path += '.csv'
 
-    def apply_global_theme(self):
-        """Updates the application stylesheet to handle light/dark mode transitions."""
-        if self.is_dark_mode:
-            bg, panel, text, border = "#1f1f24", "#1a1a1a", "#ffffff", "#444444"
+            success = self.config_mgr.export_schedule_to_csv(schedule, file_path)
+
+            if success:
+                QMessageBox.information(self, "Export Success", f"Schedule exported to:\n{file_path}")
+            else:
+                QMessageBox.critical(self, "Export Failed", "Could not write to the selected file.")
+
+    def _show_tabulated_msg(self, title, text):
+        """Private helper to ensure monospaced font is used for all tables."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle(title)
+        msg.setText(text)
+        mono_font = QFont("Courier New", 10)
+        mono_font.setStyleHint(QFont.StyleHint.Monospace)
+        msg.setFont(mono_font)
+        msg.exec()
+
+    #----------------------------------------------------------
+    # Schedule Viewer Functions
+    #----------------------------------------------------------
+
+    #TODO: Make schedules look nicer, & do more with the faculty/room/lab options.
+    def open_schedule_viewer(self, grouping):
+
+        if not self.schedules:
+            QMessageBox.warning(self, "No schedules", "No schedules to view. Generate or import one first.")
+            return
+
+        self.viewer = QDialog(self)
+        self.viewer.setWindowTitle(f"Schedule Viewer - {grouping.capitalize()}")
+        self.viewer.resize(900, 500)
+        layout = QVBoxLayout(self.viewer)
+
+        self.schedule_display = QPlainTextEdit()
+        self.schedule_display.setReadOnly(True)
+        self.schedule_display.setFont(QFont("Courier New", 10))
+        self.schedule_display.setStyleSheet("background-color: #1a1a1a; color: #e0e0e0;")
+        layout.addWidget(self.schedule_display)
+
+        if grouping == "all":
+
+            def refresh_display():
+                self._refresh_schedule_display()
+
+            nav_layout = QHBoxLayout()
+            prev_btn = QPushButton("Previous")
+            next_btn = QPushButton("Next")
+            
+            prev_btn.clicked.connect(lambda: (self.show_prev_schedule(), refresh_display()))
+            next_btn.clicked.connect(lambda: (self.show_next_schedule(), refresh_display()))
+            
+            nav_layout.addWidget(prev_btn)
+            nav_layout.addWidget(next_btn)
+            layout.addLayout(nav_layout)
+            
+            self._refresh_schedule_display()
+
         else:
-            bg, panel, text, border = "#f0f2f5", "#ffffff", "#1a1a1a", "#bbbbbb"
 
-        self.left_panel.update_theme(panel, self.is_dark_mode)
-        self.mid_panel.update_theme(panel if self.is_dark_mode else "#ffffff", self.is_dark_mode)
-        self.right_panel.update_theme(panel, self.is_dark_mode)
+            config_data = self.config_mgr.data.get("config", {})
+            
+            data_map = {
+                "faculty": config_data.get("faculty", "No Faculty found"),
+                "room": config_data.get("rooms", "No Rooms found"),
+                "lab": config_data.get("labs", "No Labs found")
+            }
+            
+            content = data_map.get(grouping)
+            self.schedule_display.setPlainText(json.dumps(content, indent=4))
 
-        self.setStyleSheet(f"""
-            QMainWindow {{ background-color: {bg}; }}
-            QMenuBar {{ background-color: {panel}; color: {text}; border-bottom: 1px solid {border}; }}
-            QTableWidget, QTreeWidget, QPlainTextEdit, QLineEdit {{ 
-                background-color: {panel}; color: {text}; border: 1px solid {border}; 
-            }}
-            QTreeWidget::viewport, QTableWidget::viewport {{ background-color: transparent; }}
-            QHeaderView::section {{ background-color: {panel}; color: {text}; border: 1px solid {border}; }}
-            QPushButton {{ background-color: {panel}; color: {text}; border: 1px solid {border}; padding: 4px 12px; }}
-            QPushButton:hover {{ background-color: {border}; }}
-        """)
 
-    def create_menus(self):
-        """Defines the menu bar structure and connects actions to functions."""
-        menubar = self.menuBar()
-        menubar.clear()
-        
-        file = menubar.addMenu("&File")
-        file.addAction("Import Config").triggered.connect(self.import_config)
-        file.addAction("Save Config").triggered.connect(self.save_config_to_file)
-        file.addSeparator()
-        file.addAction("Export CSV").triggered.connect(self.handle_export_schedule)
-        file.addAction("Export PDF").triggered.connect(self.export_to_pdf)
+        self.viewer.exec()
 
-        cfg = menubar.addMenu("&Configure")
-        cfg.addAction("Manage Courses").triggered.connect(lambda: self.open_manager_gui(self.course_manager))
-        cfg.addAction("Manage Rooms").triggered.connect(lambda: self.open_manager_gui(self.room_manager))
-        cfg.addAction("Manage Faculty").triggered.connect(lambda: self.open_manager_gui(self.faculty_manager))
+    def _refresh_schedule_display(self):
+        if not self.schedules or not (0 <= self.current_schedule_index < len(self.schedules)):
+            return
+        schedule = self.schedules[self.current_schedule_index]
+        schedule_data = schedule if isinstance(schedule, list) and schedule else []
+        if schedule_data and isinstance(schedule_data[0], dict):
+            text = self.config_mgr.get_schedule_spreadsheet(schedule_data)
+        else:
+            text = str(schedule)
+        if hasattr(self, "schedule_display"):
+            self.schedule_display.setPlainText(text)
+        if hasattr(self, "viewer") and self.viewer is not None:
+            self.viewer.setWindowTitle(f"Schedule Viewer ({self.current_schedule_index + 1}/{len(self.schedules)})")
 
-        build = menubar.addMenu("&Build")
-        build.addAction("Run Generator").triggered.connect(self.run_generation_and_render)
-        build.addAction("Clear Results").triggered.connect(self.confirm_clear_schedule)
+    def show_current_schedule(self):
+        if not self.schedules:
+            return
+        self._refresh_schedule_display()
 
-    def get_color_for_id(self, uid):
-        """Retrieves or generates a unique QColor for a given faculty/item ID."""
-        if uid not in self.color_cache:
-            self.color_cache[uid] = QColor.fromHsvF(random.random(), 0.3, 0.9 if self.is_dark_mode else 0.8)
-        return self.color_cache[uid]
 
-    def render_config_tree(self):
-        """Recursively renders the configuration JSON into the Explorer tree."""
-        self.config_tree.clear()
-        data = self.config_mgr.data if hasattr(self.config_mgr, 'data') else {}
-        for cat, content in data.items():
-            parent = QTreeWidgetItem(self.config_tree, [str(cat).upper()])
-            parent.setData(0, Qt.ItemDataRole.UserRole, content)
-            if isinstance(content, list):
-                for item in content:
-                    name = item.get('course_id') or item.get('name') or "Item" if isinstance(item, dict) else str(item)
-                    child = QTreeWidgetItem(parent, [str(name)])
-                    child.setData(0, Qt.ItemDataRole.UserRole, item)
-        self.config_tree.expandAll()
+    def show_next_schedule(self):
+        if not self.schedules:
+            return
 
-    def handle_tree_selection(self, item):
-        """Displays the selected item's raw JSON in the Inspector."""
-        data = item.data(0, Qt.ItemDataRole.UserRole)
-        if data is not None: 
-            self.detail_view.setPlainText(json.dumps(data, indent=4))
+        self.current_schedule_index = (
+            self.current_schedule_index + 1
+        ) % len(self.schedules)
 
-    def filter_tree(self, query):
-        """Filters tree items based on the search bar input."""
-        q = query.lower()
-        for i in range(self.config_tree.topLevelItemCount()):
-            parent = self.config_tree.topLevelItem(i)
-            hit = False
-            for j in range(parent.childCount()):
-                child = parent.child(j)
-                match = q in child.text(0).lower()
-                child.setHidden(not match)
-                if match: hit = True
-            parent.setHidden(not hit and q != "")
+        self.show_current_schedule()
 
-    # Boilerplate / Navigation handlers
-    def import_config(self):
-        p, _ = QFileDialog.getOpenFileName(self, "Open JSON", "", "*.json")
-        if p:
-            with open(p, 'r') as f: self.config_mgr.data = json.load(f)
-            self.render_config_tree()
 
+    def show_prev_schedule(self):
+        if not self.schedules:
+            return
+
+        self.current_schedule_index = (
+            self.current_schedule_index - 1
+        ) % len(self.schedules)
+
+        self.show_current_schedule()
+
+    #This function is used to "save as" a config file
     def save_config_to_file(self):
         p, _ = QFileDialog.getSaveFileName(self, "Save JSON", "", "*.json")
         if p:
             with open(p, 'w') as f: json.dump(self.config_mgr.data, f, indent=4)
 
-    def set_view_mode(self, m):
-        self.view_mode = m
-        self.view_btn.setText(f"View Mode: {m.title()}")
-        if self.schedules: self.render_schedule_table(self.schedules[0])
+    ######
 
-    def toggle_theme(self):
-        self.is_dark_mode = not self.is_dark_mode
-        self.apply_global_theme()
-        if self.schedules: self.render_schedule_table(self.schedules[0])
+    #TODO: Finish the below function idea.
+    #use this concept to make function calls more dynamic,
+    #needs more work however. maybe adding a function to each manager class?
+    """
+    def open_manager_gui(self, manager):
+        
+        #Safely opens a manager's sub-window.
 
-    def handle_export_schedule(self):
-        if not self.schedules: return
-        p, _ = QFileDialog.getSaveFileName(self, "CSV", "", "*.csv")
-        if p:
-            with open(p, 'w', newline='') as f:
-                w = csv.DictWriter(f, fieldnames=self.schedules[0][0].keys())
-                w.writeheader(); w.writerows(self.schedules[0])
-
-    def export_to_pdf(self):
-        p, _ = QFileDialog.getSaveFileName(self, "PDF", "", "*.pdf")
-        if p:
-            pr = QPrinter(QPrinter.PrinterMode.HighResolution)
-            pr.setOutputFileName(p)
-            painter = QPainter(pr)
-            self.sched_table.render(painter)
-            painter.end()
-
-    def confirm_clear_schedule(self): 
-        if QMessageBox.question(self, "Clear", "Clear results?") == QMessageBox.StandardButton.Yes:
-            self.schedules = []; self.render_schedule_table([])
-
-    def undo_move(self):
-        if self.history_stack:
-            self.schedules[0] = self.history_stack.pop()
-            self.render_schedule_table(self.schedules[0])
-            self.undo_btn.setEnabled(len(self.history_stack) > 0)
-
-    def handle_manual_move(self):
-        if self.schedules:
-            self.history_stack.append(copy.deepcopy(self.schedules[0]))
-            self.undo_btn.setEnabled(True)
+        #Args:
+            #manager: An instance of a ConfigManager (Course, Room, or Faculty).
+        
+        if hasattr(manager, 'show'): 
+            manager.show()
+        elif hasattr(manager, 'gui'): 
+            manager.gui.show()
+    """
 
     def save_inspector_changes(self):
-        try:
-            it = self.config_tree.currentItem()
-            if not it: return
-            self.config_mgr.data[it.text(0).upper()] = json.loads(self.detail_view.toPlainText())
-            QMessageBox.information(self, "Success", "Configuration applied.")
-        except: QMessageBox.critical(self, "Error", "Invalid JSON.")
-
-    def resizeEvent(self, e):
-        super().resizeEvent(e)
-        if self.sched_table.columnCount() > 0:
-            self.sched_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            try:
+                it = self.config_tree.currentItem()
+                if not it: return
+                self.config_mgr.data[it.text(0).upper()] = json.loads(self.detail_view.toPlainText())
+                QMessageBox.information(self, "Success", "Configuration applied.")
+            except: QMessageBox.critical(self, "Error", "Invalid JSON.")
