@@ -56,3 +56,4 @@ class ContentPanel(QFrame):
         display_text = os.path.basename(file_path)
         self.title = file_path
         self.label.setText(f"Active Config: {display_text}")
+
