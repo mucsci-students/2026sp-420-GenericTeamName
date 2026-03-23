@@ -1,24 +1,19 @@
 '''
     File: main_window.py
-    Date: 03/21/2026
+    Date: 03/23/2026
     Author: Kyle Smith & Tyler Strohl
     Class: CMSC 420
     Description: The main window of the GUI.
 '''
 
+import random
+import copy
+import json
+import csv
 from PyQt6.QtWidgets import (
-    QMainWindow, 
-    QSplitter, 
-    QMenu, 
-    QPushButton, 
-    QVBoxLayout, 
-    QHBoxLayout, 
-    QWidget, 
-    QFileDialog, 
-    QMessageBox, 
-    QDialog, 
-    QPlainTextEdit,
-    QLabel,
+    QMainWindow, QSplitter, QMenu, QPushButton, 
+    QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, 
+    QMessageBox, QDialog, QPlainTextEdit, QLabel,
     QMenuBar
     )
 from PyQt6.QtCore import Qt
@@ -164,12 +159,19 @@ class MainWindow(QMainWindow):
         #Menus & Actions: [note: only applies to buttons with sub-menus]
 
         #menus for config editor
+        file_menu = menubar.addMenu("File")
         faculty_menu = menubar.addMenu("Faculty")
         courses_menu = menubar.addMenu("Courses")
         rooms_menu = menubar.addMenu("Rooms")
         labs_menu = menubar.addMenu("Labs")
         #-------------------------------------------
         #actions for config editor
+        #file:
+        change_file_ac = file_menu.addAction("Change Config File")
+        view_sum_ac = file_menu.addAction("View Summary")
+        save_config_ac = file_menu.addAction("Save Config")
+        save_config_as_ac = file_menu.addAction("Save Config As")
+
         #faculty:
         add_faculty_ac = faculty_menu.addAction("Add Faculty")
         mod_faculty_ac = faculty_menu.addAction("Modify Faculty")
@@ -194,10 +196,6 @@ class MainWindow(QMainWindow):
 
         #--------------------------------------------
 
-        #TODO: Move the location of the filepath declaration
-        self.filepath = self.config_mgr.filepath
-        display_path = f"Active Config: <b>{self.filepath}</b>"
-
         #box-layout for buttons
         self.sc_generator_layout = QVBoxLayout()
         self.config_btn_layout = QHBoxLayout()
@@ -205,8 +203,20 @@ class MainWindow(QMainWindow):
         #splitter for panels
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.left_panel = ContentPanel("Schedule Generator", "#1a1a1a")
-        self.mid_panel = ContentPanel(display_path, "#000000")
-        self.right_panel = ContentPanel("Schedule Viewer", "#1a1a1a")
+        self.mid_panel = ContentPanel(f"Active Config: <b>{self.config_mgr.filepath}</b>", "#000000")
+        #self.right_panel = ContentPanel("Schedule Viewer", "#1a1a1a")
+        
+        #TODO: TEMPORARY, FIX OR MOVE LATER:
+        #------------------------------------------------------------
+        
+        self.right_panel = ContentPanel("Viewer & Inspector", "#1a1a1a")
+        self.detail_view = QPlainTextEdit()
+        self.save_cfg_btn = QPushButton("Apply JSON Changes")
+        self.save_cfg_btn.clicked.connect(self.save_inspector_changes)
+        self.right_panel.layout.addWidget(self.detail_view)
+        self.right_panel.layout.addWidget(self.save_cfg_btn)
+
+        #------------------------------------------------------------
 
         #----------------------------------------------------------
         #Left-Panel (Schedule Generator)
@@ -226,21 +236,21 @@ class MainWindow(QMainWindow):
         #Mid-Panel (Config Editor)
         #----------------------------------------------------------
 
-        self.change_path_btn = QPushButton("Change Config File")
+        #self.change_path_btn = QPushButton("Change Config File")
         #self.faculty_btn = QPushButton("Faculty")
         #self.course_btn = QPushButton("Courses")
         #self.room_btn = QPushButton("Rooms")
         #self.lab_btn = QPushButton("Labs")
-        self.view_sum_btn = QPushButton("View Config Summary")
-        self.save_config_btn = QPushButton("Save Config")
+        #self.view_sum_btn = QPushButton("View Config Summary")
+        #self.save_config_btn = QPushButton("Save Config")
 
-        self.config_btn_layout.addWidget(self.change_path_btn)
+        #self.config_btn_layout.addWidget(self.change_path_btn)
         #self.config_btn_layout.addWidget(self.faculty_btn)
         #self.config_btn_layout.addWidget(self.course_btn)
         #self.config_btn_layout.addWidget(self.room_btn)
         #self.config_btn_layout.addWidget(self.lab_btn)
-        self.config_btn_layout.addWidget(self.view_sum_btn)
-        self.config_btn_layout.addWidget(self.save_config_btn)
+        #self.config_btn_layout.addWidget(self.view_sum_btn)
+        #self.config_btn_layout.addWidget(self.save_config_btn)
         self.config_btn_layout.addStretch()
 
         #----------------------------------------------------------
@@ -294,8 +304,14 @@ class MainWindow(QMainWindow):
         
         #-------------------------------------------
         #triggers for mid panel (config editor)
+        #file:
+        change_file_ac.triggered.connect(self.handle_change_path)
+        view_sum_ac.triggered.connect(self.handle_view_summary)
+        save_config_ac.triggered.connect(lambda: self.config_mgr.save(self))
+        save_config_as_ac.triggered.connect(lambda: self.save_config_to_file())
+        
         #faculty:
-        #add_faculty_ac.triggered.connect(lambda: self.faculty_manager.add_faculty_via_dialog(self))
+        add_faculty_ac.triggered.connect(lambda: self.faculty_manager.add_faculty_via_dialog(self))
         mod_faculty_ac.triggered.connect(lambda: self.faculty_manager.modify_faculty_via_dialog(self))
         del_faculty_ac.triggered.connect(lambda: self.faculty_manager.delete_faculty_via_dialog(self))
         ed_faculty_times_ac.triggered.connect(lambda: self.faculty_manager.faculty_time_via_dialog(self))
@@ -317,16 +333,16 @@ class MainWindow(QMainWindow):
         del_labs_ac.triggered.connect(lambda: self.lab_manager.delete_lab_via_dialog(self))
 
         #config-management:
-        self.change_path_btn.clicked.connect(self.handle_change_path)
-        self.view_sum_btn.clicked.connect(self.handle_view_summary)
-        self.save_config_btn.clicked.connect(lambda: self.config_mgr.save(self))
+        #self.change_path_btn.clicked.connect(self.handle_change_path)
+        #self.view_sum_btn.clicked.connect(self.handle_view_summary)
+        #self.save_config_btn.clicked.connect(lambda: self.config_mgr.save(self))
         
         #-------------------------------------------
         #triggers for right panel (schedule viewer)
-        self.view_sc_btn.clicked.connect(self.open_schedule_viewer)
-        self.view_by_faculty_btn.clicked.connect(lambda: self.handle_view_grouped("faculty"))
-        self.view_by_room_btn.clicked.connect(lambda: self.handle_view_grouped("room"))
-        self.view_by_lab_btn.clicked.connect(lambda: self.handle_view_grouped("lab"))
+        self.view_sc_btn.clicked.connect(lambda: self.open_schedule_viewer("all"))
+        self.view_by_faculty_btn.clicked.connect(lambda: self.open_schedule_viewer("faculty"))
+        self.view_by_room_btn.clicked.connect(lambda: self.open_schedule_viewer("room"))
+        self.view_by_lab_btn.clicked.connect(lambda: self.open_schedule_viewer("lab"))
         self.export_sc_btn.clicked.connect(self.handle_export_schedule)
         self.import_sc_btn.clicked.connect(self.handle_import_schedule)
 
@@ -347,6 +363,7 @@ class MainWindow(QMainWindow):
             self.config_mgr.filepath = file_path
             try:
                 self.config_mgr.load()
+                self.mid_panel.update_title(file_path)
                 QMessageBox.information(self, "Path Changed", f"Now using: {file_path}")
             except Exception as e:
                 QMessageBox.warning(self, "Load Warning", f"File selected, but could not load data: {e}")
@@ -364,42 +381,6 @@ class MainWindow(QMainWindow):
         font.setStyleHint(QFont.StyleHint.Monospace)
         msg.setFont(font)
 
-        msg.exec()
-
-    def handle_view_grid(self):
-        """Displays the traditional week-view spreadsheet grid."""
-        data = self.get_active_schedule()
-        output = self.config_mgr.get_schedule_spreadsheet(data)
-        self._show_tabulated_msg("Weekly Schedule Grid", output)
-
-    def handle_view_grouped(self, key):
-        """Displays the schedule list grouped by faculty, room, or lab."""
-        data = self.get_active_schedule()
-        output = self.config_mgr.get_grouped_schedule_text(data, key)
-        self._show_tabulated_msg(f"Schedule Grouped by {key.capitalize()}", output)
-
-    def handle_view_schedule(self):
-        """Fetches generated schedule and displays it as a spreadsheet."""
-        schedule = self.imported_schedule
-        if not schedule:
-            schedule = [
-                {'course_id': 'CMSC420', 'day': 'Mon', 'time': '09:00'},
-                {'course_id': 'CMSC420', 'day': 'Wed', 'time': '09:00'},
-                {'course_id': 'MATH101', 'day': 'Tue', 'time': '10:00'},
-                {'course_id': 'CS202', 'day': 'Thu', 'time': '13:00'},
-            ]
-
-        spreadsheet = self.config_mgr.get_schedule_spreadsheet(schedule)
-
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Weekly Schedule Spreadsheet")
-        msg.setText(spreadsheet)
-
-        mono_font = QFont("Courier New", 10)
-        mono_font.setStyleHint(QFont.StyleHint.Monospace)
-        msg.setFont(mono_font)
-
-        msg.setStyleSheet("QLabel{min-width: 800px;}")
         msg.exec()
 
     def handle_import_schedule(self):
@@ -471,52 +452,60 @@ class MainWindow(QMainWindow):
         msg.setFont(mono_font)
         msg.exec()
 
-    def get_active_schedule(self):
-        """Get the schedule."""
-        schedule = self.imported_schedule
-        if schedule:
-            return schedule
-        
-        return [
-            {'course_id': 'CS420', 'faculty': 'Dr. Smith', 'room': 'Roddy 101', 'lab': 'N/A', 'day': 'Mon', 'time': '09:00'},
-            {'course_id': 'BIO101', 'faculty': 'Dr. Jones', 'room': 'Caputo 210', 'lab': 'Lab A', 'day': 'Tue', 'time': '10:00'}
-        ]
-
     #----------------------------------------------------------
     # Schedule Viewer Functions
     #----------------------------------------------------------
 
-    def open_schedule_viewer(self):
+    #TODO: Make schedules look nicer, & do more with the faculty/room/lab options.
+    def open_schedule_viewer(self, grouping):
+
         if not self.schedules:
-            QMessageBox.warning(
-                self,
-                "No schedules",
-                "No schedules to view. Generate schedules or import a schedule first."
-            )
+            QMessageBox.warning(self, "No schedules", "No schedules to view. Generate or import one first.")
             return
 
         self.viewer = QDialog(self)
-        self.viewer.setWindowTitle("Schedule Viewer")
+        self.viewer.setWindowTitle(f"Schedule Viewer - {grouping.capitalize()}")
         self.viewer.resize(900, 500)
         layout = QVBoxLayout(self.viewer)
+
         self.schedule_display = QPlainTextEdit()
         self.schedule_display.setReadOnly(True)
         self.schedule_display.setFont(QFont("Courier New", 10))
         self.schedule_display.setStyleSheet("background-color: #1a1a1a; color: #e0e0e0;")
+        layout.addWidget(self.schedule_display)
 
-        def refresh_display():
+        if grouping == "all":
+
+            def refresh_display():
+                self._refresh_schedule_display()
+
+            nav_layout = QHBoxLayout()
+            prev_btn = QPushButton("Previous")
+            next_btn = QPushButton("Next")
+            
+            prev_btn.clicked.connect(lambda: (self.show_prev_schedule(), refresh_display()))
+            next_btn.clicked.connect(lambda: (self.show_next_schedule(), refresh_display()))
+            
+            nav_layout.addWidget(prev_btn)
+            nav_layout.addWidget(next_btn)
+            layout.addLayout(nav_layout)
+            
             self._refresh_schedule_display()
 
-        nav_layout = QHBoxLayout()
-        prev_btn = QPushButton("Previous")
-        next_btn = QPushButton("Next")
-        prev_btn.clicked.connect(lambda: (self.show_prev_schedule(), refresh_display()))
-        next_btn.clicked.connect(lambda: (self.show_next_schedule(), refresh_display()))
-        nav_layout.addWidget(prev_btn)
-        nav_layout.addWidget(next_btn)
-        layout.addWidget(self.schedule_display)
-        layout.addLayout(nav_layout)
-        self._refresh_schedule_display()
+        else:
+
+            config_data = self.config_mgr.data.get("config", {})
+            
+            data_map = {
+                "faculty": config_data.get("faculty", "No Faculty found"),
+                "room": config_data.get("rooms", "No Rooms found"),
+                "lab": config_data.get("labs", "No Labs found")
+            }
+            
+            content = data_map.get(grouping)
+            self.schedule_display.setPlainText(json.dumps(content, indent=4))
+
+
         self.viewer.exec()
 
     def _refresh_schedule_display(self):
@@ -560,3 +549,35 @@ class MainWindow(QMainWindow):
 
         self.show_current_schedule()
 
+    #This function is used to "save as" a config file
+    def save_config_to_file(self):
+        p, _ = QFileDialog.getSaveFileName(self, "Save JSON", "", "*.json")
+        if p:
+            with open(p, 'w') as f: json.dump(self.config_mgr.data, f, indent=4)
+
+    ######
+
+    #TODO: Finish the below function idea.
+    #use this concept to make function calls more dynamic,
+    #needs more work however. maybe adding a function to each manager class?
+    """
+    def open_manager_gui(self, manager):
+        
+        #Safely opens a manager's sub-window.
+
+        #Args:
+            #manager: An instance of a ConfigManager (Course, Room, or Faculty).
+        
+        if hasattr(manager, 'show'): 
+            manager.show()
+        elif hasattr(manager, 'gui'): 
+            manager.gui.show()
+    """
+
+    def save_inspector_changes(self):
+            try:
+                it = self.config_tree.currentItem()
+                if not it: return
+                self.config_mgr.data[it.text(0).upper()] = json.loads(self.detail_view.toPlainText())
+                QMessageBox.information(self, "Success", "Configuration applied.")
+            except: QMessageBox.critical(self, "Error", "Invalid JSON.")

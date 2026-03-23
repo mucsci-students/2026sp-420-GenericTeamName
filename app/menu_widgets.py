@@ -1,11 +1,12 @@
 '''
     File: menu_widgets.py
-    Date: 02/25/2026
+    Date: 03/22/2026
     Author: Kyle Smith & Tyler Strohl
     Class: CMSC 420
     Description: GUI Components.
 '''
 
+import os
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QPushButton
 from PyQt6.QtCore import Qt
 
@@ -48,3 +49,10 @@ class ContentPanel(QFrame):
         if border is None:
             border = "#ffffff" if dark else "#000000"
         self._apply_color(panel_color, text_color, border)
+
+    #called when the user changes their config file.
+    def update_title(self, file_path):
+        
+        display_text = os.path.basename(file_path)
+        self.title = file_path
+        self.label.setText(f"Active Config: {display_text}")
