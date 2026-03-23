@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>app.main_window &mdash; Scheduler GUI 4.2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=86f27845" />
+
+  
+  
+        <script src="../../_static/jquery.js?v=8dae8fb0"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../_static/documentation_options.js?v=0cd558ae"></script>
+        <script src="../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            Scheduler GUI
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Scheduler GUI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">app.main_window</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for app.main_window</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    File: main_window.py</span>
+<span class="sd">    Date: 03/22/2026</span>
+<span class="sd">    Author: Kyle Smith &amp; Tyler Strohl</span>
+<span class="sd">    Class: CMSC 420</span>
+<span class="sd">    Description: Primary GUI controller for the Scheduler Pro system. </span>
+<span class="sd">    Handles event loops, theme switching, and data visualization.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">csv</span>
+<span class="kn">from</span> <span class="nn">PyQt6.QtWidgets</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">QMainWindow</span><span class="p">,</span> <span class="n">QSplitter</span><span class="p">,</span> <span class="n">QMenu</span><span class="p">,</span> <span class="n">QPushButton</span><span class="p">,</span> <span class="n">QVBoxLayout</span><span class="p">,</span> 
+    <span class="n">QHBoxLayout</span><span class="p">,</span> <span class="n">QWidget</span><span class="p">,</span> <span class="n">QFileDialog</span><span class="p">,</span> <span class="n">QMessageBox</span><span class="p">,</span> <span class="n">QTableWidget</span><span class="p">,</span> 
+    <span class="n">QTableWidgetItem</span><span class="p">,</span> <span class="n">QTreeWidget</span><span class="p">,</span> <span class="n">QTreeWidgetItem</span><span class="p">,</span> <span class="n">QMenuBar</span><span class="p">,</span> 
+    <span class="n">QStatusBar</span><span class="p">,</span> <span class="n">QHeaderView</span><span class="p">,</span> <span class="n">QPlainTextEdit</span><span class="p">,</span> <span class="n">QAbstractItemView</span><span class="p">,</span> <span class="n">QLineEdit</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">PyQt6.QtCore</span> <span class="kn">import</span> <span class="n">Qt</span>
+<span class="kn">from</span> <span class="nn">PyQt6.QtGui</span> <span class="kn">import</span> <span class="n">QColor</span><span class="p">,</span> <span class="n">QBrush</span><span class="p">,</span> <span class="n">QPainter</span>
+<span class="kn">from</span> <span class="nn">PyQt6.QtPrintSupport</span> <span class="kn">import</span> <span class="n">QPrinter</span>
+
+<span class="kn">from</span> <span class="nn">.menu_widgets</span> <span class="kn">import</span> <span class="n">ContentPanel</span>
+<span class="kn">from</span> <span class="nn">config.config_mgr</span> <span class="kn">import</span> <span class="n">ConfigManager</span>
+<span class="kn">from</span> <span class="nn">.course_gui</span> <span class="kn">import</span> <span class="n">CourseConfigManager</span>
+<span class="kn">from</span> <span class="nn">.room_gui</span> <span class="kn">import</span> <span class="n">RoomConfigManager</span>
+<span class="kn">from</span> <span class="nn">.faculty_gui</span> <span class="kn">import</span> <span class="n">FacultyManager</span>
+<span class="kn">from</span> <span class="nn">.generator_gui</span> <span class="kn">import</span> <span class="n">GenConfigManager</span>
+<span class="kn">from</span> <span class="nn">.lab_gui</span> <span class="kn">import</span> <span class="n">LabConfigManager</span>
+
+<div class="viewcode-block" id="MainWindow">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow">[docs]</a>
+<span class="k">class</span> <span class="nc">MainWindow</span><span class="p">(</span><span class="n">QMainWindow</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Main application window for Scheduler Pro.</span>
+
+<span class="sd">    This class manages the lifecycle of the GUI, coordinates between </span>
+<span class="sd">    different configuration managers, and provides the interface for </span>
+<span class="sd">    generating and exporting academic schedules.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        is_dark_mode (bool): Tracks the current theme state.</span>
+<span class="sd">        schedules (list): Stores generated schedule result sets.</span>
+<span class="sd">        history_stack (list): Stores previous states for Undo functionality.</span>
+<span class="sd">        view_mode (str): Current grid perspective (DAY, ROOM, FACULTY, or LAB).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initializes the MainWindow, managers, and UI components.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setWindowTitle</span><span class="p">(</span><span class="s2">&quot;Scheduler Pro v4.3 - GenericTeamName&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">1400</span><span class="p">,</span> <span class="mi">900</span><span class="p">)</span> 
+
+        <span class="c1"># State Initialization</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_dark_mode</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">schedules</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">history_stack</span> <span class="o">=</span> <span class="p">[]</span> 
+        <span class="bp">self</span><span class="o">.</span><span class="n">view_mode</span> <span class="o">=</span> <span class="s2">&quot;DAY&quot;</span> 
+        <span class="bp">self</span><span class="o">.</span><span class="n">color_cache</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="c1"># Core Logic Managers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config_mgr</span> <span class="o">=</span> <span class="n">ConfigManager</span><span class="p">(</span><span class="s2">&quot;config/config.json&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span> 
+            <span class="bp">self</span><span class="o">.</span><span class="n">config_mgr</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span> 
+            <span class="k">pass</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">course_manager</span> <span class="o">=</span> <span class="n">CourseConfigManager</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">room_manager</span> <span class="o">=</span> <span class="n">RoomConfigManager</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">faculty_manager</span> <span class="o">=</span> <span class="n">FacultyManager</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gen_manager</span> <span class="o">=</span> <span class="n">GenConfigManager</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lab_manager</span> <span class="o">=</span> <span class="n">LabConfigManager</span><span class="p">()</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">init_ui</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">create_menus</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">apply_global_theme</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">render_config_tree</span><span class="p">()</span>
+
+<div class="viewcode-block" id="MainWindow.init_ui">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.init_ui">[docs]</a>
+    <span class="k">def</span> <span class="nf">init_ui</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Constructs the primary layout including the Explorer, Grid, and Inspector.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setStatusBar</span><span class="p">(</span><span class="n">QStatusBar</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">splitter</span> <span class="o">=</span> <span class="n">QSplitter</span><span class="p">(</span><span class="n">Qt</span><span class="o">.</span><span class="n">Orientation</span><span class="o">.</span><span class="n">Horizontal</span><span class="p">)</span>
+        
+        <span class="c1"># Data Explorer Panel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">left_panel</span> <span class="o">=</span> <span class="n">ContentPanel</span><span class="p">(</span><span class="s2">&quot;Data Explorer&quot;</span><span class="p">,</span> <span class="s2">&quot;#1a1a1a&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">search_bar</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">search_bar</span><span class="o">.</span><span class="n">setPlaceholderText</span><span class="p">(</span><span class="s2">&quot;Search items...&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">search_bar</span><span class="o">.</span><span class="n">textChanged</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">filter_tree</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config_tree</span> <span class="o">=</span> <span class="n">QTreeWidget</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config_tree</span><span class="o">.</span><span class="n">setHeaderLabel</span><span class="p">(</span><span class="s2">&quot;Configuration Hierarchy&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config_tree</span><span class="o">.</span><span class="n">itemClicked</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_tree_selection</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">left_panel</span><span class="o">.</span><span class="n">layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">search_bar</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">left_panel</span><span class="o">.</span><span class="n">layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config_tree</span><span class="p">)</span>
+
+        <span class="c1"># Weekly Schedule Grid Panel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mid_panel</span> <span class="o">=</span> <span class="n">ContentPanel</span><span class="p">(</span><span class="s2">&quot;Schedule Grid&quot;</span><span class="p">,</span> <span class="s2">&quot;#000000&quot;</span><span class="p">)</span>
+        <span class="n">grid_ctrl</span> <span class="o">=</span> <span class="n">QHBoxLayout</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">undo_btn</span> <span class="o">=</span> <span class="n">QPushButton</span><span class="p">(</span><span class="s2">&quot;Undo&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">undo_btn</span><span class="o">.</span><span class="n">clicked</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">undo_move</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">undo_btn</span><span class="o">.</span><span class="n">setEnabled</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">view_btn</span> <span class="o">=</span> <span class="n">QPushButton</span><span class="p">(</span><span class="s2">&quot;View Mode: Day&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">view_menu</span> <span class="o">=</span> <span class="n">QMenu</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;DAY&quot;</span><span class="p">,</span> <span class="s2">&quot;ROOM&quot;</span><span class="p">,</span> <span class="s2">&quot;FACULTY&quot;</span><span class="p">,</span> <span class="s2">&quot;LAB&quot;</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">view_menu</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">m</span><span class="o">.</span><span class="n">title</span><span class="p">()</span><span class="si">}</span><span class="s2"> View&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span>
+                <span class="k">lambda</span> <span class="n">chk</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">m</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_view_mode</span><span class="p">(</span><span class="n">mode</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">view_btn</span><span class="o">.</span><span class="n">setMenu</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">view_menu</span><span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">theme_btn</span> <span class="o">=</span> <span class="n">QPushButton</span><span class="p">(</span><span class="s2">&quot;Switch Theme&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">theme_btn</span><span class="o">.</span><span class="n">clicked</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">toggle_theme</span><span class="p">)</span>
+        
+        <span class="n">grid_ctrl</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">undo_btn</span><span class="p">)</span>
+        <span class="n">grid_ctrl</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">view_btn</span><span class="p">)</span>
+        <span class="n">grid_ctrl</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theme_btn</span><span class="p">)</span>
+        <span class="n">grid_ctrl</span><span class="o">.</span><span class="n">addStretch</span><span class="p">()</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span> <span class="o">=</span> <span class="n">QTableWidget</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">model</span><span class="p">()</span><span class="o">.</span><span class="n">dataChanged</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_manual_move</span><span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">mid_panel</span><span class="o">.</span><span class="n">layout</span><span class="o">.</span><span class="n">addLayout</span><span class="p">(</span><span class="n">grid_ctrl</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mid_panel</span><span class="o">.</span><span class="n">layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="p">)</span>
+
+        <span class="c1"># Object Inspector Panel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">right_panel</span> <span class="o">=</span> <span class="n">ContentPanel</span><span class="p">(</span><span class="s2">&quot;Inspector &amp; Limits&quot;</span><span class="p">,</span> <span class="s2">&quot;#1a1a1a&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">detail_view</span> <span class="o">=</span> <span class="n">QPlainTextEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">save_cfg_btn</span> <span class="o">=</span> <span class="n">QPushButton</span><span class="p">(</span><span class="s2">&quot;Apply JSON Changes&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">save_cfg_btn</span><span class="o">.</span><span class="n">clicked</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">save_inspector_changes</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">right_panel</span><span class="o">.</span><span class="n">layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">detail_view</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">right_panel</span><span class="o">.</span><span class="n">layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">save_cfg_btn</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">splitter</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">left_panel</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">splitter</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mid_panel</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">splitter</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">right_panel</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">splitter</span><span class="o">.</span><span class="n">setSizes</span><span class="p">([</span><span class="mi">300</span><span class="p">,</span> <span class="mi">800</span><span class="p">,</span> <span class="mi">300</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setCentralWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">splitter</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.open_manager_gui">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.open_manager_gui">[docs]</a>
+    <span class="k">def</span> <span class="nf">open_manager_gui</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">manager</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Safely opens a manager&#39;s sub-window.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            manager: An instance of a ConfigManager (Course, Room, or Faculty).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="s1">&#39;show&#39;</span><span class="p">):</span> 
+            <span class="n">manager</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="s1">&#39;gui&#39;</span><span class="p">):</span> 
+            <span class="n">manager</span><span class="o">.</span><span class="n">gui</span><span class="o">.</span><span class="n">show</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.run_generation_and_render">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.run_generation_and_render">[docs]</a>
+    <span class="k">def</span> <span class="nf">run_generation_and_render</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Executes the scheduling algorithm and updates the table view.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gen_manager</span><span class="o">.</span><span class="n">run_scheduler</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">schedules</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">render_schedule_table</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">schedules</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">statusBar</span><span class="p">()</span><span class="o">.</span><span class="n">showMessage</span><span class="p">(</span><span class="s2">&quot;Generation Complete&quot;</span><span class="p">,</span> <span class="mi">3000</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.render_schedule_table">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.render_schedule_table">[docs]</a>
+    <span class="k">def</span> <span class="nf">render_schedule_table</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">schedule</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Populates the QTableWidget based on the current view mode and schedule data.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            schedule (list): A list of dictionaries representing scheduled courses.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">blockSignals</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">setRowCount</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">schedule</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">setColumnCount</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">blockSignals</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">slots</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">i</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">schedule</span><span class="p">)))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">setRowCount</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">slots</span><span class="p">))</span>
+        
+        <span class="n">view_map</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;DAY&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;day&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;Mon&quot;</span><span class="p">,</span> <span class="s2">&quot;Tue&quot;</span><span class="p">,</span> <span class="s2">&quot;Wed&quot;</span><span class="p">,</span> <span class="s2">&quot;Thu&quot;</span><span class="p">,</span> <span class="s2">&quot;Fri&quot;</span><span class="p">]),</span>
+            <span class="s2">&quot;ROOM&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;room&quot;</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">i</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;room&#39;</span><span class="p">,</span> <span class="s1">&#39;N/A&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">schedule</span><span class="p">)))),</span>
+            <span class="s2">&quot;FACULTY&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;faculty&quot;</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">i</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;faculty&#39;</span><span class="p">,</span> <span class="s1">&#39;TBD&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">schedule</span><span class="p">)))),</span>
+            <span class="s2">&quot;LAB&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;lab&quot;</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">i</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;lab&#39;</span><span class="p">,</span> <span class="s1">&#39;None&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">schedule</span><span class="p">))))</span>
+        <span class="p">}</span>
+        <span class="n">key</span><span class="p">,</span> <span class="n">cols</span> <span class="o">=</span> <span class="n">view_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">view_mode</span><span class="p">,</span> <span class="n">view_map</span><span class="p">[</span><span class="s2">&quot;DAY&quot;</span><span class="p">])</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">setColumnCount</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">cols</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">setHorizontalHeaderLabels</span><span class="p">([</span><span class="s2">&quot;Time&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">cols</span><span class="p">)</span>
+        
+        <span class="k">for</span> <span class="n">row</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">slots</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">setItem</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">QTableWidgetItem</span><span class="p">(</span><span class="n">t</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">schedule</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">entry</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">t</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">col_val</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">col_val</span> <span class="ow">in</span> <span class="n">cols</span><span class="p">:</span>
+                            <span class="n">c_idx</span> <span class="o">=</span> <span class="n">cols</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">col_val</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+                            <span class="n">cell</span> <span class="o">=</span> <span class="n">QTableWidgetItem</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">entry</span><span class="p">[</span><span class="s1">&#39;course_id&#39;</span><span class="p">]</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;faculty&#39;</span><span class="p">,</span><span class="s1">&#39;TBD&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                            <span class="n">cell</span><span class="o">.</span><span class="n">setBackground</span><span class="p">(</span><span class="n">QBrush</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_color_for_id</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;faculty&#39;</span><span class="p">))))</span>
+                            <span class="n">cell</span><span class="o">.</span><span class="n">setData</span><span class="p">(</span><span class="n">Qt</span><span class="o">.</span><span class="n">ItemDataRole</span><span class="o">.</span><span class="n">UserRole</span><span class="p">,</span> <span class="n">entry</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">setItem</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">c_idx</span><span class="p">,</span> <span class="n">cell</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">):</span> 
+                        <span class="k">continue</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">resizeRowsToContents</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">horizontalHeader</span><span class="p">()</span><span class="o">.</span><span class="n">setSectionResizeMode</span><span class="p">(</span><span class="n">QHeaderView</span><span class="o">.</span><span class="n">ResizeMode</span><span class="o">.</span><span class="n">Stretch</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">blockSignals</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.apply_global_theme">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.apply_global_theme">[docs]</a>
+    <span class="k">def</span> <span class="nf">apply_global_theme</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the application stylesheet to handle light/dark mode transitions.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_dark_mode</span><span class="p">:</span>
+            <span class="n">bg</span><span class="p">,</span> <span class="n">panel</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">border</span> <span class="o">=</span> <span class="s2">&quot;#1f1f24&quot;</span><span class="p">,</span> <span class="s2">&quot;#1a1a1a&quot;</span><span class="p">,</span> <span class="s2">&quot;#ffffff&quot;</span><span class="p">,</span> <span class="s2">&quot;#444444&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">bg</span><span class="p">,</span> <span class="n">panel</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">border</span> <span class="o">=</span> <span class="s2">&quot;#f0f2f5&quot;</span><span class="p">,</span> <span class="s2">&quot;#ffffff&quot;</span><span class="p">,</span> <span class="s2">&quot;#1a1a1a&quot;</span><span class="p">,</span> <span class="s2">&quot;#bbbbbb&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">left_panel</span><span class="o">.</span><span class="n">update_theme</span><span class="p">(</span><span class="n">panel</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_dark_mode</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mid_panel</span><span class="o">.</span><span class="n">update_theme</span><span class="p">(</span><span class="n">panel</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_dark_mode</span> <span class="k">else</span> <span class="s2">&quot;#ffffff&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_dark_mode</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">right_panel</span><span class="o">.</span><span class="n">update_theme</span><span class="p">(</span><span class="n">panel</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_dark_mode</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">setStyleSheet</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">            QMainWindow </span><span class="se">{{</span><span class="s2"> background-color: </span><span class="si">{</span><span class="n">bg</span><span class="si">}</span><span class="s2">; </span><span class="se">}}</span>
+<span class="s2">            QMenuBar </span><span class="se">{{</span><span class="s2"> background-color: </span><span class="si">{</span><span class="n">panel</span><span class="si">}</span><span class="s2">; color: </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">; border-bottom: 1px solid </span><span class="si">{</span><span class="n">border</span><span class="si">}</span><span class="s2">; </span><span class="se">}}</span>
+<span class="s2">            QTableWidget, QTreeWidget, QPlainTextEdit, QLineEdit </span><span class="se">{{</span><span class="s2"> </span>
+<span class="s2">                background-color: </span><span class="si">{</span><span class="n">panel</span><span class="si">}</span><span class="s2">; color: </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">; border: 1px solid </span><span class="si">{</span><span class="n">border</span><span class="si">}</span><span class="s2">; </span>
+<span class="s2">            </span><span class="se">}}</span>
+<span class="s2">            QTreeWidget::viewport, QTableWidget::viewport </span><span class="se">{{</span><span class="s2"> background-color: transparent; </span><span class="se">}}</span>
+<span class="s2">            QHeaderView::section </span><span class="se">{{</span><span class="s2"> background-color: </span><span class="si">{</span><span class="n">panel</span><span class="si">}</span><span class="s2">; color: </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">; border: 1px solid </span><span class="si">{</span><span class="n">border</span><span class="si">}</span><span class="s2">; </span><span class="se">}}</span>
+<span class="s2">            QPushButton </span><span class="se">{{</span><span class="s2"> background-color: </span><span class="si">{</span><span class="n">panel</span><span class="si">}</span><span class="s2">; color: </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">; border: 1px solid </span><span class="si">{</span><span class="n">border</span><span class="si">}</span><span class="s2">; padding: 4px 12px; </span><span class="se">}}</span>
+<span class="s2">            QPushButton:hover </span><span class="se">{{</span><span class="s2"> background-color: </span><span class="si">{</span><span class="n">border</span><span class="si">}</span><span class="s2">; </span><span class="se">}}</span>
+<span class="s2">        &quot;&quot;&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.create_menus">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.create_menus">[docs]</a>
+    <span class="k">def</span> <span class="nf">create_menus</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Defines the menu bar structure and connects actions to functions.&quot;&quot;&quot;</span>
+        <span class="n">menubar</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">menuBar</span><span class="p">()</span>
+        <span class="n">menubar</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        
+        <span class="n">file</span> <span class="o">=</span> <span class="n">menubar</span><span class="o">.</span><span class="n">addMenu</span><span class="p">(</span><span class="s2">&quot;&amp;File&quot;</span><span class="p">)</span>
+        <span class="n">file</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="s2">&quot;Import Config&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">import_config</span><span class="p">)</span>
+        <span class="n">file</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="s2">&quot;Save Config&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">save_config_to_file</span><span class="p">)</span>
+        <span class="n">file</span><span class="o">.</span><span class="n">addSeparator</span><span class="p">()</span>
+        <span class="n">file</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="s2">&quot;Export CSV&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_export_schedule</span><span class="p">)</span>
+        <span class="n">file</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="s2">&quot;Export PDF&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">export_to_pdf</span><span class="p">)</span>
+
+        <span class="n">cfg</span> <span class="o">=</span> <span class="n">menubar</span><span class="o">.</span><span class="n">addMenu</span><span class="p">(</span><span class="s2">&quot;&amp;Configure&quot;</span><span class="p">)</span>
+        <span class="n">cfg</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="s2">&quot;Manage Courses&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">open_manager_gui</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">course_manager</span><span class="p">))</span>
+        <span class="n">cfg</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="s2">&quot;Manage Rooms&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">open_manager_gui</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">room_manager</span><span class="p">))</span>
+        <span class="n">cfg</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="s2">&quot;Manage Faculty&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">open_manager_gui</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">faculty_manager</span><span class="p">))</span>
+
+        <span class="n">build</span> <span class="o">=</span> <span class="n">menubar</span><span class="o">.</span><span class="n">addMenu</span><span class="p">(</span><span class="s2">&quot;&amp;Build&quot;</span><span class="p">)</span>
+        <span class="n">build</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="s2">&quot;Run Generator&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">run_generation_and_render</span><span class="p">)</span>
+        <span class="n">build</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="s2">&quot;Clear Results&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">confirm_clear_schedule</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.get_color_for_id">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.get_color_for_id">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_color_for_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retrieves or generates a unique QColor for a given faculty/item ID.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">uid</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">color_cache</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">color_cache</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span> <span class="o">=</span> <span class="n">QColor</span><span class="o">.</span><span class="n">fromHsvF</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">(),</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.9</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_dark_mode</span> <span class="k">else</span> <span class="mf">0.8</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">color_cache</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.render_config_tree">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.render_config_tree">[docs]</a>
+    <span class="k">def</span> <span class="nf">render_config_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Recursively renders the configuration JSON into the Explorer tree.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config_tree</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_mgr</span><span class="o">.</span><span class="n">data</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config_mgr</span><span class="p">,</span> <span class="s1">&#39;data&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">cat</span><span class="p">,</span> <span class="n">content</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">parent</span> <span class="o">=</span> <span class="n">QTreeWidgetItem</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config_tree</span><span class="p">,</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">cat</span><span class="p">)</span><span class="o">.</span><span class="n">upper</span><span class="p">()])</span>
+            <span class="n">parent</span><span class="o">.</span><span class="n">setData</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">Qt</span><span class="o">.</span><span class="n">ItemDataRole</span><span class="o">.</span><span class="n">UserRole</span><span class="p">,</span> <span class="n">content</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">content</span><span class="p">:</span>
+                    <span class="n">name</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;course_id&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">item</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;name&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;Item&quot;</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+                    <span class="n">child</span> <span class="o">=</span> <span class="n">QTreeWidgetItem</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">)])</span>
+                    <span class="n">child</span><span class="o">.</span><span class="n">setData</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">Qt</span><span class="o">.</span><span class="n">ItemDataRole</span><span class="o">.</span><span class="n">UserRole</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config_tree</span><span class="o">.</span><span class="n">expandAll</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.handle_tree_selection">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.handle_tree_selection">[docs]</a>
+    <span class="k">def</span> <span class="nf">handle_tree_selection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Displays the selected item&#39;s raw JSON in the Inspector.&quot;&quot;&quot;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">data</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">Qt</span><span class="o">.</span><span class="n">ItemDataRole</span><span class="o">.</span><span class="n">UserRole</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span> 
+            <span class="bp">self</span><span class="o">.</span><span class="n">detail_view</span><span class="o">.</span><span class="n">setPlainText</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.filter_tree">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.filter_tree">[docs]</a>
+    <span class="k">def</span> <span class="nf">filter_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Filters tree items based on the search bar input.&quot;&quot;&quot;</span>
+        <span class="n">q</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config_tree</span><span class="o">.</span><span class="n">topLevelItemCount</span><span class="p">()):</span>
+            <span class="n">parent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_tree</span><span class="o">.</span><span class="n">topLevelItem</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+            <span class="n">hit</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">parent</span><span class="o">.</span><span class="n">childCount</span><span class="p">()):</span>
+                <span class="n">child</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">child</span><span class="p">(</span><span class="n">j</span><span class="p">)</span>
+                <span class="n">match</span> <span class="o">=</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">child</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+                <span class="n">child</span><span class="o">.</span><span class="n">setHidden</span><span class="p">(</span><span class="ow">not</span> <span class="n">match</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">match</span><span class="p">:</span> <span class="n">hit</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">parent</span><span class="o">.</span><span class="n">setHidden</span><span class="p">(</span><span class="ow">not</span> <span class="n">hit</span> <span class="ow">and</span> <span class="n">q</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span><span class="p">)</span></div>
+
+
+    <span class="c1"># Boilerplate / Navigation handlers</span>
+<div class="viewcode-block" id="MainWindow.import_config">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.import_config">[docs]</a>
+    <span class="k">def</span> <span class="nf">import_config</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">p</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">QFileDialog</span><span class="o">.</span><span class="n">getOpenFileName</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;Open JSON&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;*.json&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">p</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_mgr</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">render_config_tree</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.save_config_to_file">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.save_config_to_file">[docs]</a>
+    <span class="k">def</span> <span class="nf">save_config_to_file</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">p</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">QFileDialog</span><span class="o">.</span><span class="n">getSaveFileName</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;Save JSON&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;*.json&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">p</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config_mgr</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.set_view_mode">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.set_view_mode">[docs]</a>
+    <span class="k">def</span> <span class="nf">set_view_mode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">m</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">view_mode</span> <span class="o">=</span> <span class="n">m</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">view_btn</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;View Mode: </span><span class="si">{</span><span class="n">m</span><span class="o">.</span><span class="n">title</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">schedules</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_schedule_table</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">schedules</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.toggle_theme">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.toggle_theme">[docs]</a>
+    <span class="k">def</span> <span class="nf">toggle_theme</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_dark_mode</span> <span class="o">=</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_dark_mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">apply_global_theme</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">schedules</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_schedule_table</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">schedules</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.handle_export_schedule">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.handle_export_schedule">[docs]</a>
+    <span class="k">def</span> <span class="nf">handle_export_schedule</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">schedules</span><span class="p">:</span> <span class="k">return</span>
+        <span class="n">p</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">QFileDialog</span><span class="o">.</span><span class="n">getSaveFileName</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;CSV&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;*.csv&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">p</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">newline</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">w</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">DictWriter</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">fieldnames</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">schedules</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+                <span class="n">w</span><span class="o">.</span><span class="n">writeheader</span><span class="p">();</span> <span class="n">w</span><span class="o">.</span><span class="n">writerows</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">schedules</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.export_to_pdf">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.export_to_pdf">[docs]</a>
+    <span class="k">def</span> <span class="nf">export_to_pdf</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">p</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">QFileDialog</span><span class="o">.</span><span class="n">getSaveFileName</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;PDF&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;*.pdf&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">p</span><span class="p">:</span>
+            <span class="n">pr</span> <span class="o">=</span> <span class="n">QPrinter</span><span class="p">(</span><span class="n">QPrinter</span><span class="o">.</span><span class="n">PrinterMode</span><span class="o">.</span><span class="n">HighResolution</span><span class="p">)</span>
+            <span class="n">pr</span><span class="o">.</span><span class="n">setOutputFileName</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+            <span class="n">painter</span> <span class="o">=</span> <span class="n">QPainter</span><span class="p">(</span><span class="n">pr</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="n">painter</span><span class="p">)</span>
+            <span class="n">painter</span><span class="o">.</span><span class="n">end</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.confirm_clear_schedule">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.confirm_clear_schedule">[docs]</a>
+    <span class="k">def</span> <span class="nf">confirm_clear_schedule</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> 
+        <span class="k">if</span> <span class="n">QMessageBox</span><span class="o">.</span><span class="n">question</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;Clear&quot;</span><span class="p">,</span> <span class="s2">&quot;Clear results?&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="n">QMessageBox</span><span class="o">.</span><span class="n">StandardButton</span><span class="o">.</span><span class="n">Yes</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">schedules</span> <span class="o">=</span> <span class="p">[];</span> <span class="bp">self</span><span class="o">.</span><span class="n">render_schedule_table</span><span class="p">([])</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.undo_move">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.undo_move">[docs]</a>
+    <span class="k">def</span> <span class="nf">undo_move</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">history_stack</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">schedules</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">history_stack</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">render_schedule_table</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">schedules</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">undo_btn</span><span class="o">.</span><span class="n">setEnabled</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history_stack</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.handle_manual_move">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.handle_manual_move">[docs]</a>
+    <span class="k">def</span> <span class="nf">handle_manual_move</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">schedules</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">history_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">schedules</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">undo_btn</span><span class="o">.</span><span class="n">setEnabled</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.save_inspector_changes">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.save_inspector_changes">[docs]</a>
+    <span class="k">def</span> <span class="nf">save_inspector_changes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">it</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_tree</span><span class="o">.</span><span class="n">currentItem</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">it</span><span class="p">:</span> <span class="k">return</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">config_mgr</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">it</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">upper</span><span class="p">()]</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">detail_view</span><span class="o">.</span><span class="n">toPlainText</span><span class="p">())</span>
+            <span class="n">QMessageBox</span><span class="o">.</span><span class="n">information</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;Success&quot;</span><span class="p">,</span> <span class="s2">&quot;Configuration applied.&quot;</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span> <span class="n">QMessageBox</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;Error&quot;</span><span class="p">,</span> <span class="s2">&quot;Invalid JSON.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainWindow.resizeEvent">
+<a class="viewcode-back" href="../../api.html#app.main_window.MainWindow.resizeEvent">[docs]</a>
+    <span class="k">def</span> <span class="nf">resizeEvent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">e</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">resizeEvent</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">columnCount</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sched_table</span><span class="o">.</span><span class="n">horizontalHeader</span><span class="p">()</span><span class="o">.</span><span class="n">setSectionResizeMode</span><span class="p">(</span><span class="n">QHeaderView</span><span class="o">.</span><span class="n">ResizeMode</span><span class="o">.</span><span class="n">Stretch</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, GenericTeamName.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
