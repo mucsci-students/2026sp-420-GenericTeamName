@@ -165,10 +165,10 @@ class MainWindow(QMainWindow):
         edit_menu = menubar.addMenu("Edit")
 
         #tabs will be moved under edit_menu
-        faculty_menu = menubar.addMenu("Faculty")
-        courses_menu = menubar.addMenu("Courses")
-        rooms_menu = menubar.addMenu("Rooms")
-        labs_menu = menubar.addMenu("Labs")
+        faculty_menu = edit_menu.addMenu("Faculty")
+        courses_menu = edit_menu.addMenu("Courses")
+        rooms_menu = edit_menu.addMenu("Rooms")
+        labs_menu = edit_menu.addMenu("Labs")
 
 
         gen_menu = menubar.addMenu("Generator")
