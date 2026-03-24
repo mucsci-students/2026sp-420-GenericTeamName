@@ -138,6 +138,7 @@ class MainWindow(QMainWindow):
     def init_menus(self):
 
         #TODO: Implement a design pattern to improve this code.
+        #see some functions at bottom of class.
 
         menubar = self.menuBar()
 
@@ -155,17 +156,25 @@ class MainWindow(QMainWindow):
         menubar.setCornerWidget(self.theme_btn, Qt.Corner.TopLeftCorner)
 
         #--------------------------------------------
-        #Config Editor MENU-BAR Options:
+        #Config Editor, Schedule Generator & Viewer MENU-BAR Options:
         #Menus & Actions: [note: only applies to buttons with sub-menus]
 
-        #menus for config editor
+        #these are the menubar tabs that display.
         file_menu = menubar.addMenu("File")
+
+        edit_menu = menubar.addMenu("Edit")
+
+        #tabs will be moved under edit_menu
         faculty_menu = menubar.addMenu("Faculty")
         courses_menu = menubar.addMenu("Courses")
         rooms_menu = menubar.addMenu("Rooms")
         labs_menu = menubar.addMenu("Labs")
+
+
+        gen_menu = menubar.addMenu("Generator")
+        viewer_menu = menubar.addMenu("Viewer")
         #-------------------------------------------
-        #actions for config editor
+        #actions for menubar tabs.
         #file:
         change_file_ac = file_menu.addAction("Change Config File")
         view_sum_ac = file_menu.addAction("View Summary")
@@ -194,6 +203,19 @@ class MainWindow(QMainWindow):
         mod_labs_ac = labs_menu.addAction("Modify Labs")
         del_labs_ac = labs_menu.addAction("Delete Labs")
 
+        #generator:
+        limit_ac = gen_menu.addAction("Limit # Of Schedules")
+        optimize_ac = gen_menu.addAction("Toggle Optimization")
+        generate_sc_ac = gen_menu.addAction("Generate Schedules")
+
+        #viewer:
+        view_sc_ac = viewer_menu.addAction("View Schedules")
+        view_sc_fac_ac = viewer_menu.addAction("View by Faculty")
+        view_sc_room_ac = viewer_menu.addAction("View by Room")
+        view_sc_lab_ac = viewer_menu.addAction("View by Lab")
+        export_sc_ac = viewer_menu.addAction("Export Schedules")
+        import_sc_ac = viewer_menu.addAction("Import Schedules")
+
         #--------------------------------------------
 
         #box-layout for buttons
@@ -219,58 +241,20 @@ class MainWindow(QMainWindow):
         #------------------------------------------------------------
 
         #----------------------------------------------------------
-        #Left-Panel (Schedule Generator)
+        #Left-Panel (currently unused)
         #----------------------------------------------------------
-        
-        self.limit_btn = QPushButton("Limit # Of Schedules")
-        self.optimize_btn = QPushButton("Toggle Optimization")
-        self.generate_sc_btn = QPushButton("Generate Schedules")
 
-        #above panels & buttons are displayed in widgets.
-        self.sc_generator_layout.addWidget(self.limit_btn)
-        self.sc_generator_layout.addWidget(self.optimize_btn)
-        self.sc_generator_layout.addWidget(self.generate_sc_btn)
         self.sc_generator_layout.addStretch()
 
         #----------------------------------------------------------
         #Mid-Panel (Config Editor)
         #----------------------------------------------------------
 
-        #self.change_path_btn = QPushButton("Change Config File")
-        #self.faculty_btn = QPushButton("Faculty")
-        #self.course_btn = QPushButton("Courses")
-        #self.room_btn = QPushButton("Rooms")
-        #self.lab_btn = QPushButton("Labs")
-        #self.view_sum_btn = QPushButton("View Config Summary")
-        #self.save_config_btn = QPushButton("Save Config")
-
-        #self.config_btn_layout.addWidget(self.change_path_btn)
-        #self.config_btn_layout.addWidget(self.faculty_btn)
-        #self.config_btn_layout.addWidget(self.course_btn)
-        #self.config_btn_layout.addWidget(self.room_btn)
-        #self.config_btn_layout.addWidget(self.lab_btn)
-        #self.config_btn_layout.addWidget(self.view_sum_btn)
-        #self.config_btn_layout.addWidget(self.save_config_btn)
         self.config_btn_layout.addStretch()
 
         #----------------------------------------------------------
-        #Right-Panel (Schedule Viewer)
+        #Right-Panel (currently unused)
         #----------------------------------------------------------
-
-        self.view_sc_btn = QPushButton("View Schedules")
-        self.view_by_faculty_btn = QPushButton("View by Faculty")
-        self.view_by_room_btn = QPushButton("View by Room")
-        self.view_by_lab_btn = QPushButton("View by Lab")
-        self.export_sc_btn = QPushButton("Export Schedules")
-        self.import_sc_btn = QPushButton("Import Schedules")
-
-        self.sc_viewer_layout.addWidget(self.view_sc_btn)
-        self.sc_viewer_layout.addWidget(self.view_by_faculty_btn)
-        self.sc_viewer_layout.addWidget(self.view_by_room_btn)
-        self.sc_viewer_layout.addWidget(self.view_by_lab_btn)
-        self.sc_viewer_layout.addWidget(self.export_sc_btn)
-        self.sc_viewer_layout.addWidget(self.import_sc_btn)
-        self.sc_viewer_layout.addStretch()
 
         #----------------------------------------------------------
         #Splitter for 3 Main Panels:
@@ -297,13 +281,15 @@ class MainWindow(QMainWindow):
         #ac.triggered.connect = drop-down option clicked
 
         #-------------------------------------------
-        #triggers for left panel (schedule generator)
-        self.limit_btn.clicked.connect(lambda: self.gen_manager.set_limit(self))
-        self.optimize_btn.clicked.connect(lambda: self.gen_manager.set_optimize(self))
-        self.generate_sc_btn.clicked.connect(lambda: self.gen_manager.run_scheduler(self))
+        #triggers for left panel (currently unused)
         
         #-------------------------------------------
-        #triggers for mid panel (config editor)
+
+        #-------------------------------------------
+        #triggers for mid panel (live config/schedules will display here)
+        
+        #-------------------------------------------
+        #triggers for menubar
         #file:
         change_file_ac.triggered.connect(self.handle_change_path)
         view_sum_ac.triggered.connect(self.handle_view_summary)
@@ -331,20 +317,24 @@ class MainWindow(QMainWindow):
         add_labs_ac.triggered.connect(lambda: self.lab_manager.add_lab_via_dialog(self))
         mod_labs_ac.triggered.connect(lambda: self.lab_manager.modify_lab_via_dialog(self))
         del_labs_ac.triggered.connect(lambda: self.lab_manager.delete_lab_via_dialog(self))
+        
+        #generator
+        limit_ac.triggered.connect(lambda: self.gen_manager.set_limit(self))
+        optimize_ac.triggered.connect(lambda: self.gen_manager.set_optimize(self))
+        generate_sc_ac.triggered.connect(lambda: self.gen_manager.run_scheduler(self))
 
-        #config-management:
-        #self.change_path_btn.clicked.connect(self.handle_change_path)
-        #self.view_sum_btn.clicked.connect(self.handle_view_summary)
-        #self.save_config_btn.clicked.connect(lambda: self.config_mgr.save(self))
+        #viewer:
+        view_sc_ac.triggered.connect(lambda: self.open_schedule_viewer("all"))
+        view_sc_fac_ac.triggered.connect(lambda: self.open_schedule_viewer("faculty"))
+        view_sc_room_ac.triggered.connect(lambda: self.open_schedule_viewer("room"))
+        view_sc_lab_ac.triggered.connect(lambda: self.open_schedule_viewer("lab"))
+        export_sc_ac.triggered.connect(lambda: self.handle_export_schedule())
+        import_sc_ac.triggered.connect(lambda: self.handle_import_schedule())
+
+        #-------------------------------------------
+        #triggers for right panel (currently unused)
         
         #-------------------------------------------
-        #triggers for right panel (schedule viewer)
-        self.view_sc_btn.clicked.connect(lambda: self.open_schedule_viewer("all"))
-        self.view_by_faculty_btn.clicked.connect(lambda: self.open_schedule_viewer("faculty"))
-        self.view_by_room_btn.clicked.connect(lambda: self.open_schedule_viewer("room"))
-        self.view_by_lab_btn.clicked.connect(lambda: self.open_schedule_viewer("lab"))
-        self.export_sc_btn.clicked.connect(self.handle_export_schedule)
-        self.import_sc_btn.clicked.connect(self.handle_import_schedule)
 
     #----------------------------------------------------------
     # Config management handlers (GUI)
