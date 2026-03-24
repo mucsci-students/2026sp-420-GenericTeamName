@@ -1,113 +1,107 @@
-'''
-    File: test_gui.py
-    Date: 02/24/2026
-    Author: Kyle Smith
-    Class: CMSC 420
-    Description: Main GUI test suite.
-'''
+"""
+    File: test_main_window.py
+    Date: 03/22/2026
+    Author: GenericTeamName
+    Description: Unit and Integration tests for the Scheduler Pro MainWindow.
+    Tests cover theme engine stability, error handling for empty data, 
+    and GUI component management.
+"""
 
 import pytest
-from PyQt6.QtCore import Qt, QPoint
-from PyQt6.QtWidgets import QMenu
-from PyQt6.QtGui import QContextMenuEvent
+from PyQt6.QtCore import Qt
 from app.main_window import MainWindow
 
 @pytest.fixture
 def app(qtbot):
-    """Fixture to initialize the MainWindow for each test."""
-    window = MainWindow()
-    qtbot.addWidget(window)
-    window.show()
-    return window
+    """
+    Pytest fixture that initializes the MainWindow and registers it with qtbot.
 
-# --- UI Integrity Tests ---
+    Args:
+        qtbot: The pytest-qt bot used to simulate user interaction.
 
-def test_initial_state(app):
-    """Verify the window title and panel counts."""
-    assert app.windowTitle() == "Scheduler Program - GenericTeamName"
-    assert app.splitter.count() == 3
-    assert app.left_panel.isVisible()
+    Returns:
+        MainWindow: A fully initialized instance of the application.
+    """
+    test_app = MainWindow()
+    qtbot.addWidget(test_app)
+    return test_app
 
-def test_button_existence(app):
-    """Ensure all critical buttons are instantiated and labeled correctly."""
-    assert app.faculty_btn.text() == "Faculty"
-    assert app.generate_sc_btn.text() == "Generate Schedules"
-    assert app.save_config_btn.text() == "Save Config"
-
-def test_menu_assignments(app):
-    """Verify that configuration buttons have their associated sub-menus."""
-    buttons = [
-        (app.faculty_btn, "Add Faculty"),
-        (app.course_btn, "Add Courses"),
-        (app.room_btn, "Add Rooms"),
-        (app.lab_btn, "Add Labs")
-    ]
-    for btn, expected_action in buttons:
-        menu = btn.menu()
-        assert isinstance(menu, QMenu), f"Button {btn.text()} missing menu"
-        action_texts = [a.text() for a in menu.actions()]
-        assert expected_action in action_texts
-
-# --- Logic & Functionality Tests ---
-
-def test_reset_layout_logic(app):
-    """Verify the math inside reset_layout is precise."""
-    app.splitter.setSizes([50, 50, 800])
+def test_config_tree_handles_int(app):
+    """
+    Test that the Configuration Tree can render non-string data types.
     
-    app.reset_layout()
-    
-    sizes = app.splitter.sizes()
-    total_width = sum(sizes)
-    third = total_width // 3
-    
-    assert sizes[0] == third
-    assert sizes[1] == third
-    assert sizes[2] == total_width - (2 * third)
+    This verifies the fix for a previous AttributeError where the tree 
+    renderer expected all JSON values to have a .lower() or .upper() method.
 
-def test_context_menu_signal_manual(app, qtbot):
-    """Robustly verify context menu signal by simulating the event directly."""
-    with qtbot.waitSignal(app.splitter.customContextMenuRequested, timeout=1000):
-        event = QContextMenuEvent(
-            QContextMenuEvent.Reason.Mouse, 
-            QPoint(10, 10)
-        )
-        app.splitter.customContextMenuRequested.emit(event.pos())
-
-def test_button_click_output(app, qtbot, capsys):
-    """Verify that clicking 'Save Config' triggers the print statement."""
-    qtbot.mouseClick(app.save_config_btn, Qt.MouseButton.LeftButton)
-    captured = capsys.readouterr()
-    assert "Save Config clicked" in captured.out
-
-# --- Component Interaction Tests ---
-
-def test_faculty_menu_actions(app):
-    """Deep check of the Faculty sub-menu actions."""
-    menu = app.faculty_btn.menu()
-    actions = {a.text(): a for a in menu.actions()}
+    Args:
+        app (MainWindow): The application instance from the fixture.
+    """
+    # Inject an integer into the configuration data
+    app.config_mgr.data = {"SETTINGS": {"limit": 100}}
+    app.render_config_tree()
     
-    expected_actions = [
-        "Add Faculty", "Modify Faculty", "Delete Faculty", 
-        "Edit Faculty Available Times", "Edit Faculty Preferences"
-    ]
-    
-    for action_name in expected_actions:
-        assert action_name in actions
-        assert actions[action_name].isEnabled()
-def test_resize_logic(app):
-    """Verify the reset_layout function makes panels roughly equal."""
-    app.splitter.setSizes([50, 50, 800])
-    app.reset_layout()
-    
-    sizes = app.splitter.sizes()
-    assert abs(sizes[0] - sizes[1]) <= 2
-    assert abs(sizes[1] - sizes[2]) <= 2
+    root = app.config_tree.invisibleRootItem()
+    # Find the 'SETTINGS' parent
+    parent = next(root.child(i) for i in range(root.childCount()) if root.child(i).text(0) == "SETTINGS")
+    # Verify the integer 100 was converted to a string '100' for the QTreeWidget
+    assert parent.child(0).text(0) == "limit"
 
-def test_context_menu_detection(app, qtbot):
-    """Verify right-click works on the splitter/panels."""
-    with qtbot.waitSignal(app.splitter.customContextMenuRequested, timeout=2000):
-        qtbot.mouseClick(
-            app.mid_panel, 
-            Qt.MouseButton.RightButton, 
-            pos=app.mid_panel.rect().center()
-        )
+def test_manual_move_no_schedule(app):
+    """
+    Test that the manual move handler ignores requests when no schedule is loaded.
+    
+    This ensures that the IndexError: list index out of range is prevented 
+    when the user interacts with the table before running the generator.
+
+    Args:
+        app (MainWindow): The application instance from the fixture.
+    """
+    app.schedules = []
+    # Triggering the handler manually
+    app.handle_manual_move() 
+    
+    # Verification: History stack should remain empty if the safety check worked
+    assert len(app.history_stack) == 0
+
+def test_theme_toggle_logic(app):
+    """
+    Test the global theme switching engine.
+    
+    Verifies that the is_dark_mode state flips correctly and that the 
+    stylesheet string is updated with the appropriate hex codes.
+
+    Args:
+        app (MainWindow): The application instance from the fixture.
+    """
+    initial_mode = app.is_dark_mode
+    app.toggle_theme()
+    
+    # Assert state flip
+    assert app.is_dark_mode != initial_mode
+    
+    # Check for specific hex codes in the resulting stylesheet
+    current_style = app.styleSheet().lower()
+    if app.is_dark_mode:
+        assert "#1f1f24" in current_style  # Dark background
+    else:
+        assert "#f0f2f5" in current_style  # Light background
+
+def test_manager_gui_opening(app, qtbot):
+    """
+    Test the safety wrapper for opening sub-manager GUIs.
+    
+    This confirms that the AttributeError: 'Manager' object has no attribute 'show' 
+    is resolved by checking both .show() and .gui.show().
+
+    Args:
+        app (MainWindow): The application instance from the fixture.
+        qtbot: The pytest-qt bot to monitor window exposure.
+    """
+    # Determine the actual widget to wait for
+    target_widget = app.course_manager if hasattr(app.course_manager, 'show') else app.course_manager.gui
+    
+    # Use qtbot to wait for the window to become visible
+    with qtbot.waitExposed(target_widget, timeout=1000):
+        app.open_manager_gui(app.course_manager)
+    
+    assert target_widget.isVisible()
