@@ -99,7 +99,8 @@ class MainWindow(QMainWindow):
             f"background-color: {self.theme_color}; color: {text_c}; border: 2px solid {btn_border};"
         )
         self.theme_btn.setText(self.current_theme)
-        for panel in (self.left_panel, self.mid_panel, self.right_panel):
+        #for panel in (self.left_panel, self.mid_panel, self.right_panel):
+        for panel in (self.mid_panel, self.right_panel):
             panel.set_color(self.theme_color, panel_border)
 
     def _darken(self, hex_color: str, amount: float) -> str:
@@ -164,12 +165,17 @@ class MainWindow(QMainWindow):
 
         edit_menu = menubar.addMenu("Edit")
 
-        #tabs will be moved under edit_menu
+        #tabs under edit:
         faculty_menu = edit_menu.addMenu("Faculty")
         courses_menu = edit_menu.addMenu("Courses")
         rooms_menu = edit_menu.addMenu("Rooms")
         labs_menu = edit_menu.addMenu("Labs")
 
+        #timeslot config editor option, underneath Edit->Courses
+        timeslot_menu = courses_menu.addMenu("Timeslots")
+        #timeslot options:
+        meet_pat_menu = timeslot_menu.addMenu("Class Meeting Patterns")
+        ed_timeslot_menu = timeslot_menu.addMenu("Edit Timeslots")
 
         gen_menu = menubar.addMenu("Generator")
         viewer_menu = menubar.addMenu("Viewer")
@@ -192,6 +198,17 @@ class MainWindow(QMainWindow):
         add_courses_ac = courses_menu.addAction("Add Courses")
         mod_courses_ac = courses_menu.addAction("Modify Courses")
         del_courses_ac = courses_menu.addAction("Delete Courses")
+
+        #meeting patterns:
+        add_meet_pat_ac = meet_pat_menu.addAction("Add Meeting Patterns")
+        #start/end-times/spacing might go under this modify option?
+        mod_meet_pat_ac = meet_pat_menu.addAction("Modify Meeting Patterns")
+        del_meet_pat_ac = meet_pat_menu.addAction("Delete Meeting Patterns")
+
+        #edit timeslots:
+        add_timeslot_ac = ed_timeslot_menu.addAction("Add Timeslots")
+        mod_timeslot_ac = ed_timeslot_menu.addAction("Modify Timeslots")
+        del_timeslot_ac = ed_timeslot_menu.addAction("Delete Timeslots")
 
         #rooms:
         add_rooms_ac = rooms_menu.addAction("Add Rooms")
@@ -224,14 +241,14 @@ class MainWindow(QMainWindow):
         self.sc_viewer_layout = QVBoxLayout()
         #splitter for panels
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.left_panel = ContentPanel("Schedule Generator", "#1a1a1a")
+        #self.left_panel = ContentPanel("Schedule Generator", "#1a1a1a")
         self.mid_panel = ContentPanel(f"Active Config: <b>{self.config_mgr.filepath}</b>", "#000000")
         #self.right_panel = ContentPanel("Schedule Viewer", "#1a1a1a")
         
         #TODO: TEMPORARY, FIX OR MOVE LATER:
         #------------------------------------------------------------
         
-        self.right_panel = ContentPanel("Viewer & Inspector", "#1a1a1a")
+        self.right_panel = ContentPanel("Inspector & Assistant", "#1a1a1a")
         self.detail_view = QPlainTextEdit()
         self.save_cfg_btn = QPushButton("Apply JSON Changes")
         self.save_cfg_btn.clicked.connect(self.save_inspector_changes)
@@ -259,12 +276,13 @@ class MainWindow(QMainWindow):
         #----------------------------------------------------------
         #Splitter for 3 Main Panels:
         #----------------------------------------------------------
-        self.splitter.addWidget(self.left_panel)
+        #self.splitter.addWidget(self.left_panel)
         self.splitter.addWidget(self.mid_panel)
         self.splitter.addWidget(self.right_panel)
         #sizes in order of declarations above ^^
-        self.splitter.setSizes([100, 400, 100])
-        self.left_panel.layout.insertLayout(1, self.sc_generator_layout)
+        #self.splitter.setSizes([100, 400, 100])
+        self.splitter.setSizes([800, 200])
+        #self.left_panel.layout.insertLayout(1, self.sc_generator_layout)
         self.mid_panel.layout.insertLayout(1, self.config_btn_layout)
         self.right_panel.layout.insertLayout(1, self.sc_viewer_layout)
         
@@ -308,6 +326,17 @@ class MainWindow(QMainWindow):
         mod_courses_ac.triggered.connect(lambda: self.course_manager.modify_course_via_dialog(self))
         del_courses_ac.triggered.connect(lambda: self.course_manager.delete_course_via_dialog(self))
 
+        #meeting patterns:
+        add_meet_pat_ac.triggered.connect(lambda: "Add Meeting Patterns clicked.")
+        #start/end-times/spacing might go under this modify option?
+        mod_meet_pat_ac.triggered.connect(lambda: "Modify Meeting Patterns clicked.")
+        del_meet_pat_ac.triggered.connect(lambda: "Delete Meeting Patterns clicked.")
+
+        #edit timeslots:
+        add_timeslot_ac.triggered.connect(lambda: "Add Timeslots clicked.")
+        mod_timeslot_ac.triggered.connect(lambda: "Modify Timeslots clicked.")
+        del_timeslot_ac.triggered.connect(lambda: "Delete Timeslots clicked.")
+
         #rooms:
         add_rooms_ac.triggered.connect(lambda: self.room_manager.add_room_via_dialog(self))
         mod_rooms_ac.triggered.connect(lambda: self.room_manager.modify_room_via_dialog(self))
@@ -332,7 +361,7 @@ class MainWindow(QMainWindow):
         import_sc_ac.triggered.connect(lambda: self.handle_import_schedule())
 
         #-------------------------------------------
-        #triggers for right panel (currently unused)
+        #triggers for right panel (panel will be for inspector & chatbot)
         
         #-------------------------------------------
 
