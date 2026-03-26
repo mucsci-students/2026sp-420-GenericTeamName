@@ -74,7 +74,34 @@ class ConfigManager:
         if not courses:
             lines.append(f"{' (No courses defined) ':-^{len(header)}}")
         return "\n".join(lines)
+        
+    def scheduler_output_to_viewer_format(self, raw_schedules):
+        """
+        Converts raw scheduler output into a standardized list of dictionaries 
+        for the GUI viewer strategies.
+        
+        :param raw_schedules: Raw data (list of dicts or objects) from the generator.
+        :return: A list of formatted dictionaries.
+        """
+        formatted_list = []
+        
+        # If raw_schedules is a single schedule, wrap it in a list
+        if isinstance(raw_schedules, dict):
+            raw_schedules = [raw_schedules]
 
+        for item in raw_schedules:
+            # Standardize keys to ensure the Viewer doesn't crash on missing data
+            entry = {
+                "course": item.get("course_name") or item.get("course", "Unknown"),
+                "faculty": item.get("instructor") or item.get("faculty", "Unassigned"),
+                "room": item.get("room_id") or item.get("room", "TBD"),
+                "day": item.get("day", "Monday"),
+                "time": item.get("start_time") or item.get("time", "08:00")
+            }
+            formatted_list.append(entry)
+            
+        return formatted_list
+        
     def get_schedule_spreadsheet(self, schedule_data):
         """Formats schedule data into an ASCII spreadsheet grid."""
         days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
