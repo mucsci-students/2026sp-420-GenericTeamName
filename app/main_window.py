@@ -122,30 +122,34 @@ class MainWindow(QMainWindow):
         menubar = self.menuBar()
         self._setup_theme_menu(menubar)
 
-        #Menubar tab definitions:
+        # Menubar tab definitions:
         file_menu = menubar.addMenu("File")
-
         edit_menu = menubar.addMenu("Edit")
 
-        #tabs under edit:
+        # Tabs under edit:
         faculty_menu = edit_menu.addMenu("Faculty")
         courses_menu = edit_menu.addMenu("Courses")
         rooms_menu = edit_menu.addMenu("Rooms")
         labs_menu = edit_menu.addMenu("Labs")
 
-        #timeslot config editor option, underneath Edit->Courses
+        # Timeslot config editor option, underneath Edit->Courses
         timeslot_menu = courses_menu.addMenu("Timeslots")
-        #timeslot options:
+        # Timeslot sub-options:
         meet_pat_menu = timeslot_menu.addMenu("Class Meeting Patterns")
         ed_timeslot_menu = timeslot_menu.addMenu("Edit Timeslots")
 
         gen_menu = menubar.addMenu("Generator")
         viewer_menu = menubar.addMenu("Viewer")
 
-        #Command Bindings [Double-check]
+        # Command Bindings
         self._bind_file_commands(file_menu)
         self._bind_faculty_commands(faculty_menu)
         self._bind_course_commands(courses_menu)
+        
+        # New Bindings for the nested Timeslot menus
+        self._bind_meeting_pattern_commands(meet_pat_menu)
+        self._bind_timeslot_commands(ed_timeslot_menu)
+        
         self._bind_room_commands(rooms_menu)
         self._bind_lab_commands(labs_menu)
         self._bind_generator_commands(gen_menu)
@@ -183,6 +187,18 @@ class MainWindow(QMainWindow):
         menu.addAction("Add Faculty").triggered.connect(lambda: self.faculty_manager.add_faculty_via_dialog(self))
         menu.addAction("Modify Faculty").triggered.connect(lambda: self.faculty_manager.modify_faculty_via_dialog(self))
         menu.addAction("Delete Faculty").triggered.connect(lambda: self.faculty_manager.delete_faculty_via_dialog(self))
+
+    def _bind_meeting_pattern_commands(self, menu):
+        """Binds dummy meeting pattern operations."""
+        menu.addAction("Add Meeting Pattern").triggered.connect(lambda: print("Add Meeting Patterns clicked."))
+        menu.addAction("Modify Meeting Pattern").triggered.connect(lambda: print("Modify Meeting Patterns clicked."))
+        menu.addAction("Delete Meeting Pattern").triggered.connect(lambda: print("Delete Meeting Patterns clicked."))
+
+    def _bind_timeslot_commands(self, menu):
+        """Binds dummy timeslot operations."""
+        menu.addAction("Add Timeslot").triggered.connect(lambda: print("Add Timeslots clicked."))
+        menu.addAction("Modify Timeslot").triggered.connect(lambda: print("Modify Timeslots clicked."))
+        menu.addAction("Delete Timeslot").triggered.connect(lambda: print("Delete Timeslots clicked."))
 
     def _bind_course_commands(self, menu):
         """Binds course management operations."""
