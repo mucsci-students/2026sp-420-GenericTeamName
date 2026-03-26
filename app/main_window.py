@@ -3,16 +3,22 @@ main_window.py
 ==============
 The primary entry point for the Scheduler Program GUI.
 
-:date: 03/23/2026
+The Design-Patterns implemented here are as follows:
+    -
+
+:date: 03/25/2026
 :authors: Kyle Smith, Tyler Strohl
 :class: CMSC 420
 """
+#Note: The """ comment blocks are important for the documentation (see docs folder).
+#TODO: Reformat comments so auto-documentation picks up more files across program.
 
 import json
+import csv
 from PyQt6.QtWidgets import (
     QMainWindow, QSplitter, QMenu, QPushButton, 
     QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, 
-    QMessageBox, QDialog, QPlainTextEdit
+    QMessageBox, QDialog, QPlainTextEdit, QMenuBar
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QFont
@@ -25,7 +31,7 @@ from config.config_mgr import ConfigManager
 from .generator_gui import GenConfigManager
 from .lab_gui import LabConfigManager
 
-
+#=================================================================================
 class MainWindow(QMainWindow):
     """
     Main Window for the Scheduler Application.
@@ -36,7 +42,6 @@ class MainWindow(QMainWindow):
     :ivar theme_colors: Dictionary of available UI color themes.
     :vartype theme_colors: dict
     """
-
     def __init__(self):
         """
         Initializes the MainWindow, managers, and UI components.
@@ -45,36 +50,38 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Scheduler Program - GenericTeamName")
         self.resize(900, 600)
 
-        # Theme Configuration
+        #Theme Configuration
         self.theme_colors = {
             "Light": "#f3f4f6", "Dark": "#1f1f24", "Autumn": "#8a5a44",
             "Crimson": "#8b2e3c", "Marathon": "#c2fe0b", "Summer": "#f4c95d",
             "Spring": "#98c379", "Winter": "#cfddeb", "Ocean": "#1f6f8b",
             "Land": "#6b8f71", "Sky": "#7fb7e6",
         }
+        #Default theme on startup
         self.current_theme = "Light"
         self.theme_color = self.theme_colors[self.current_theme]
 
-        # Domain Logic Managers
+        #Domain Logic Managers
         self.config_mgr = ConfigManager("config/config.json")
         self._load_config()
 
+        self.faculty_manager = FacultyManager()
         self.course_manager = CourseConfigManager()
         self.room_manager = RoomConfigManager()
-        self.faculty_manager = FacultyManager()
         self.gen_manager = GenConfigManager()
         self.lab_manager = LabConfigManager()
 
-        # State Management
+        #State Management
         self.schedules = []
         self.current_schedule_index = 0
         self.imported_schedule = None
 
-        # UI Setup
+        #UI Setup (see functions below)
         self._setup_ui_components()
         self.init_menus()
         self.apply_theme()
-
+#=================================================================================
+    
     def _load_config(self):
         """
         Attempts to load the initial configuration file.
@@ -88,8 +95,9 @@ class MainWindow(QMainWindow):
         """
         Initializes the structural layout components of the window.
         """
+        #Splitter organizes our panels.
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.mid_panel = ContentPanel(f"Active Config: <b>{self.config_mgr.filepath}</b>", "#000000")
+        self.cfg_panel = ContentPanel(f"Active Config: <b>{self.config_mgr.filepath}</b>", "#000000")
         self.right_panel = ContentPanel("Inspector & Assistant", "#1a1a1a")
         
         self.detail_view = QPlainTextEdit()
@@ -99,7 +107,8 @@ class MainWindow(QMainWindow):
         self.right_panel.layout.addWidget(self.detail_view)
         self.right_panel.layout.addWidget(self.save_cfg_btn)
 
-        self.splitter.addWidget(self.mid_panel)
+        #Panels are displayed in widgets.
+        self.splitter.addWidget(self.cfg_panel)
         self.splitter.addWidget(self.right_panel)
         self.splitter.setSizes([800, 200])
         self.setCentralWidget(self.splitter)
@@ -113,19 +122,27 @@ class MainWindow(QMainWindow):
         menubar = self.menuBar()
         self._setup_theme_menu(menubar)
 
-        # Menu Definitions
+        #Menubar tab definitions:
         file_menu = menubar.addMenu("File")
-        edit_menu = menubar.addMenu("Edit")
-        gen_menu = menubar.addMenu("Generator")
-        viewer_menu = menubar.addMenu("Viewer")
 
-        # Sub-Menus
+        edit_menu = menubar.addMenu("Edit")
+
+        #tabs under edit:
         faculty_menu = edit_menu.addMenu("Faculty")
         courses_menu = edit_menu.addMenu("Courses")
         rooms_menu = edit_menu.addMenu("Rooms")
         labs_menu = edit_menu.addMenu("Labs")
 
-        # Command Binding
+        #timeslot config editor option, underneath Edit->Courses
+        timeslot_menu = courses_menu.addMenu("Timeslots")
+        #timeslot options:
+        meet_pat_menu = timeslot_menu.addMenu("Class Meeting Patterns")
+        ed_timeslot_menu = timeslot_menu.addMenu("Edit Timeslots")
+
+        gen_menu = menubar.addMenu("Generator")
+        viewer_menu = menubar.addMenu("Viewer")
+
+        #Command Bindings [Double-check]
         self._bind_file_commands(file_menu)
         self._bind_faculty_commands(faculty_menu)
         self._bind_course_commands(courses_menu)
@@ -157,13 +174,15 @@ class MainWindow(QMainWindow):
         menu.addAction("Save Config").triggered.connect(lambda: self.config_mgr.save(self))
         menu.addAction("Save Config As").triggered.connect(self.save_config_to_file)
 
+    #TODO: Address this.
+    #bind_edit_commands(self, menu): ??
+    #see last commit made prior to design pattern integration.
+    
     def _bind_faculty_commands(self, menu):
         """Binds faculty management operations."""
         menu.addAction("Add Faculty").triggered.connect(lambda: self.faculty_manager.add_faculty_via_dialog(self))
         menu.addAction("Modify Faculty").triggered.connect(lambda: self.faculty_manager.modify_faculty_via_dialog(self))
         menu.addAction("Delete Faculty").triggered.connect(lambda: self.faculty_manager.delete_faculty_via_dialog(self))
-        menu.addAction("Edit Available Times").triggered.connect(lambda: self.faculty_manager.faculty_time_via_dialog(self))
-        menu.addAction("Edit Preferences").triggered.connect(lambda: self.faculty_manager.faculty_preference(self))
 
     def _bind_course_commands(self, menu):
         """Binds course management operations."""
@@ -217,7 +236,7 @@ class MainWindow(QMainWindow):
         self.theme_btn.setStyleSheet(f"color: {text_color}; border: 2px solid {btn_border};")
         self.theme_btn.setText(self.current_theme)
 
-        for panel in (self.mid_panel, self.right_panel):
+        for panel in (self.cfg_panel, self.right_panel):
             panel.set_color(self.theme_color, panel_border)
 
     def _is_dark(self, hex_color: str) -> bool:
@@ -264,7 +283,7 @@ class MainWindow(QMainWindow):
             self.config_mgr.filepath = file_path
             try:
                 self.config_mgr.load()
-                self.mid_panel.update_title(file_path)
+                self.cfg_panel.update_title(file_path)
             except Exception as e:
                 QMessageBox.warning(self, "Load Warning", str(e))
 
@@ -278,7 +297,7 @@ class MainWindow(QMainWindow):
         if not file_path:
             return
 
-        # Simple strategy choice based on extension
+        #Simple strategy choice based on extension
         if file_path.lower().endswith(".json"):
             data = self.config_mgr.import_schedule_from_json(file_path)
         else:
@@ -337,6 +356,7 @@ class MainWindow(QMainWindow):
         msg.setFont(QFont("Courier New", 10))
         msg.exec()
 
+    #TODO: Revisit this function, i do not think it is finished.
     def open_schedule_viewer(self, grouping: str):
         """
         Opens the schedule viewing strategy.
