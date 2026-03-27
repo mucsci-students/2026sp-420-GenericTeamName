@@ -232,6 +232,7 @@ class MainWindow(QMainWindow):
         menu.addAction("View by Lab").triggered.connect(lambda: self.open_schedule_viewer("lab"))
         menu.addAction("Export Schedules").triggered.connect(self.handle_export_schedule)
         menu.addAction("Import Schedules").triggered.connect(self.handle_import_schedule)
+        menu.addAction("Clear Schedules").triggered.connect(self.handle_clear_schedule)
 
     def apply_theme(self) -> None:
         """
@@ -343,6 +344,21 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Success", f"Exported to {file_path}")
             else:
                 QMessageBox.critical(self, "Error", "Export failed.")
+
+    def handle_clear_schedule(self) -> None:
+
+        """
+        Removes all the currently generated schedules.
+        """
+        if not self.schedules or not (0 <= self.current_schedule_index < len(self.schedules)):
+            QMessageBox.warning(self, "No Data", "No schedules to clear.")
+            return
+        else:
+            try:
+                self.schedules.clear()
+                QMessageBox.information(self, "Success", "Schedule/s have been cleared.")
+            except:
+                QMessageBox.critical(self, "Error", "Clear failed.")
 
     def show_context_menu(self, position) -> None:
         """
