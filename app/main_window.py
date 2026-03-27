@@ -304,46 +304,53 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.warning(self, "Load Warning", str(e))
 
-    def handle_import_schedule(self) -> None:
+    def handle_import_schedule(self):
         """
-        Imports a schedule from CSV or JSON and adds it to the session list.
+        Delegates CSV parsing to ConfigManager and updates the UI with the result.
         """
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Import Schedule", "", "CSV Files (*.csv);;JSON Files (*.json);;All Files (*)"
-        )
-        if not file_path:
-            return
+        # ConfigManager opens the Open File dialog and parses the CSV into a list of lists
+        imported_data = self.config_mgr.import_schedule_from_csv(parent=self)
 
-        #Simple strategy choice based on extension
-        if file_path.lower().endswith(".json"):
-            data = self.config_mgr.import_schedule_from_json(file_path)
-        else:
-            data = self.config_mgr.import_schedule_from_csv(file_path)
+        if imported_data:
+            # Replace current session with imported data
+            self.schedules = imported_data
+            self.current_schedule_index = 0
 
-        if data:
-            self.schedules.append(data)
-            self.current_schedule_index = len(self.schedules) - 1
-            QMessageBox.information(self, "Success", f"Imported {len(data)} assignments.")
-        else:
-            QMessageBox.warning(self, "Error", "Failed to import a valid schedule.")
+            # Trigger your UI update logic
+            # (Assuming you have a method like update_viewer_text() or similar)
+            if hasattr(self, 'update_schedule_display'):
+                self.update_schedule_display()
 
-    def handle_export_schedule(self) -> None:
+            QMessageBox.information(
+                self,
+                "Import Successful",
+                f"Successfully loaded {len(imported_data)} schedule(s)."
+            )
+
+    def handle_export_schedule(self):
         """
-        Exports the currently active schedule to a CSV file.
+        Delegates the export process to the ConfigManager.
+        The ConfigManager will handle the 'Save As' dialog and CSV formatting.
         """
-        if not self.schedules or not (0 <= self.current_schedule_index < len(self.schedules)):
-            QMessageBox.warning(self, "No Data", "No schedule selected to export.")
-            return
-
-        file_path, _ = QFileDialog.getSaveFileName(self, "Export Schedule", "", "CSV Files (*.csv)")
-        if file_path:
-            if not file_path.endswith('.csv'):
-                file_path += '.csv'
+        # 1. Check if we actually have schedules to export
+        # We pass self.schedules (the full list of generated options)
+        if hasattr(self, 'schedules') and self.schedules:
+            # Pass 'self' as the second argument so the ConfigManager 
+            # can use this window as the parent for its file dialog.
+            success = self.config_mgr.export_schedule_to_csv(self.schedules, self)
             
-            if self.config_mgr.export_schedule_to_csv(self.schedules[self.current_schedule_index], file_path):
-                QMessageBox.information(self, "Success", f"Exported to {file_path}")
-            else:
-                QMessageBox.critical(self, "Error", "Export failed.")
+            if success:
+                # Optional: log to status bar if you have one
+                # self.statusBar().showMessage("Schedules exported successfully.", 5000)
+                pass
+        else:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, 
+                "Export Error", 
+                "There are no schedules currently loaded to export. "
+                "Please generate schedules first."
+            )
 
     def handle_clear_schedule(self) -> None:
 
