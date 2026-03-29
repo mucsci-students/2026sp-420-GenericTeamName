@@ -10,15 +10,23 @@ import random
 import copy
 import json
 import csv
+import os
 from PyQt6.QtWidgets import (
-    QMainWindow, QSplitter, QMenu, QPushButton, 
-    QVBoxLayout, QHBoxLayout, QWidget, QFileDialog, 
+    QMainWindow, QSplitter, QMenu, QPushButton,
+    QVBoxLayout, QHBoxLayout, QWidget, QFileDialog,
     QMessageBox, QDialog, QPlainTextEdit, QLabel,
-    QMenuBar
+    QMenuBar, QLineEdit,
     )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QFont
 from .menu_widgets import ContentPanel
+from .ai_assistant import (
+    AssistantChatWorker,
+    OPENAI_MODEL,
+    SYSTEM_PROMPT,
+    default_api_key,
+    execute_tool,
+)
 from .course_gui import CourseConfigManager
 from .room_gui import RoomConfigManager
 from .faculty_gui import FacultyManager
@@ -68,6 +76,9 @@ class MainWindow(QMainWindow):
         self.schedules = []
         self.current_schedule_index = 0
 
+        self.assistant_messages: list = [{"role": "system", "content": SYSTEM_PROMPT}]
+        self._assistant_worker: AssistantChatWorker | None = None
+
         #most important function, along with "menu_widgets.py" class.
         self.init_menus()
         self.apply_theme()
@@ -101,6 +112,21 @@ class MainWindow(QMainWindow):
         self.theme_btn.setText(self.current_theme)
         for panel in (self.left_panel, self.mid_panel, self.right_panel):
             panel.set_color(self.theme_color, panel_border)
+        self._apply_ai_chat_theme()
+
+    def _apply_ai_chat_theme(self) -> None:
+        if not hasattr(self, "ai_chat_log"):
+            return
+        dark = self._is_dark(self.theme_color)
+        bg = "#2b2b2b" if dark else "#ffffff"
+        fg = "#e0e0e0" if dark else "#222222"
+        border = "#555" if dark else "#ccc"
+        sheet = (
+            f"QPlainTextEdit, QLineEdit {{ background-color: {bg}; color: {fg}; "
+            f"border: 1px solid {border}; }}"
+        )
+        self.ai_chat_log.setStyleSheet(sheet)
+        self.ai_input.setStyleSheet(sheet)
 
     def _darken(self, hex_color: str, amount: float) -> str:
         hex_color = hex_color.lstrip("#")
@@ -221,7 +247,6 @@ class MainWindow(QMainWindow):
         #box-layout for buttons
         self.sc_generator_layout = QVBoxLayout()
         self.config_btn_layout = QHBoxLayout()
-        self.sc_viewer_layout = QVBoxLayout()
         #splitter for panels
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.left_panel = ContentPanel("Schedule Generator", "#1a1a1a")
@@ -231,12 +256,42 @@ class MainWindow(QMainWindow):
         #TODO: TEMPORARY, FIX OR MOVE LATER:
         #------------------------------------------------------------
         
-        self.right_panel = ContentPanel("Viewer & Inspector", "#1a1a1a")
+        self.right_panel = ContentPanel("Inspector & Assistant", "#1a1a1a", stretch_middle=False)
         self.detail_view = QPlainTextEdit()
         self.save_cfg_btn = QPushButton("Apply JSON Changes")
         self.save_cfg_btn.clicked.connect(self.save_inspector_changes)
-        self.right_panel.layout.addWidget(self.detail_view)
-        self.right_panel.layout.addWidget(self.save_cfg_btn)
+
+        inspect_box = QWidget()
+        inspect_layout = QVBoxLayout(inspect_box)
+        inspect_layout.setContentsMargins(0, 0, 0, 0)
+        inspect_layout.addWidget(self.detail_view, 1)
+        inspect_layout.addWidget(self.save_cfg_btn)
+
+        self.ai_chat_log = QPlainTextEdit()
+        self.ai_chat_log.setReadOnly(True)
+        self.ai_chat_log.setPlaceholderText("Ask the assistant to change rooms, faculty, courses, run generation, etc.")
+        self.ai_input = QLineEdit()
+        self.ai_input.setPlaceholderText("Message the assistant…")
+        self.ai_input.returnPressed.connect(self.send_assistant_message)
+        self.ai_send_btn = QPushButton("Send")
+        self.ai_send_btn.clicked.connect(self.send_assistant_message)
+        ai_row = QHBoxLayout()
+        ai_row.addWidget(self.ai_input, 1)
+        ai_row.addWidget(self.ai_send_btn)
+
+        assistant_box = QWidget()
+        assistant_layout = QVBoxLayout(assistant_box)
+        assistant_layout.setContentsMargins(0, 0, 0, 0)
+        assistant_layout.addWidget(QLabel("AI assistant"), 0)
+        assistant_layout.addWidget(self.ai_chat_log, 1)
+        assistant_layout.addLayout(ai_row)
+
+        self.right_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.right_splitter.addWidget(inspect_box)
+        self.right_splitter.addWidget(assistant_box)
+        self.right_splitter.setStretchFactor(0, 2)
+        self.right_splitter.setStretchFactor(1, 3)
+        self.right_panel.layout.addWidget(self.right_splitter, 1)
 
         #------------------------------------------------------------
 
@@ -266,8 +321,7 @@ class MainWindow(QMainWindow):
         self.splitter.setSizes([100, 400, 100])
         self.left_panel.layout.insertLayout(1, self.sc_generator_layout)
         self.mid_panel.layout.insertLayout(1, self.config_btn_layout)
-        self.right_panel.layout.insertLayout(1, self.sc_viewer_layout)
-        
+
         self.setCentralWidget(self.splitter)
 
         self.splitter.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -565,9 +619,95 @@ class MainWindow(QMainWindow):
     """
 
     def save_inspector_changes(self):
+        try:
+            if not hasattr(self, "config_tree") or self.config_tree is None:
+                QMessageBox.warning(
+                    self,
+                    "Inspector",
+                    "Tree selection is not available; edit JSON only via assistant or external editor.",
+                )
+                return
+            it = self.config_tree.currentItem()
+            if not it:
+                return
+            self.config_mgr.data[it.text(0).upper()] = json.loads(self.detail_view.toPlainText())
+            QMessageBox.information(self, "Success", "Configuration applied.")
+        except Exception:
+            QMessageBox.critical(self, "Error", "Invalid JSON.")
+
+    def refresh_config_views_after_mutation(self) -> None:
+        """Reload config from disk and refresh read-only views after AI (or other) tools wrote the file."""
+        path = getattr(self.config_mgr, "filepath", None)
+        if path and os.path.isfile(path):
             try:
-                it = self.config_tree.currentItem()
-                if not it: return
-                self.config_mgr.data[it.text(0).upper()] = json.loads(self.detail_view.toPlainText())
-                QMessageBox.information(self, "Success", "Configuration applied.")
-            except: QMessageBox.critical(self, "Error", "Invalid JSON.")
+                self.config_mgr.load()
+            except Exception:
+                pass
+        if hasattr(self, "detail_view"):
+            self.detail_view.setPlainText(json.dumps(self.config_mgr.data, indent=2))
+
+    def _append_ai_chat(self, who: str, text: str) -> None:
+        self.ai_chat_log.appendPlainText(f"{who}: {text}\n")
+
+    def send_assistant_message(self) -> None:
+        if self._assistant_worker is not None and self._assistant_worker.isRunning():
+            return
+        user_text = self.ai_input.text().strip()
+        if not user_text:
+            return
+        key = default_api_key()
+        if not key:
+            QMessageBox.warning(
+                self,
+                "OpenAI API key",
+                "Set your key in app/ai_assistant.py (OPENAI_API_KEY_IN_CODE), "
+                "or put it in config/openai_key.txt, or set OPENAI_API_KEY in the environment.",
+            )
+            return
+        self.ai_input.clear()
+        self._append_ai_chat("You", user_text)
+        self.assistant_messages.append({"role": "user", "content": user_text})
+        self.ai_send_btn.setEnabled(False)
+        self.ai_input.setEnabled(False)
+
+        msgs = copy.deepcopy(self.assistant_messages)
+        w = AssistantChatWorker(key, OPENAI_MODEL, msgs)
+        self._assistant_worker = w
+        w.need_tools.connect(self._on_assistant_need_tools)
+        w.finished_reply.connect(self._on_assistant_finished)
+        w.failed.connect(self._on_assistant_failed)
+        # finished_reply can run before the native thread has fully stopped; never destroy
+        # the QThread until QThread.finished (or Qt aborts in ~QThread).
+        w.finished.connect(lambda worker=w: self._dispose_assistant_chat_worker(worker))
+        w.start()
+
+    def _on_assistant_need_tools(self, tool_calls: list) -> None:
+        results = []
+        for tc in tool_calls:
+            try:
+                args = json.loads(tc.get("arguments") or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            out = execute_tool(self, tc["name"], args)
+            results.append({"id": tc["id"], "content": out})
+        self.refresh_config_views_after_mutation()
+        w = self._assistant_worker
+        if w is not None:
+            w.deliver_tool_results(results)
+
+    def _dispose_assistant_chat_worker(self, worker: AssistantChatWorker) -> None:
+        if self._assistant_worker is worker:
+            self._assistant_worker = None
+        worker.deleteLater()
+
+    def _on_assistant_finished(self, text: str) -> None:
+        self._append_ai_chat("Assistant", text)
+        if self._assistant_worker is not None:
+            self.assistant_messages = self._assistant_worker.out_messages
+        self.ai_send_btn.setEnabled(True)
+        self.ai_input.setEnabled(True)
+
+    def _on_assistant_failed(self, err: str) -> None:
+        self._append_ai_chat("Assistant", f"(Error) {err}")
+        self.ai_send_btn.setEnabled(True)
+        self.ai_input.setEnabled(True)

@@ -11,14 +11,15 @@ from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QPushButton
 from PyQt6.QtCore import Qt
 
 class ContentPanel(QFrame):
-    def __init__(self, title, color, parent=None):
+    def __init__(self, title, color, parent=None, stretch_middle: bool = True):
         super().__init__(parent)
         self.title = title
         self.layout = QVBoxLayout(self)
         self.label = QLabel(title)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.layout.addWidget(self.label)
-        self.layout.addStretch()
+        if stretch_middle:
+            self.layout.addStretch()
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self._base_color = color
         self._apply_color(color)
