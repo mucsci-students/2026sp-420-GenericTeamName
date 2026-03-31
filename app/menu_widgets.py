@@ -24,7 +24,7 @@ class ContentPanel(QFrame):
     theme adjustments based on luminance.
     """
 
-    def __init__(self, title, color, parent=None):
+    def __init__(self, title, color, parent=None, stretch_middle: bool = True)
         """
         Initializes the panel with a title and a base color.
         """
@@ -37,11 +37,14 @@ class ContentPanel(QFrame):
         self.label = QLabel(title)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Add the label to the layout
+        #What is this?
+        #====================================
         self.layout.addWidget(self.label)
-
+        if stretch_middle:
+            self.layout.addStretch()
         # Add a stretch factor to push everything above it to the top
         self.layout.addStretch()
+        #====================================
 
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self._base_color = color
