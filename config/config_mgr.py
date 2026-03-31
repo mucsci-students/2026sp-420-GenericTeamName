@@ -71,7 +71,7 @@ class ConfigManager:
             lines.append(f"{' (No courses defined) ':-^{len(header)}}")
 
         return "\n".join(lines)
-
+        
     def get_schedule_spreadsheet(self, schedule_data):
         """
         Formats schedule data into an ASCII spreadsheet grid.
@@ -148,100 +148,159 @@ class ConfigManager:
         lines.append(divider)
         return "\n".join(lines)
 
-    def export_schedule_to_csv(self, schedule_data, filename="schedule.csv"):
-        """Exports the schedule grid to a CSV file."""
+    def export_schedule_to_csv(self, all_schedules, parent: QWidget):
+        """
+        Logic: Handles the Save As dialog and writes all schedules to one CSV.
+        """
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+
+        if not all_schedules:
+            QMessageBox.warning(parent, "Export Error", "No schedule data available.")
+            return False
+
+        # The logic handles the path selection internally now
+        file_path, _ = QFileDialog.getSaveFileName(
+            parent,
+            "Save All Generated Schedules",
+            "generated_schedules.csv",
+            "CSV Files (*.csv);;All Files (*)"
+        )
+
+        if not file_path:
+            return False
+
         days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
         times = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"]
 
         try:
-            with open(filename, mode='w', newline='') as f:
+            with open(file_path, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                # Header row
-                writer.writerow(["TIME"] + days)
 
-                # Data rows
-                for t in times:
-                    row = [t]
-                    for d in days:
-                        entry = next((s for s in schedule_data if s['day'] == d and s['time'] == t), None)
-                        row.append(entry['course_id'] if entry else "")
-                    writer.writerow(row)
+                # Check if it's a list of schedules or a single schedule
+                # If it's just one schedule, wrap it so the loop works
+                if all_schedules and isinstance(all_schedules[0], dict):
+                    data_to_export = [all_schedules]
+                else:
+                    data_to_export = all_schedules
+
+                for i, schedule_data in enumerate(data_to_export):
+                    writer.writerow([f"--- SCHEDULE OPTION {i+1} ---"])
+                    writer.writerow(["TIME"] + days)
+
+                    for t in times:
+                        row = [t]
+                        for d in days:
+                            # Search for entry - formatted course_id includes the section
+                            entry = next((s for s in schedule_data if s['day'] == d and s['time'] == t), None)
+                            row.append(entry['course_id'] if entry else "")
+                        writer.writerow(row)
+
+                    writer.writerow([]) # Spacer row
+
+            QMessageBox.information(parent, "Success", f"Exported {len(data_to_export)} schedule(s) to:\n{file_path}")
             return True
+
         except Exception as e:
-            print(f"CSV Export Error: {e}")
+            QMessageBox.critical(parent, "Export Error", f"Failed to save CSV: {str(e)}")
             return False
 
-    def import_schedule_from_csv(self, filename):
+    def import_schedule_from_csv(self, filename=None, parent: QWidget = None):
         """
-        Imports schedule from a CSV file (same format as export_schedule_to_csv).
-        Returns list of dicts [{'course_id': str, 'day': str, 'time': str}, ...] or None on error.
+        Logic: Imports a CSV that may contain multiple schedules.
+        Returns: A list of schedules (list of lists of dicts).
         """
+        from PyQt6.QtWidgets import QFileDialog
+
+        if not filename:
+            filename, _ = QFileDialog.getOpenFileName(
+                parent, "Import Schedule CSV", "", "CSV Files (*.csv);;All Files (*)"
+            )
+
+        if not filename:
+            return None
+
         days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
         try:
-            schedule_data = []
+            all_schedules = [] # This will be our list of lists
+            current_schedule = []
+
             with open(filename, mode='r', newline='', encoding='utf-8') as f:
                 reader = csv.reader(f)
-                header = next(reader, None)
-                if not header:
-                    return None
-                # Header: TIME, Mon, Tue, Wed, Thu, Fri (or similar)
-                time_col = 0
+
                 day_cols = {}
-                for i, cell in enumerate(header):
-                    cell = (cell or "").strip()
-                    if i == 0 and cell.upper() == "TIME":
-                        time_col = 0
-                        continue
-                    if cell in days:
-                        day_cols[i] = cell
-                if not day_cols:
-                    # Fallback: assume columns 1..5 are Mon..Fri
-                    for j, d in enumerate(days):
-                        if j + 1 < len(header):
-                            day_cols[j + 1] = d
+                time_col = 0
+
                 for row in reader:
-                    if not row:
+                    if not row or not any(field.strip() for field in row):
                         continue
-                    time_slot = row[time_col].strip() if time_col < len(row) else ""
-                    for col_idx, day in day_cols.items():
-                        if col_idx < len(row) and row[col_idx].strip():
-                            schedule_data.append({
-                                "course_id": row[col_idx].strip(),
-                                "day": day,
-                                "time": time_slot,
-                            })
-            return schedule_data
+
+                    # 1. Detect a new schedule section
+                    if row[0].startswith("---"):
+                        if current_schedule:
+                            all_schedules.append(current_schedule)
+                        current_schedule = []
+                        day_cols = {} # Reset header detection for the new table
+                        continue
+
+                    # 2. Detect the Header Row (TIME, Mon, Tue...)
+                    if row[0].strip().upper() == "TIME":
+                        day_cols = {i: cell.strip() for i, cell in enumerate(row) if cell.strip() in days}
+                        continue
+
+                    # 3. Parse data rows if we have a valid header
+                    if day_cols:
+                        time_slot = row[time_col].strip()
+                        for col_idx, day_name in day_cols.items():
+                            if col_idx < len(row) and row[col_idx].strip():
+                                current_schedule.append({
+                                    "course_id": row[col_idx].strip(),
+                                    "day": day_name,
+                                    "time": time_slot,
+                                })
+
+                # Append the final schedule gathered
+                if current_schedule:
+                    all_schedules.append(current_schedule)
+
+            return all_schedules # Returns [[{...}, ...], [{...}, ...]]
+
         except Exception as e:
             print(f"CSV Import Error: {e}")
+            if parent:
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.critical(parent, "Import Error", f"Failed to load CSV: {str(e)}")
             return None
 
     def scheduler_output_to_viewer_format(self, schedule_list):
         """
-        Converts scheduler output (list of dicts with course_str, times) to
-        [{'course_id', 'day', 'time'}, ...] for the schedule viewer.
-        Scheduler uses: course_str, times=[{day: 1-5, start: minutes}]
-        day 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri
-        start: minutes from midnight (e.g. 720 = 12:00)
+        Logic: Standardizes raw scheduler dicts into viewer format.
+        Fix: Explicitly combines 'course_id' and 'section' (e.g., CMSC 161.01).
         """
         days_map = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri"}
         result = []
         for item in schedule_list:
-            if not isinstance(item, dict):
-                continue
-            cid = item.get("course_str") or item.get("course_id")
-            times = item.get("times", [])
-            for t in times:
-                if not isinstance(t, dict):
-                    continue
+            if not isinstance(item, dict): continue
+
+            # Get base ID and Section
+            cid = item.get("course_id") or item.get("course_str") or "Unknown"
+            section = item.get("section")
+
+            # Format as CMSC 161.01
+            if section is not None:
+                sec_str = str(section)
+                full_name = f"{cid}.{sec_str}" if not sec_str.startswith('.') else f"{cid}{sec_str}"
+            else:
+                full_name = str(cid)
+
+            for t in item.get("times", []):
                 day_num = t.get("day")
                 start_mins = t.get("start", 0)
-                if day_num is None:
-                    continue
-                day_str = days_map.get(day_num, f"Day{day_num}")
-                h = start_mins // 60
-                m = start_mins % 60
-                time_str = f"{h:02d}:{m:02d}"
-                result.append({"course_id": str(cid or ""), "day": day_str, "time": time_str})
+                if day_num:
+                    result.append({
+                        "course_id": full_name,
+                        "day": days_map.get(day_num, "Mon"),
+                        "time": f"{start_mins // 60:02d}:{start_mins % 60:02d}"
+                    })
         return result
 
     def import_schedule_from_json(self, filename):
