@@ -317,6 +317,11 @@ class GenConfigManager:
                 parent.schedules = parent.schedules + viewer_schedules
                 parent.current_schedule_index = len(parent.schedules) - len(viewer_schedules)
 
+                if hasattr(parent, 'refresh_ui_metadata'):
+                    parent.refresh_ui_metadata()
+                if hasattr(parent, 'update_schedule_display'):
+                    parent.update_schedule_display()
+
                 QMessageBox.information(
                     parent, "Success",
                     f"Generated {len(viewer_schedules)} schedule(s). View them in Schedule Viewer."

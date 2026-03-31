@@ -24,7 +24,7 @@ class ContentPanel(QFrame):
     theme adjustments based on luminance.
     """
 
-    def __init__(self, title, color, parent=None, stretch_middle: bool = True)
+    def __init__(self, title, color, parent=None, stretch_middle: bool = True):
         """
         Initializes the panel with a title and a base color.
         """
