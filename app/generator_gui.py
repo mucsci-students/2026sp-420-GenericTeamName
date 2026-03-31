@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -191,10 +192,86 @@ class GenConfigManager:
             return
 
         try:
-            path_str = str(self.config_path.resolve())
-            config = load_config_from_file(CombinedConfig, path_str)
-            
+            # path_str = str(self.config_path.resolve())
+            # config = load_config_from_file(CombinedConfig, path_str)
+               # --- SANITIZE + CONVERT CONFIG FOR SCHEDULER ---
+
+            # --- SANITIZE + CONVERT CONFIG FOR SCHEDULER ---
+
+            def convert_time_slots(ui_time_slots):
+                day_map = {
+                    "Monday": "MON",
+                    "Tuesday": "TUE",
+                    "Wednesday": "WED",
+                    "Thursday": "THU",
+                    "Friday": "FRI",
+                }
+
+                # default fallback (VERY important)
+                default_block = {
+                    "start": "08:00",
+                    "end": "09:00",
+                    "spacing": 60
+                }
+
+                times = {
+                    "MON": [default_block],
+                    "TUE": [default_block],
+                    "WED": [default_block],
+                    "THU": [default_block],
+                    "FRI": [default_block],
+                }
+
+                for day, data in ui_time_slots.items():
+                    if not data.get("enabled"):
+                        continue
+
+                    short_day = day_map.get(day)
+                    if not short_day:
+                        continue
+
+                    times[short_day] = [{
+                        "start": data["start_time"],
+                        "end": data["end_time"],
+                        "spacing": data["spacing_minutes"]
+                    }]
+
+                return times
+
+
+            clean_data = json.loads(json.dumps(self._config_data))
+
+            cfg = clean_data.get("config", {})
+
+            # grab UI timeslots BEFORE deleting
+            ui_slots = cfg.pop("time_slots", {})
+
+            # remove unused stuff
+            cfg.pop("meeting_patterns", None)
+
+            clean_data = json.loads(json.dumps(self._config_data))
+
+            cfg = clean_data.get("config", {})
+
+            # remove UI-only fields that Scheduler does not accept
+            cfg.pop("time_slots", None)
+            cfg.pop("meeting_patterns", None)
+
+            # do NOT overwrite existing scheduler-ready time_slot_config
+            if "time_slot_config" not in clean_data:
+                raise ValueError(
+                    "This config file does not contain a top-level time_slot_config. "
+                    "Use a config like example.json that already includes scheduler-compatible time_slot_config."
+                )
+
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+                json.dump(clean_data, tmp, indent=2)
+                tmp_path = tmp.name
+
+            config = load_config_from_file(CombinedConfig, tmp_path)
             scheduler = Scheduler(config)
+            
+            
             limit = self._config_data.get("limit", 2)
 
             #the progress bar setup.

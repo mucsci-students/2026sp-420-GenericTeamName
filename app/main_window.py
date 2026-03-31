@@ -30,6 +30,7 @@ from .faculty_gui import FacultyManager
 from config.config_mgr import ConfigManager
 from .generator_gui import GenConfigManager
 from .lab_gui import LabConfigManager
+from .time_slot_editor import TimeSlotEditor
 
 #=================================================================================
 class MainWindow(QMainWindow):
@@ -70,6 +71,7 @@ class MainWindow(QMainWindow):
         self.room_manager = RoomConfigManager()
         self.gen_manager = GenConfigManager()
         self.lab_manager = LabConfigManager()
+        self.time_slot_editor = TimeSlotEditor(self.config_mgr)
 
         #State Management
         self.schedules = []
@@ -196,9 +198,9 @@ class MainWindow(QMainWindow):
 
     def _bind_timeslot_commands(self, menu):
         """Binds dummy timeslot operations."""
-        menu.addAction("Add Timeslot").triggered.connect(lambda: print("Add Timeslots clicked."))
-        menu.addAction("Modify Timeslot").triggered.connect(lambda: print("Modify Timeslots clicked."))
-        menu.addAction("Delete Timeslot").triggered.connect(lambda: print("Delete Timeslots clicked."))
+        menu.addAction("Add Timeslot").triggered.connect(lambda: self.time_slot_editor.add_time_slot(self))
+        menu.addAction("Modify Timeslot").triggered.connect(lambda: self.time_slot_editor.modify_time_slot(self))
+        menu.addAction("Delete Timeslot").triggered.connect(lambda: self.time_slot_editor.delete_time_slot(self))
 
     def _bind_course_commands(self, menu):
         """Binds course management operations."""
