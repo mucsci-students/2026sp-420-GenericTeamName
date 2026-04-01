@@ -319,15 +319,15 @@ class MainWindow(QMainWindow):
     def _bind_viewer_commands(self, menu):
         """Binds schedule viewing and I/O operations."""
         #These view actions (for now) are for the ASCII table.
-        menu.addAction("View Schedules").triggered.connect(lambda: self.open_schedule_viewer("all"))
-        menu.addAction("View by Faculty").triggered.connect(lambda: self.open_schedule_viewer("faculty"))
-        menu.addAction("View by Room").triggered.connect(lambda: self.open_schedule_viewer("room"))
-        menu.addAction("View by Lab").triggered.connect(lambda: self.open_schedule_viewer("lab"))
+        #menu.addAction("View Schedules").triggered.connect(lambda: self.open_schedule_viewer("all"))
+        #menu.addAction("View by Faculty").triggered.connect(lambda: self.open_schedule_viewer("faculty"))
+        #menu.addAction("View by Room").triggered.connect(lambda: self.open_schedule_viewer("room"))
+        #menu.addAction("View by Lab").triggered.connect(lambda: self.open_schedule_viewer("lab"))
         #TODO: Replace the above view actions with these after some fixes.
-        #menu.addAction("View Schedules").triggered.connect(lambda: self.update_schedule_display("all"))
-        #menu.addAction("View by Faculty").triggered.connect(lambda: self.update_schedule_display("faculty"))
-        #menu.addAction("View by Room").triggered.connect(lambda: self.update_schedule_display("room"))
-        #menu.addAction("View by Lab").triggered.connect(lambda: self.update_schedule_display("lab"))
+        menu.addAction("View Schedules").triggered.connect(lambda: self.update_schedule_display("all"))
+        menu.addAction("View by Faculty").triggered.connect(lambda: self.update_schedule_display("faculty"))
+        menu.addAction("View by Room").triggered.connect(lambda: self.update_schedule_display("room"))
+        menu.addAction("View by Lab").triggered.connect(lambda: self.update_schedule_display("lab"))
         menu.addAction("Export Schedules").triggered.connect(self.handle_export_schedule)
         menu.addAction("Import Schedules").triggered.connect(self.handle_import_schedule)
         menu.addAction("Clear Schedules").triggered.connect(self.handle_clear_schedule)
