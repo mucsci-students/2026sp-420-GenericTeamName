@@ -316,6 +316,7 @@ class GenConfigManager:
 
                 parent.schedules = parent.schedules + viewer_schedules
                 parent.current_schedule_index = len(parent.schedules) - len(viewer_schedules)
+                parent.update_schedule_display()
 
                 QMessageBox.information(
                     parent, "Success",

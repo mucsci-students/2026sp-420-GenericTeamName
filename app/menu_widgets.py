@@ -24,7 +24,7 @@ class ContentPanel(QFrame):
     theme adjustments based on luminance.
     """
 
-    def __init__(self, title, color, parent=None, stretch_middle: bool = True)
+    def __init__(self, title, color, parent=None, stretch_middle: bool = True):
         """
         Initializes the panel with a title and a base color.
         """
@@ -89,14 +89,14 @@ class ContentPanel(QFrame):
             f"border: none; color: {text_color};"
         )
 
-    def update_title(self, file_path):
+    def update_title(self, label, file_path):
         """
-        Updates the panel header text using the basename of a file path.
+        Updates the file_path label using the basename of current file_path.
 
         :param file_path: The full path to the active configuration file.
         """
         display_text = os.path.basename(file_path)
-        self.label.setText(f"Active Config: {display_text}")
+        label.setText(f"Active Config: {display_text}")
 
     def _is_dark(self, hex_color):
         """
