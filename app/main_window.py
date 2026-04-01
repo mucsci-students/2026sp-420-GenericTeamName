@@ -17,13 +17,14 @@ The Design-Patterns implemented here are as follows:
 import json
 import csv
 import os
+import copy
 from PyQt6.QtWidgets import (
     QMainWindow, QSplitter, QMenu, QPushButton,
     QVBoxLayout, QHBoxLayout, QWidget, QFileDialog,
     QMessageBox, QDialog, QPlainTextEdit, QLabel,
-    QMenuBar, QLineEdit,
+    QMenuBar, QLineEdit, QTableWidget, QHeaderView, QTableWidgetItem
     )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QCoreApplication
 from PyQt6.QtGui import QAction, QFont
 
 from .menu_widgets import ContentPanel
@@ -93,23 +94,79 @@ class MainWindow(QMainWindow):
         self._setup_ui_components()
         self.init_menus()
         self.apply_theme()
-#=================================================================================
-"""
-UI Setup Functions:
-"""
-#=================================================================================
+    #=================================================================================
+    """
+    UI Setup Functions:
+    """
+    #=================================================================================
     
+    def _load_config(self):
+        """
+        Attempts to load the initial configuration file.
+        """
+        try:
+            self.config_mgr.load()
+        except Exception:
+            pass
+
     def _setup_ui_components(self):
         """
         Initializes the structural layout components of the window.
         """
         #Splitter organizes our panels.
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.cfg_panel = ContentPanel(f"Active Config: <b>{self.config_mgr.filepath}</b>", "#000000")
-        self.right_panel = ContentPanel("Inspector & Assistant", "#1a1a1a", stretch_middle=False)
         
-        self.detail_view = QPlainTextEdit()    
-        self.right_panel.layout.addWidget(self.detail_view)
+        self.cfg_panel = ContentPanel("Schedule Preview", "#000000")
+        self.cfg_panel.layout.setContentsMargins(0, 0, 0, 0)
+        self.cfg_panel.layout.setSpacing(0)
+
+        # Refined Header Area
+        header_widget = QWidget()
+        header_layout = QVBoxLayout(header_widget)
+        header_layout.setContentsMargins(10, 8, 10, 8)
+        header_layout.setSpacing(4)
+
+        self.counter_label = QLabel("NO SCHEDULES LOADED")
+        counter_font = QFont("Segoe UI", 10)
+        counter_font.setBold(True)
+        self.counter_label.setFont(counter_font)
+        self.counter_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.path_label = QLabel(f"Active Config: <b>{self.config_mgr.filepath}</b>")
+        path_font = QFont("Segoe UI", 8)
+        path_font.setBold(True)
+        self.path_label.setFont(path_font)
+        self.path_label.setStyleSheet("color: #555;")
+        self.path_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        header_layout.addWidget(self.counter_label)
+        header_layout.addWidget(self.path_label)
+
+        # Navigation Bar
+        nav_widget = QWidget()
+        nav_layout = QHBoxLayout(nav_widget)
+        self.prev_dashboard_btn = QPushButton("◀ Previous")
+        self.next_dashboard_btn = QPushButton("Next ▶")
+        self.prev_dashboard_btn.clicked.connect(lambda: (self.show_prev_schedule(), self.update_schedule_display()))
+        self.next_dashboard_btn.clicked.connect(lambda: (self.show_next_schedule(), self.update_schedule_display()))
+        nav_layout.addWidget(self.prev_dashboard_btn)
+        nav_layout.addWidget(self.next_dashboard_btn)
+
+        # Calendar Table
+        self.calendar_view = QTableWidget()
+        self.calendar_view.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.calendar_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.calendar_view.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+
+        # Add schedule widgets to Config Panel
+        self.cfg_panel.layout.addWidget(header_widget, 0)
+        self.cfg_panel.layout.addWidget(nav_widget, 0)
+        self.cfg_panel.layout.addWidget(self.calendar_view, 1)
+        
+        self.right_panel = ContentPanel("Inspector & Assistant", "#1a1a1a", stretch_middle=False)
+        self.detail_view = QPlainTextEdit()
+        self.save_cfg_btn = QPushButton("Save Config")
+        self.save_cfg_btn.clicked.connect(lambda: self.config_mgr.save(self))    
 
         #Panels are displayed in widgets.
         self.splitter.addWidget(self.cfg_panel)
@@ -122,7 +179,7 @@ UI Setup Functions:
         inspect_layout = QVBoxLayout(inspect_box)
         inspect_layout.setContentsMargins(0, 0, 0, 0)
         inspect_layout.addWidget(self.detail_view, 1)
-        inspect_layout.addWidget(self.save_cfg_btn)
+        inspect_layout.addWidget(self.save_cfg_btn, 0)
 
         self.ai_chat_log = QPlainTextEdit()
         self.ai_chat_log.setReadOnly(True)
@@ -261,19 +318,25 @@ UI Setup Functions:
 
     def _bind_viewer_commands(self, menu):
         """Binds schedule viewing and I/O operations."""
+        #These view actions (for now) are for the ASCII table.
         menu.addAction("View Schedules").triggered.connect(lambda: self.open_schedule_viewer("all"))
         menu.addAction("View by Faculty").triggered.connect(lambda: self.open_schedule_viewer("faculty"))
         menu.addAction("View by Room").triggered.connect(lambda: self.open_schedule_viewer("room"))
         menu.addAction("View by Lab").triggered.connect(lambda: self.open_schedule_viewer("lab"))
+        #TODO: Replace the above view actions with these after some fixes.
+        #menu.addAction("View Schedules").triggered.connect(lambda: self.update_schedule_display("all"))
+        #menu.addAction("View by Faculty").triggered.connect(lambda: self.update_schedule_display("faculty"))
+        #menu.addAction("View by Room").triggered.connect(lambda: self.update_schedule_display("room"))
+        #menu.addAction("View by Lab").triggered.connect(lambda: self.update_schedule_display("lab"))
         menu.addAction("Export Schedules").triggered.connect(self.handle_export_schedule)
         menu.addAction("Import Schedules").triggered.connect(self.handle_import_schedule)
         menu.addAction("Clear Schedules").triggered.connect(self.handle_clear_schedule)
 
-#=================================================================================
-"""
-Theme Functions:
-"""
-#=================================================================================
+    #=================================================================================
+    """
+    Theme Functions:
+    """
+    #=================================================================================
         
     def _is_dark(self, hex_color: str) -> bool:
         """Return True if color is dark (use light text)."""
@@ -302,7 +365,7 @@ Theme Functions:
             f"background-color: {self.theme_color}; color: {text_c}; border: 2px solid {btn_border};"
         )
         self.theme_btn.setText(self.current_theme)
-        for panel in (self.left_panel, self.mid_panel, self.right_panel):
+        for panel in (self.cfg_panel, self.right_panel):
             panel.set_color(self.theme_color, panel_border)
         self._apply_ai_chat_theme()
 
@@ -334,11 +397,6 @@ Theme Functions:
         b = min(255, int(int(hex_color[4:6], 16) + 255 * amount))
         return f"#{r:02x}{g:02x}{b:02x}"
 
-    def show_context_menu(self, position):
-        menu = QMenu(self)
-        menu.addAction("Reset Layout").triggered.connect(self.reset_layout)
-        menu.exec(self.splitter.mapToGlobal(position))
-
     def set_theme(self, theme_name: str) -> None:
         if theme_name not in self.theme_colors:
             return
@@ -346,11 +404,11 @@ Theme Functions:
         self.theme_color = self.theme_colors[theme_name]
         self.apply_theme()
         
-#=================================================================================
-"""
-Handler Functions:
-"""
-#=================================================================================    
+    #=================================================================================
+    """
+    Handler Functions:
+    """
+    #=================================================================================    
         
     def handle_change_path(self):
         """Opens dialog to update the configuration file path."""
@@ -361,7 +419,9 @@ Handler Functions:
             self.config_mgr.filepath = file_path
             try:
                 self.config_mgr.load()
-                self.cfg_panel.update_title(file_path)
+                self.cfg_panel.update_title(self.path_label, file_path)
+                #self.update_schedule_display()
+                
             except Exception as e:
                 QMessageBox.warning(self, "Load Warning", str(e))
 
@@ -369,18 +429,14 @@ Handler Functions:
         """
         Delegates CSV parsing to ConfigManager and updates the UI with the result.
         """
-        # ConfigManager opens the Open File dialog and parses the CSV into a list of lists
+
         imported_data = self.config_mgr.import_schedule_from_csv(parent=self)
 
         if imported_data:
-            # Replace current session with imported data
+
             self.schedules = imported_data
             self.current_schedule_index = 0
-
-            # Trigger your UI update logic
-            # (Assuming you have a method like update_viewer_text() or similar)
-            if hasattr(self, 'update_schedule_display'):
-                self.update_schedule_display()
+            self.update_schedule_display()
 
             QMessageBox.information(
                 self,
@@ -393,16 +449,11 @@ Handler Functions:
         Delegates the export process to the ConfigManager.
         The ConfigManager will handle the 'Save As' dialog and CSV formatting.
         """
-        # 1. Check if we actually have schedules to export
-        # We pass self.schedules (the full list of generated options)
         if hasattr(self, 'schedules') and self.schedules:
-            # Pass 'self' as the second argument so the ConfigManager 
-            # can use this window as the parent for its file dialog.
+
             success = self.config_mgr.export_schedule_to_csv(self.schedules, self)
             
             if success:
-                # Optional: log to status bar if you have one
-                # self.statusBar().showMessage("Schedules exported successfully.", 5000)
                 pass
         else:
             from PyQt6.QtWidgets import QMessageBox
@@ -424,35 +475,17 @@ Handler Functions:
         else:
             try:
                 self.schedules.clear()
+                self.update_schedule_display()
                 QMessageBox.information(self, "Success", "Schedule/s have been cleared.")
             except:
                 QMessageBox.critical(self, "Error", "Clear failed.")
 
-    def show_context_menu(self, position) -> None:
-        """
-        Displays a context menu for the splitter to reset the layout.
-        """
-        menu = QMenu(self)
-        menu.addAction("Reset Layout").triggered.connect(self.reset_layout)
-        menu.exec(self.splitter.mapToGlobal(position))
-
-    def reset_layout(self) -> None:
-        """
-        Resets the splitter panels to an even distribution.
-        """
-        width = sum(self.splitter.sizes())
-        self.splitter.setSizes([width // 2, width // 2])
-
     def handle_view_summary(self):
         """Displays a summary of the current configuration in a monospaced dialog."""
         summary = self.config_mgr.get_summary_text()
-        self._show_tabulated_msg(f"Summary: {self.config_mgr.filepath}", summary)
-
-    def _show_tabulated_msg(self, title, text):
-        """Helper for monospaced message boxes."""
         msg = QMessageBox(self)
-        msg.setWindowTitle(title)
-        msg.setText(text)
+        msg.setWindowTitle(f"Summary: {self.config_mgr.filepath}")
+        msg.setText(summary)
         msg.setFont(QFont("Courier New", 10))
         msg.exec()
 
@@ -520,6 +553,70 @@ Handler Functions:
         if self.schedules:
             self.current_schedule_index = (self.current_schedule_index - 1) % len(self.schedules)
 
+    #this function and/or a helper with replace the open_schedule_viewer function
+    def update_schedule_display(self, group_by: str = "all"):
+        """
+        Refreshes the grid based on the current schedule index and optional filters.
+        """
+        if not self.schedules:
+            self.calendar_view.setRowCount(0)
+            self.counter_label.setText("NO SCHEDULES LOADED")
+            return
+
+        filter_val = None
+        if group_by != "all":
+            options = []
+            config_section = self.config_mgr.data.get("config", {})
+            if group_by == "faculty":
+                options = [f["name"] for f in config_section.get("faculty", [])]
+            elif group_by == "room":
+                options = [r for r in config_section.get("rooms", [])]
+            elif group_by == "lab":
+                options = [r for r in config_section.get("labs", [])]
+
+            if not options:
+                QMessageBox.information(self, "Filter", f"No {group_by} data available to filter by.")
+                group_by = "all"
+            
+            #what is this
+            else:
+                from PyQt6.QtWidgets import QInputDialog
+                item, ok = QInputDialog.getItem(self, f"Filter by {group_by.capitalize()}", 
+                                              f"Select {group_by}:", options, 0, False)
+                if ok and item:
+                    filter_val = item
+                else:
+                    return
+
+        #this does not work?
+        self.cfg_panel.update_title(self.path_label, self.config_mgr.filepath)
+        filter_suffix = f" | FILTER: {filter_val}" if filter_val else ""
+        self.counter_label.setText(
+            f"SCHEDULE OPTION {self.current_schedule_index + 1} OF {len(self.schedules)}{filter_suffix}"
+        )
+
+        days, times, grid = self.config_mgr.get_schedule_grid_data(
+            self.schedules[self.current_schedule_index],
+            filter_type=group_by,
+            filter_value=filter_val
+        )
+
+        self.calendar_view.setRowCount(len(times))
+        self.calendar_view.setColumnCount(len(days))
+        self.calendar_view.setHorizontalHeaderLabels(days)
+        self.calendar_view.setVerticalHeaderLabels(times)
+
+        item_font = QFont("Segoe UI", 9)
+        for r, row_data in enumerate(grid):
+            for c, cell_value in enumerate(row_data):
+                item = QTableWidgetItem(cell_value)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                item.setFont(item_font)
+                if cell_value:
+                    item.setBackground(Qt.GlobalColor.blue)
+                    item.setForeground(Qt.GlobalColor.white)
+                self.calendar_view.setItem(r, c, item)
+
     def save_config_to_file(self):
         """'Save As' functionality for exporting the current config state."""
         p, _ = QFileDialog.getSaveFileName(self, "Save JSON", "", "*.json")
@@ -531,10 +628,7 @@ Handler Functions:
         """Reload config from disk and refresh read-only views after AI (or other) tools wrote the file."""
         path = getattr(self.config_mgr, "filepath", None)
         if path and os.path.isfile(path):
-            try:
-                self.config_mgr.load()
-            except Exception:
-                pass
+            self._load_config()
         if hasattr(self, "detail_view"):
             self.detail_view.setPlainText(json.dumps(self.config_mgr.data, indent=2))
 

@@ -71,7 +71,8 @@ class ConfigManager:
             lines.append(f"{' (No courses defined) ':-^{len(header)}}")
 
         return "\n".join(lines)
-        
+
+    #ASCII VERSION OF SCHEDULE VIEWER:    
     def get_schedule_spreadsheet(self, schedule_data):
         """
         Formats schedule data into an ASCII spreadsheet grid.
@@ -349,3 +350,50 @@ class ConfigManager:
         except Exception as e:
             print(f"JSON Import Error: {e}")
             return None
+
+    #NEW SCHEDULE VIEWER GRID [As seen in cfg panel]:
+    def get_schedule_grid_data(self, schedule_data, filter_type="all", filter_value=None):
+        days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+        times = [f"{h:02d}:00" for h in range(24)]
+        grid = [["" for _ in range(len(days))] for _ in range(len(times))]
+        
+        # Access the master course list from config to look up missing attributes
+        master_courses = self.data.get("config", {}).get("courses", [])
+
+        for entry in schedule_data:
+            # 1. Apply Filter Logic
+            if filter_type != "all" and filter_value:
+                # Get value from entry (CSV import style) or from master config (JSON style)
+                entry_val = entry.get(filter_type)
+                
+                # If the attribute (like 'room') isn't in the schedule entry, 
+                # find the course in the master config and check its attributes there.
+                if entry_val is None:
+                    # Strip section numbers (e.g., 'CMSC 161.01' -> 'CMSC 161') to match master list
+                    base_id = entry.get('course_id', '').split('.')[0]
+                    course_info = next((c for c in master_courses if c.get('course_id') == base_id), {})
+                    entry_val = course_info.get(filter_type, [])
+
+                # Handle membership: Your JSON stores rooms/faculty as LISTS
+                # Check if the filter_value (string) is in the entry_val (list or string)
+                if isinstance(entry_val, list):
+                    if str(filter_value) not in [str(v) for v in entry_val]:
+                        continue
+                else:
+                    if str(entry_val) != str(filter_value):
+                        continue
+
+            # 2. Placement Logic
+            day = entry.get('day')
+            time = entry.get('time')
+            course = entry.get('course_id', '')
+            
+            if day in days and time in times:
+                row = times.index(time)
+                col = days.index(day)
+                if grid[row][col]:
+                    grid[row][col] += f"\n{course}"
+                else:
+                    grid[row][col] = course
+                
+        return days, times, grid
