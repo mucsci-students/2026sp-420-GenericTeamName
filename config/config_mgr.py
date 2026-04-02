@@ -1,16 +1,11 @@
 '''
     File: config_mgr.py
-    Date: 02/28/2026
-    Author: Kyle Smith & Shane del Villar
+    Date: 04/01/2026
+    Author: Kyle Smith, Shane del Villar, & Chayse Altland
     Class: CMSC 420
     Description: Implements saving, loading and displaying a config for the scheduler.
     Implements displaying the schedule in a tabulated format and saving as a CSV.
 '''
-
-import json
-import os
-import csv
-from PyQt6.QtWidgets import QMessageBox, QWidget
 
 import json
 import os
