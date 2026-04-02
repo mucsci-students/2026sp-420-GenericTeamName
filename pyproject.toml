@@ -18,7 +18,7 @@ source = ["./"]
 omit = ["tests/*"]
 
 [tool.pytest.ini_options]
-addopts = "--cov --cov-report=html --import-mode=importlib"
+addopts = "--cov --cov-report=xml --import-mode=importlib"
 pythonpath = ["."]
 
 [dependency-groups]
