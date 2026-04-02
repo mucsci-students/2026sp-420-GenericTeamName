@@ -5,7 +5,28 @@
         ],
         "labs": [],
         "courses": [],
-        "faculty": []
+        "faculty": [],
+        "time_slots": {
+            "Monday": {
+                "enabled": true,
+                "blocks": [
+                    {
+                        "start_time": "08:00",
+                        "end_time": "15:00",
+                        "spacing_minutes": 60,
+                        "slots": [
+                            "08:00",
+                            "09:00",
+                            "10:00",
+                            "11:00",
+                            "12:00",
+                            "13:00",
+                            "14:00"
+                        ]
+                    }
+                ]
+            }
+        }
     },
     "limit": 5,
     "optimizer_flags": [
@@ -15,5 +36,17 @@
         "same_room",
         "same_lab",
         "pack_rooms"
-    ]
+    ],
+    "time_slot_config": {
+        "times": {
+            "MON": [
+                {
+                    "start": "08:00",
+                    "end": "15:00",
+                    "spacing": 60
+                }
+            ]
+        },
+        "classes": []
+    }
 }

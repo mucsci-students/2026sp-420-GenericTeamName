@@ -1,7 +1,7 @@
 '''
     File: config_mgr.py
-    Date: 02/28/2026
-    Author: Kyle Smith & Shane del Villar
+    Date: 04/01/2026
+    Author: Kyle Smith, Shane del Villar, & Chayse Altland
     Class: CMSC 420
     Description: Implements saving, loading and displaying a config for the scheduler.
     Implements displaying the schedule in a tabulated format and saving as a CSV.
@@ -15,20 +15,33 @@ from PyQt6.QtWidgets import QMessageBox, QWidget
 class ConfigManager:
     def __init__(self, filepath="config.json"):
         self.filepath = filepath
-        self.data = {"config": {"rooms": [], "labs": [], "courses": [], "faculty": []}}
+        self.data = {
+            "config": {
+                "rooms": [],
+                "labs": [],
+                "courses": [],
+                "faculty": [],
+                "time_slots": {},
+                "meeting_patterns": []
+            },
+            "time_slot_config": {
+                "times": {},
+                "classes": []
+            }
+        }
 
     def load(self):
         """Load data from the JSON file."""
         if not os.path.exists(self.filepath):
             raise FileNotFoundError(f"Config file not found: {self.filepath}")
-        with open(self.filepath, 'r') as f:
+        with open(self.filepath, "r") as f:
             self.data = json.load(f)
         return self.data
 
     def save(self, parent: QWidget):
         """Save JSON data with 4 space indent."""
         try:
-            with open(self.filepath, 'w') as f:
+            with open(self.filepath, "w") as f:
                 json.dump(self.data, f, indent=4)
                 QMessageBox.information(parent, "Success", f"Saved to: {self.filepath}")
         except Exception as e:

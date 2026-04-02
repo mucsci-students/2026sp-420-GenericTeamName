@@ -1,11 +1,10 @@
 '''
     File: generator_gui.py
-    Date: 03/05/2026
-    Author: Tyler Strohl
+    Date: 04/01/2026
+    Author: Tyler Strohl, Kyle Smith, & Chayse Altland
     Class: CMSC 420
     Description: Schedule Generator dialogs and helpers for the GUI.
 '''
-
 from __future__ import annotations
 
 import json
@@ -23,7 +22,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QProgressBar,
 )
-
+print("DEBUG: loaded app/generator_gui.py from schedule-config-editor")
 #the work-around for scheduler function blocking main GUI thread.
 class ScheduleWorker(QThread):
     
@@ -179,7 +178,8 @@ class GenConfigManager:
 
     #the generate schedules option.
     def run_scheduler(self, parent: QWidget) -> None:
-        
+        print("DEBUG config path:", parent.config_mgr.filepath)
+        print(json.dumps(parent.config_mgr.data.get("time_slot_config", {}), indent=2))
         """Runs the scheduler and displays results in Schedule Viewer. Use Export to save to file."""
         if not self._ensure_config_loaded(parent):
             return
@@ -192,12 +192,6 @@ class GenConfigManager:
             return
 
         try:
-            # path_str = str(self.config_path.resolve())
-            # config = load_config_from_file(CombinedConfig, path_str)
-               # --- SANITIZE + CONVERT CONFIG FOR SCHEDULER ---
-
-            # --- SANITIZE + CONVERT CONFIG FOR SCHEDULER ---
-
             def convert_time_slots(ui_time_slots):
                 day_map = {
                     "Monday": "MON",
@@ -207,62 +201,70 @@ class GenConfigManager:
                     "Friday": "FRI",
                 }
 
-                # default fallback (VERY important)
                 default_block = {
                     "start": "08:00",
-                    "end": "09:00",
-                    "spacing": 60
+                    "end": "17:00",
+                    "spacing": 60,
                 }
 
                 times = {
-                    "MON": [default_block],
-                    "TUE": [default_block],
-                    "WED": [default_block],
-                    "THU": [default_block],
-                    "FRI": [default_block],
+                    "MON": [default_block.copy()],
+                    "TUE": [default_block.copy()],
+                    "WED": [default_block.copy()],
+                    "THU": [default_block.copy()],
+                    "FRI": [default_block.copy()],
                 }
 
-                for day, data in ui_time_slots.items():
-                    if not data.get("enabled"):
-                        continue
-
+                for day, day_entry in ui_time_slots.items():
                     short_day = day_map.get(day)
                     if not short_day:
                         continue
+                    if not day_entry.get("enabled", True):
+                        continue
 
-                    times[short_day] = [{
-                        "start": data["start_time"],
-                        "end": data["end_time"],
-                        "spacing": data["spacing_minutes"]
-                    }]
+                    converted_blocks = []
+
+                    if "blocks" in day_entry:
+                        for block in day_entry.get("blocks", []):
+                            converted_blocks.append({
+                                "start": block["start_time"],
+                                "end": block["end_time"],
+                                "spacing": block["spacing_minutes"],
+                            })
+                    elif {"start_time", "end_time", "spacing_minutes"} <= set(day_entry.keys()):
+                        converted_blocks.append({
+                            "start": day_entry["start_time"],
+                            "end": day_entry["end_time"],
+                            "spacing": day_entry["spacing_minutes"],
+                        })
+
+                    if converted_blocks:
+                        times[short_day] = converted_blocks
 
                 return times
 
 
             clean_data = json.loads(json.dumps(self._config_data))
+            cfg = clean_data.setdefault("config", {})
 
-            cfg = clean_data.get("config", {})
-
-            # grab UI timeslots BEFORE deleting
             ui_slots = cfg.pop("time_slots", {})
-
-            # remove unused stuff
             cfg.pop("meeting_patterns", None)
 
-            clean_data = json.loads(json.dumps(self._config_data))
+            time_slot_config = clean_data.setdefault("time_slot_config", {})
+            time_slot_config.setdefault("classes", [])
 
-            cfg = clean_data.get("config", {})
-
-            # remove UI-only fields that Scheduler does not accept
-            cfg.pop("time_slots", None)
-            cfg.pop("meeting_patterns", None)
-
-            # do NOT overwrite existing scheduler-ready time_slot_config
-            if "time_slot_config" not in clean_data:
-                raise ValueError(
-                    "This config file does not contain a top-level time_slot_config. "
-                    "Use a config like example.json that already includes scheduler-compatible time_slot_config."
-                )
+            # Only overwrite scheduler times if GUI timeslots actually exist
+            if ui_slots:
+                time_slot_config["times"] = convert_time_slots(ui_slots)
+            elif "times" not in time_slot_config:
+                # last-resort fallback only if neither format exists
+                time_slot_config["times"] = {
+                    "MON": [{"start": "08:00", "end": "17:00", "spacing": 60}],
+                    "TUE": [{"start": "08:00", "end": "17:00", "spacing": 60}],
+                    "WED": [{"start": "08:00", "end": "17:00", "spacing": 60}],
+                    "THU": [{"start": "08:00", "end": "17:00", "spacing": 60}],
+                    "FRI": [{"start": "08:00", "end": "17:00", "spacing": 60}],
+                }
 
             with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
                 json.dump(clean_data, tmp, indent=2)
@@ -270,27 +272,26 @@ class GenConfigManager:
 
             config = load_config_from_file(CombinedConfig, tmp_path)
             scheduler = Scheduler(config)
-            
-            
+
             limit = self._config_data.get("limit", 2)
 
-            #the progress bar setup.
+            #Progress bar setup:
             self.gen_progress = QProgressDialog("Generating Schedules:", "Cancel", 0, limit, parent)
             #progress bar prevents user from interacting with other windows in program.
             self.gen_progress.setWindowModality(Qt.WindowModality.WindowModal)
             self.gen_progress.setMinimumDuration(0)
             self.gen_progress.setValue(0)
 
-            #format: M/N schedules
+            #Format: M/N schedules
             bar = self.gen_progress.findChild(QProgressBar)
             if bar:
                 bar.setFormat("%v / %m")
-            
+
             self.worker = ScheduleWorker(scheduler, limit)
-            
+
             self.worker.progress.connect(self.gen_progress.setValue)
             self.gen_progress.canceled.connect(self.worker.cancel)
-            
+
             def on_finished(raw_schedules):
                 self.gen_progress.close()
                 if not raw_schedules:
@@ -303,9 +304,12 @@ class GenConfigManager:
                     return
 
                 def course_to_dict(c: Any) -> Any:
-                    if hasattr(c, "model_dump"): return c.model_dump()
-                    if hasattr(c, "as_dict"): return c.as_dict()
-                    if hasattr(c, "__dict__"): return c.__dict__
+                    if hasattr(c, "model_dump"):
+                        return c.model_dump()
+                    if hasattr(c, "as_dict"):
+                        return c.as_dict()
+                    if hasattr(c, "__dict__"):
+                        return c.__dict__
                     return str(c)
 
                 viewer_schedules = []
@@ -319,7 +323,8 @@ class GenConfigManager:
                 parent.update_schedule_display()
 
                 QMessageBox.information(
-                    parent, "Success",
+                    parent,
+                    "Success",
                     f"Generated {len(viewer_schedules)} schedule(s). View them in Schedule Viewer."
                 )
 
