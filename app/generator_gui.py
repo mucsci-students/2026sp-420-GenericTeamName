@@ -1,7 +1,7 @@
 '''
     File: generator_gui.py
-    Date: 03/05/2026
-    Author: Tyler Strohl
+    Date: 04/01/2026
+    Author: Tyler Strohl, Kyle Smith, & Chayse Altland
     Class: CMSC 420
     Description: Schedule Generator dialogs and helpers for the GUI.
 '''
@@ -275,11 +275,14 @@ class GenConfigManager:
 
             limit = self._config_data.get("limit", 2)
 
+            #Progress bar setup:
             self.gen_progress = QProgressDialog("Generating Schedules:", "Cancel", 0, limit, parent)
+            #progress bar prevents user from interacting with other windows in program.
             self.gen_progress.setWindowModality(Qt.WindowModality.WindowModal)
             self.gen_progress.setMinimumDuration(0)
             self.gen_progress.setValue(0)
 
+            #Format: M/N schedules
             bar = self.gen_progress.findChild(QProgressBar)
             if bar:
                 bar.setFormat("%v / %m")
