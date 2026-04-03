@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     )
 from PyQt6.QtCore import Qt, QCoreApplication
 from PyQt6.QtGui import QAction, QFont
+from PyQt6.QtWidgets import QInputDialog
 
 from .menu_widgets import ContentPanel
 from .ai_assistant import (
@@ -94,6 +95,10 @@ class MainWindow(QMainWindow):
         self._setup_ui_components()
         self.init_menus()
         self.apply_theme()
+
+        #Bug fix to prevent "No Schedules" warning from popping up at wrong time.
+        #See update_schedule_display
+        self.clear_clicked = False
     #=================================================================================
     """
     UI Setup Functions:
@@ -318,12 +323,6 @@ class MainWindow(QMainWindow):
 
     def _bind_viewer_commands(self, menu):
         """Binds schedule viewing and I/O operations."""
-        #These view actions (for now) are for the ASCII table.
-        #menu.addAction("View Schedules").triggered.connect(lambda: self.open_schedule_viewer("all"))
-        #menu.addAction("View by Faculty").triggered.connect(lambda: self.open_schedule_viewer("faculty"))
-        #menu.addAction("View by Room").triggered.connect(lambda: self.open_schedule_viewer("room"))
-        #menu.addAction("View by Lab").triggered.connect(lambda: self.open_schedule_viewer("lab"))
-        #TODO: Replace the above view actions with these after some fixes.
         menu.addAction("View Schedules").triggered.connect(lambda: self.update_schedule_display("all"))
         menu.addAction("View by Faculty").triggered.connect(lambda: self.update_schedule_display("faculty"))
         menu.addAction("View by Room").triggered.connect(lambda: self.update_schedule_display("room"))
@@ -421,42 +420,46 @@ class MainWindow(QMainWindow):
                 self.config_mgr.load()
                 self.cfg_panel.update_title(self.path_label, file_path)
                 #self.update_schedule_display()
+                QMessageBox.information(self, "Success", "Configuration File changed.")
                 
             except Exception as e:
                 QMessageBox.warning(self, "Load Warning", str(e))
 
     def handle_import_schedule(self):
         """
-        Delegates CSV parsing to ConfigManager and updates the UI with the result.
+        Delegates JSON parsing to ConfigManager and updates the UI with the result.
         """
 
-        imported_data = self.config_mgr.import_schedule_from_csv(parent=self)
+        imported_data = self.config_mgr.import_schedule_from_json(parent=self)
 
         if imported_data:
 
             self.schedules = imported_data
             self.current_schedule_index = 0
+            #TODO: If importing a schedule, show user the file name
             self.update_schedule_display()
 
-            QMessageBox.information(
-                self,
-                "Import Successful",
-                f"Successfully loaded {len(imported_data)} schedule(s)."
-            )
+            try:
+                QMessageBox.information(
+                    self,
+                    "Import Successful",
+                    f"Successfully loaded {len(imported_data)} schedule(s)."
+                )
+            except:
+                QMessageBox.critical(self, "Error", "Import failed.")
 
     def handle_export_schedule(self):
         """
         Delegates the export process to the ConfigManager.
-        The ConfigManager will handle the 'Save As' dialog and CSV formatting.
+        The ConfigManager will handle the 'Save As' dialog and JSON formatting.
         """
         if hasattr(self, 'schedules') and self.schedules:
 
-            success = self.config_mgr.export_schedule_to_csv(self.schedules, self)
+            success = self.config_mgr.export_schedule_to_json(self.schedules, self)
             
             if success:
                 pass
         else:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(
                 self, 
                 "Export Error", 
@@ -474,7 +477,9 @@ class MainWindow(QMainWindow):
             return
         else:
             try:
+                self.clear_clicked = True
                 self.schedules.clear()
+                #make sure to also update the imported schedule panel
                 self.update_schedule_display()
                 QMessageBox.information(self, "Success", "Schedule/s have been cleared.")
             except:
@@ -489,42 +494,6 @@ class MainWindow(QMainWindow):
         msg.setFont(QFont("Courier New", 10))
         msg.exec()
 
-    #TODO: Revisit this function, i do not think it is finished.
-    def open_schedule_viewer(self, grouping: str):
-        """
-        Opens the schedule viewing strategy.
-        
-        :param grouping: How to group the data ('all', 'faculty', 'room', 'lab').
-        """
-        if not self.schedules:
-            QMessageBox.warning(self, "No schedules", "Generate or import one first.")
-            return
-
-        self.viewer = QDialog(self)
-        self.viewer.setWindowTitle(f"Viewer - {grouping.capitalize()}")
-        self.viewer.resize(900, 500)
-        layout = QVBoxLayout(self.viewer)
-
-        self.schedule_display = QPlainTextEdit()
-        self.schedule_display.setReadOnly(True)
-        self.schedule_display.setFont(QFont("Courier New", 10))
-        layout.addWidget(self.schedule_display)
-
-        if grouping == "all":
-            self._setup_viewer_navigation(layout)
-            self._refresh_schedule_display()
-        else:
-            # Viewer Strategy: Logic for specific data maps
-            config_data = self.config_mgr.data.get("config", {})
-            data_map = {
-                "faculty": config_data.get("faculty", "N/A"),
-                "room": config_data.get("rooms", "N/A"),
-                "lab": config_data.get("labs", "N/A")
-            }
-            self.schedule_display.setPlainText(json.dumps(data_map.get(grouping), indent=4))
-
-        self.viewer.exec()
-
     def _setup_viewer_navigation(self, layout):
         """Adds navigation buttons for cycling through multiple schedules."""
         nav_layout = QHBoxLayout()
@@ -535,6 +504,7 @@ class MainWindow(QMainWindow):
         nav_layout.addWidget(next_btn)
         layout.addLayout(nav_layout)
 
+    #TODO: Move more of this code to config_mgr?
     def _refresh_schedule_display(self):
         """Updates the viewer text based on the current schedule index."""
         if not self.schedules: return
@@ -553,14 +523,30 @@ class MainWindow(QMainWindow):
         if self.schedules:
             self.current_schedule_index = (self.current_schedule_index - 1) % len(self.schedules)
 
-    #this function and/or a helper with replace the open_schedule_viewer function
+    #TODO: Filters do not always work properly. Fix.
+    # - When importing schedule and not changing default config,
+    #   the filters do not work properly,
+    #   because they are going off of what config is currently loaded,
+    #   and not what schedule is currently loaded.
+
+    #TODO: Change import/export to JSON
+
+    #for filters:
+    #if schedules are generated, read from CONFIG JSON FILE
+    #if schedules are imported, read from IMPORTED JSON FILE
+
     def update_schedule_display(self, group_by: str = "all"):
         """
         Refreshes the grid based on the current schedule index and optional filters.
+        Also refreshes the grid when new schedules are generated.
         """
         if not self.schedules:
             self.calendar_view.setRowCount(0)
             self.counter_label.setText("NO SCHEDULES LOADED")
+            #this is a little buggy because of when the function is called.
+            #ex: when clearing schedules.
+            if self.clear_clicked == False:
+                QMessageBox.warning(self, "No Schedules", "Generate or import schedule/s first.")
             return
 
         filter_val = None
@@ -578,9 +564,8 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Filter", f"No {group_by} data available to filter by.")
                 group_by = "all"
             
-            #what is this
+            #Prompts user for selection when choosing a view option:
             else:
-                from PyQt6.QtWidgets import QInputDialog
                 item, ok = QInputDialog.getItem(self, f"Filter by {group_by.capitalize()}", 
                                               f"Select {group_by}:", options, 0, False)
                 if ok and item:
@@ -588,9 +573,12 @@ class MainWindow(QMainWindow):
                 else:
                     return
 
-        #this does not work?
+        #TODO: If importing a schedule, show user the file name
+        self.cfg_panel.update_title(self.cfg_panel, self.config_mgr.filepath)
         self.cfg_panel.update_title(self.path_label, self.config_mgr.filepath)
+        #Show schedules through appropriate filter (all, faculty, room, lab)
         filter_suffix = f" | FILTER: {filter_val}" if filter_val else ""
+        #Update label when viewing different schedules
         self.counter_label.setText(
             f"SCHEDULE OPTION {self.current_schedule_index + 1} OF {len(self.schedules)}{filter_suffix}"
         )
