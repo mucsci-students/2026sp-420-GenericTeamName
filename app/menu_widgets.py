@@ -96,7 +96,11 @@ class ContentPanel(QFrame):
         :param file_path: The full path to the active configuration file.
         """
         display_text = os.path.basename(file_path)
-        label.setText(f"Active Config: {display_text}")
+        #Change which schedule filepath is displayed
+        if (isinstance(label, ContentPanel)):
+            self.label.setText(f"Schedules Imported: {display_text}")
+        else:
+            label.setText(f"Active Config: {display_text}")
 
     def _is_dark(self, hex_color):
         """
