@@ -5,3 +5,5 @@ coverage>=7.13.5
 pytest-cov>=7.1.0
 qtbot>=0.0.1
 mocker>=1.1.1
+pytest-mock
+pytest-qt
