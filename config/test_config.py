@@ -3,16 +3,27 @@
     Date: 03/01/2026
     Author: Kyle Smith
     Class: CMSC 420
-    Description: Test suite for config manager.
+    Description: Test suite for config manager. Updated to handle PyQt6 dependencies.
 '''
 
 import pytest
 import json
 import os
 import sys
+from unittest.mock import MagicMock
 
+# Ensure the local directory is in the path so config_mgr can be found
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
 from config_mgr import ConfigManager
+from PyQt6.QtWidgets import QMessageBox
+
+@pytest.fixture
+def mock_gui(monkeypatch):
+    """Fixture to prevent QMessageBox from opening actual windows during tests."""
+    monkeypatch.setattr(QMessageBox, "information", MagicMock())
+    monkeypatch.setattr(QMessageBox, "warning", MagicMock())
+    monkeypatch.setattr(QMessageBox, "critical", MagicMock())
 
 def test_load_nonexistent_file():
     """Verify that loading a missing file raises FileNotFoundError."""
@@ -48,8 +59,6 @@ def test_get_summary_missing_config_key(tmp_path):
     manager.load()
     summary = manager.get_summary_text()
 
-    # Now this passes because the manager provides headers
-    # even if the specific 'config' key is absent.
     assert "COURSE ID" in summary
     assert "CREDITS" in summary
 
@@ -70,21 +79,18 @@ def test_tabulation_alignment():
     # Get the index of the first '|' for every line
     pipe_indices = [line.find("|") for line in data_lines]
     
-    # Verify we have data to check
     assert len(pipe_indices) > 0
-    # Verify all pipe indices are the same (the set will have length 1)
     assert len(set(pipe_indices)) == 1
-    # Verify the width actually expanded to fit the long string
-    # "VERY_LONG_ID_STRING" is 19 chars, so index should be at least 20
+    # "VERY_LONG_ID_STRING" is 19 chars, plus padding, should be >= 20
     assert pipe_indices[0] >= 20
 
-def test_save_creates_new_file(tmp_path):
-    """Verify that save() can create a file even if it didn't exist before."""
+def test_save_creates_new_file(tmp_path, mock_gui):
+    """Verify that save() can create a file. Passes None for the parent QWidget."""
     new_file = tmp_path / "new_save.json"
     manager = ConfigManager(str(new_file))
     
     manager.data["config"]["rooms"] = ["Lab 1"]
-    manager.save()
+    manager.save(None)
     
     assert os.path.exists(new_file)
     with open(new_file, 'r') as f:
@@ -106,3 +112,18 @@ def test_get_summary_with_extra_attributes():
     summary = manager.get_summary_text()
     assert "instructor: Kyle" in summary
     assert "difficulty: Hard" in summary
+
+def test_scheduler_output_to_viewer_format():
+    """Verify raw scheduler data transforms correctly to the flat viewer format."""
+    manager = ConfigManager()
+    raw_data = [{
+        "course_id": "CMSC 161",
+        "section": "01",
+        "times": [{"day": 1, "start": 540}] # 9:00 AM
+    }]
+    
+    formatted = manager.scheduler_output_to_viewer_format(raw_data)
+    assert len(formatted) == 1
+    assert formatted[0]["course_id"] == "CMSC 161.01"
+    assert formatted[0]["day"] == "Mon"
+    assert formatted[0]["time"] == "09:00"
