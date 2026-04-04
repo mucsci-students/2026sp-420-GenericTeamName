@@ -1,6 +1,6 @@
 '''
     File: generator_gui.py
-    Date: 04/01/2026
+    Date: 04/03/2026
     Author: Tyler Strohl, Kyle Smith, & Chayse Altland
     Class: CMSC 420
     Description: Schedule Generator dialogs and helpers for the GUI.
@@ -10,21 +10,19 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
-    QFileDialog,
     QInputDialog,
     QMessageBox,
     QWidget,
     QProgressDialog,
-    QApplication,
     QProgressBar,
 )
-print("DEBUG: loaded app/generator_gui.py from schedule-config-editor")
-#the work-around for scheduler function blocking main GUI thread.
+
 class ScheduleWorker(QThread):
+    """Work-around for scheduler function blocking main GUI thread."""
     
     #communicate with the main GUI thread
     progress = pyqtSignal(int)
@@ -47,7 +45,7 @@ class ScheduleWorker(QThread):
                 raw_schedules.append(schedule)
                 #Tell main thread to update the progress bar
                 self.progress.emit(index + 1)
-            
+
             #Send final list of schedules back to the main thread
             self.finished_schedules.emit(raw_schedules)
         except Exception as e:
@@ -56,10 +54,10 @@ class ScheduleWorker(QThread):
     def cancel(self):
         self._is_cancelled = True
 
-class GenConfigManager:
 
+class GenConfigManager:
+    """Manager object to interact with main_window.py."""
     def __init__(self) -> None:
-        
         self.config_path: Optional[Path] = None
         self._config_data: Dict[str, Any] = {}
         self.limit: int = 2
@@ -68,9 +66,8 @@ class GenConfigManager:
         self.optimize: bool = True
 
     def _ensure_config_loaded(self, parent: QWidget) -> bool:
-        """
-        Use the config file selected via the Change Config File button.
-        """
+        """Use the config file selected via the Change Config File button."""
+        
         config_mgr = getattr(parent, "config_mgr", None)
         if config_mgr is None or not getattr(config_mgr, "filepath", None):
             QMessageBox.warning(
@@ -79,34 +76,28 @@ class GenConfigManager:
                 "Please select a config file first using the Change Config File button."
             )
             return False
+
         try:
             config_mgr.load()
         except Exception as e:
-            QMessageBox.critical(
-                parent,
-                "Config Error",
-                f"Could not load config:\n{e}",
-            )
+            QMessageBox.critical(parent, "Config Error", f"Could not load config:\n{e}")
             return False
+
         self.config_path = Path(config_mgr.filepath)
         self._config_data = config_mgr.data
         return True
-    
+
     def _save(self, parent: QWidget) -> None:
-        
         if self.config_path is None:
             return
+
         try:
             self.config_path.write_text(
                 json.dumps(self._config_data, indent=2),
                 encoding="utf-8"
             )
         except OSError as e:
-            QMessageBox.critical(
-                parent,
-                "Save failed",
-                f"Failed to save config:\n{e}",
-            )
+            QMessageBox.critical(parent, "Save failed", f"Failed to save config:\n{e}")
             return
 
         QMessageBox.information(
@@ -115,8 +106,9 @@ class GenConfigManager:
             f"Configuration saved to:\n{self.config_path}",
         )
 
-    #modify the limit variable in the config file.
     def set_limit(self, parent: QWidget) -> None:
+        """Modifies the limit variable in the config file."""
+        
         if not self._ensure_config_loaded(parent):
             return
 
@@ -143,14 +135,14 @@ class GenConfigManager:
         except ValueError:
             QMessageBox.warning(parent, "Invalid Input", "Please enter a valid number.")
 
-    #enables/disables the optimization flags in the config file.
     def set_optimize(self, parent: QWidget) -> None:
+        """Modifies the optimize_flags in the config file."""
         
         if not self._ensure_config_loaded(parent):
             return
-        
+
         full_flags = [
-            "faculty_course", "faculty_room", "faculty_lab", 
+            "faculty_course", "faculty_room", "faculty_lab",
             "same_room", "same_lab", "pack_rooms"
         ]
 
@@ -159,15 +151,16 @@ class GenConfigManager:
         start_index = 0 if is_currently_on else 1
 
         text, ok = QInputDialog.getItem(
-            parent, "Specify Optimization", "Enable/Disable All:", 
-            ["True", "False"], start_index, False
+            parent,
+            "Specify Optimization",
+            "Enable/Disable All:",
+            ["True", "False"],
+            start_index,
+            False
         )
 
         if ok:
-            if text == "True":
-                self._config_data["optimizer_flags"] = full_flags
-            else:
-                self._config_data["optimizer_flags"] = []
+            self._config_data["optimizer_flags"] = full_flags if text == "True" else []
 
             config_mgr = getattr(parent, "config_mgr", None)
             if config_mgr:
@@ -176,11 +169,8 @@ class GenConfigManager:
             else:
                 self._save(parent)
 
-    #the generate schedules option.
     def run_scheduler(self, parent: QWidget) -> None:
-        print("DEBUG config path:", parent.config_mgr.filepath)
-        print(json.dumps(parent.config_mgr.data.get("time_slot_config", {}), indent=2))
-        """Runs the scheduler and displays results in Schedule Viewer. Use Export to save to file."""
+        """Schedule Generation function. Interacts with Scheduler."""
         if not self._ensure_config_loaded(parent):
             return
 
@@ -243,20 +233,62 @@ class GenConfigManager:
 
                 return times
 
+            def convert_meeting_patterns(gui_patterns):
+                day_map = {
+                    "Monday": "MON",
+                    "Tuesday": "TUE",
+                    "Wednesday": "WED",
+                    "Thursday": "THU",
+                    "Friday": "FRI",
+                }
+
+                classes = []
+                for pattern in gui_patterns:
+                    meetings = []
+                    for meeting in pattern.get("meetings", []):
+                        short_day = day_map.get(meeting.get("day"))
+                        if not short_day:
+                            continue
+
+                        sched_meeting = {
+                            "day": short_day,
+                            "duration": int(meeting.get("duration", 50)),
+                        }
+                        if meeting.get("lab", False):
+                            sched_meeting["lab"] = True
+
+                        meetings.append(sched_meeting)
+
+                    if not meetings:
+                        continue
+
+                    sched_pattern = {
+                        "credits": int(pattern.get("credits", 3)),
+                        "meetings": meetings,
+                    }
+
+                    start_time = str(pattern.get("start_time", "")).strip()
+                    if start_time:
+                        sched_pattern["start_time"] = start_time
+
+                    if pattern.get("disabled", False):
+                        sched_pattern["disabled"] = True
+
+                    classes.append(sched_pattern)
+
+                return classes
 
             clean_data = json.loads(json.dumps(self._config_data))
             cfg = clean_data.setdefault("config", {})
 
             ui_slots = cfg.pop("time_slots", {})
-            cfg.pop("meeting_patterns", None)
+            gui_patterns = cfg.pop("meeting_patterns", [])
 
             time_slot_config = clean_data.setdefault("time_slot_config", {})
-            time_slot_config.setdefault("classes", [])
-
             # Only overwrite scheduler times if GUI timeslots actually exist
             if ui_slots:
                 time_slot_config["times"] = convert_time_slots(ui_slots)
-            elif "times" not in time_slot_config:
+            elif not time_slot_config.get("times"):
                 # last-resort fallback only if neither format exists
                 time_slot_config["times"] = {
                     "MON": [{"start": "08:00", "end": "17:00", "spacing": 60}],
@@ -266,7 +298,17 @@ class GenConfigManager:
                     "FRI": [{"start": "08:00", "end": "17:00", "spacing": 60}],
                 }
 
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
+            if gui_patterns:
+                time_slot_config["classes"] = convert_meeting_patterns(gui_patterns)
+            else:
+                time_slot_config.setdefault("classes", [])
+
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".json",
+                delete=False,
+                encoding="utf-8",
+            ) as tmp:
                 json.dump(clean_data, tmp, indent=2)
                 tmp_path = tmp.name
 
