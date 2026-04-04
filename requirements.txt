@@ -1,0 +1,7 @@
+pyqt6>=6.10.2
+openai>=1.0.0
+course-constraint-scheduler @ git+https://github.com/mucsci/Scheduler@5d904d0156cce60cd8ea4c333f26229019119487
+coverage>=7.13.5
+pytest-cov>=7.1.0
+qtbot>=0.0.1
+mocker>=1.1.1
