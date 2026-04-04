@@ -1,6 +1,6 @@
 '''
     File: generator_gui.py
-    Date: 04/01/2026
+    Date: 04/03/2026
     Author: Tyler Strohl, Kyle Smith, & Chayse Altland
     Class: CMSC 420
     Description: Schedule Generator dialogs and helpers for the GUI.
@@ -21,8 +21,10 @@ from PyQt6.QtWidgets import (
     QProgressBar,
 )
 
-
 class ScheduleWorker(QThread):
+    """Work-around for scheduler function blocking main GUI thread."""
+    
+    #communicate with the main GUI thread
     progress = pyqtSignal(int)
     finished_schedules = pyqtSignal(list)
     error = pyqtSignal(str)
@@ -34,14 +36,17 @@ class ScheduleWorker(QThread):
         self._is_cancelled = False
 
     def run(self):
+        """This runs in the background thread."""
         try:
             raw_schedules = []
             for index, schedule in enumerate(self.scheduler.get_models()):
                 if self._is_cancelled or index >= self.limit:
                     break
                 raw_schedules.append(schedule)
+                #Tell main thread to update the progress bar
                 self.progress.emit(index + 1)
 
+            #Send final list of schedules back to the main thread
             self.finished_schedules.emit(raw_schedules)
         except Exception as e:
             self.error.emit(str(e))
@@ -51,6 +56,7 @@ class ScheduleWorker(QThread):
 
 
 class GenConfigManager:
+    """Manager object to interact with main_window.py."""
     def __init__(self) -> None:
         self.config_path: Optional[Path] = None
         self._config_data: Dict[str, Any] = {}
@@ -60,6 +66,8 @@ class GenConfigManager:
         self.optimize: bool = True
 
     def _ensure_config_loaded(self, parent: QWidget) -> bool:
+        """Use the config file selected via the Change Config File button."""
+        
         config_mgr = getattr(parent, "config_mgr", None)
         if config_mgr is None or not getattr(config_mgr, "filepath", None):
             QMessageBox.warning(
@@ -99,6 +107,8 @@ class GenConfigManager:
         )
 
     def set_limit(self, parent: QWidget) -> None:
+        """Modifies the limit variable in the config file."""
+        
         if not self._ensure_config_loaded(parent):
             return
 
@@ -126,6 +136,8 @@ class GenConfigManager:
             QMessageBox.warning(parent, "Invalid Input", "Please enter a valid number.")
 
     def set_optimize(self, parent: QWidget) -> None:
+        """Modifies the optimize_flags in the config file."""
+        
         if not self._ensure_config_loaded(parent):
             return
 
@@ -158,6 +170,7 @@ class GenConfigManager:
                 self._save(parent)
 
     def run_scheduler(self, parent: QWidget) -> None:
+        """Schedule Generation function. Interacts with Scheduler."""
         if not self._ensure_config_loaded(parent):
             return
 
@@ -272,10 +285,11 @@ class GenConfigManager:
             gui_patterns = cfg.pop("meeting_patterns", [])
 
             time_slot_config = clean_data.setdefault("time_slot_config", {})
-
+            # Only overwrite scheduler times if GUI timeslots actually exist
             if ui_slots:
                 time_slot_config["times"] = convert_time_slots(ui_slots)
             elif not time_slot_config.get("times"):
+                # last-resort fallback only if neither format exists
                 time_slot_config["times"] = {
                     "MON": [{"start": "08:00", "end": "17:00", "spacing": 60}],
                     "TUE": [{"start": "08:00", "end": "17:00", "spacing": 60}],
@@ -303,11 +317,14 @@ class GenConfigManager:
 
             limit = self._config_data.get("limit", 2)
 
+            #Progress bar setup:
             self.gen_progress = QProgressDialog("Generating Schedules:", "Cancel", 0, limit, parent)
+            #progress bar prevents user from interacting with other windows in program.
             self.gen_progress.setWindowModality(Qt.WindowModality.WindowModal)
             self.gen_progress.setMinimumDuration(0)
             self.gen_progress.setValue(0)
 
+            #Format: M/N schedules
             bar = self.gen_progress.findChild(QProgressBar)
             if bar:
                 bar.setFormat("%v / %m")
