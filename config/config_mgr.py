@@ -15,6 +15,8 @@ class ConfigManager:
     def __init__(self, filepath="config.json", import_file = ""):
         #filepath is used for a config file
         self.filepath = filepath
+        #import_file is used for an imported schedules file
+        self.import_file = import_file
         self.data = {
             "config": {
                 "rooms": [],
@@ -29,8 +31,6 @@ class ConfigManager:
                 "classes": []
             }
         }
-        #import_file is used for an imported schedules file
-        self.import_file = import_file
 
     def load(self):
         """Load data from the JSON file."""

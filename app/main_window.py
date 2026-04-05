@@ -8,7 +8,7 @@ The Design-Patterns implemented here are as follows:
     -Singleton
 
 :date: 03/31/2026
-:authors: Kyle Smith, Tyler Strohl, & Shane del Villar
+:authors: Kyle Smith, Tyler Strohl, Chayse Altland, & Shane del Villar
 :class: CMSC 420
 """
 #Note: The """ comment blocks are important for the documentation (see docs folder).
@@ -40,6 +40,7 @@ from config.config_mgr import ConfigManager
 from .generator_gui import GenConfigManager
 from .lab_gui import LabConfigManager
 from .time_slot_editor import TimeSlotEditor
+from .meeting_pattern_editor import MeetingPatternEditor
 
 #=================================================================================
 class MainWindow(QMainWindow):
@@ -81,6 +82,7 @@ class MainWindow(QMainWindow):
         self.gen_manager = GenConfigManager()
         self.lab_manager = LabConfigManager()
         self.time_slot_editor = TimeSlotEditor(self.config_mgr)
+        self.meeting_pattern_editor = MeetingPatternEditor(self.config_mgr)
 
         #State Management
         self.schedules = []
@@ -188,7 +190,9 @@ class MainWindow(QMainWindow):
 
         self.ai_chat_log = QPlainTextEdit()
         self.ai_chat_log.setReadOnly(True)
-        self.ai_chat_log.setPlaceholderText("Ask the assistant to change rooms, faculty, courses, run generation, etc.")
+        self.ai_chat_log.setPlaceholderText(
+            "Ask the assistant to change rooms, faculty, courses, timeslots, class meeting patterns, run generation, etc."
+        )
         self.ai_input = QLineEdit()
         self.ai_input.setPlaceholderText("Message the assistant…")
         self.ai_input.returnPressed.connect(self.send_assistant_message)
@@ -286,10 +290,10 @@ class MainWindow(QMainWindow):
         menu.addAction("Delete Faculty").triggered.connect(lambda: self.faculty_manager.delete_faculty_via_dialog(self))
 
     def _bind_meeting_pattern_commands(self, menu):
-        """Binds dummy meeting pattern operations."""
-        menu.addAction("Add Meeting Pattern").triggered.connect(lambda: print("Add Meeting Patterns clicked."))
-        menu.addAction("Modify Meeting Pattern").triggered.connect(lambda: print("Modify Meeting Patterns clicked."))
-        menu.addAction("Delete Meeting Pattern").triggered.connect(lambda: print("Delete Meeting Patterns clicked."))
+        """Binds class meeting pattern operations."""
+        menu.addAction("Add Meeting Pattern").triggered.connect(lambda: self.meeting_pattern_editor.add_meeting_pattern(self))
+        menu.addAction("Modify Meeting Pattern").triggered.connect(lambda: self.meeting_pattern_editor.modify_meeting_pattern(self))
+        menu.addAction("Delete Meeting Pattern").triggered.connect(lambda: self.meeting_pattern_editor.delete_meeting_pattern(self))
 
     def _bind_timeslot_commands(self, menu):
         """Binds dummy timeslot operations."""
