@@ -1,5 +1,7 @@
 '''
     File: ai_assistant.py
+    Date: 4/4/26
+    Author: Shane del Villar
     Description: OpenAI tool-calling assistant that mutates the active scheduler config
     and triggers GUI actions (e.g. add rooms, courses, run generation).
 '''
