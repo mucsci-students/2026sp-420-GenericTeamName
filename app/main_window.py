@@ -123,7 +123,7 @@ class MainWindow(QMainWindow):
         #Splitter organizes our panels.
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         
-        self.cfg_panel = ContentPanel("Schedule Preview", "#000000")
+        self.cfg_panel = ContentPanel("NO FILE IMPORTED", "#000000")
         self.cfg_panel.layout.setContentsMargins(0, 0, 0, 0)
         self.cfg_panel.layout.setSpacing(0)
 
@@ -440,7 +440,8 @@ class MainWindow(QMainWindow):
 
             self.schedules = imported_data
             self.current_schedule_index = 0
-            #TODO: If importing a schedule, show user the file name
+            #Updates filepath displayed for imported schedules
+            self.cfg_panel.update_title(self.cfg_panel, self.config_mgr.import_file)
             self.update_schedule_display()
 
             try:
@@ -483,7 +484,9 @@ class MainWindow(QMainWindow):
             try:
                 self.clear_clicked = True
                 self.schedules.clear()
-                #make sure to also update the imported schedule panel
+                #Updates imported schedules label
+                self.cfg_panel.update_title(self.cfg_panel)
+                self.import_file = ""
                 self.update_schedule_display()
                 QMessageBox.information(self, "Success", "Schedule/s have been cleared.")
             except:
@@ -508,7 +511,7 @@ class MainWindow(QMainWindow):
         nav_layout.addWidget(next_btn)
         layout.addLayout(nav_layout)
 
-    #TODO: Move more of this code to config_mgr?
+    #TODO: Move more of this code to config_mgr with design patterns.
     def _refresh_schedule_display(self):
         """Updates the viewer text based on the current schedule index."""
         if not self.schedules: return
@@ -526,18 +529,6 @@ class MainWindow(QMainWindow):
         """Decrements schedule index with wrap-around."""
         if self.schedules:
             self.current_schedule_index = (self.current_schedule_index - 1) % len(self.schedules)
-
-    #TODO: Filters do not always work properly. Fix.
-    # - When importing schedule and not changing default config,
-    #   the filters do not work properly,
-    #   because they are going off of what config is currently loaded,
-    #   and not what schedule is currently loaded.
-
-    #TODO: Change import/export to JSON
-
-    #for filters:
-    #if schedules are generated, read from CONFIG JSON FILE
-    #if schedules are imported, read from IMPORTED JSON FILE
 
     def update_schedule_display(self, group_by: str = "all"):
         """
@@ -577,8 +568,7 @@ class MainWindow(QMainWindow):
                 else:
                     return
 
-        #TODO: If importing a schedule, show user the file name
-        self.cfg_panel.update_title(self.cfg_panel, self.config_mgr.filepath)
+        #Updated filepath displayed for active config
         self.cfg_panel.update_title(self.path_label, self.config_mgr.filepath)
         #Show schedules through appropriate filter (all, faculty, room, lab)
         filter_suffix = f" | FILTER: {filter_val}" if filter_val else ""
