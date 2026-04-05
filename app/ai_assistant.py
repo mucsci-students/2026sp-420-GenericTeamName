@@ -35,7 +35,10 @@ get_current_schedule_display_text to read the tabular view as text; open_schedul
 (mode: all, faculty, room, lab); export_current_schedule_to_csv writes the current schedule to a path (no file picker);
 import_schedule_from_file loads CSV or JSON into the schedule list.
 Summary: get_config_summary_text returns the table summary as text; show_config_summary_dialog opens the menu's summary message box.
-Native menus: open_native_gui runs File/Edit/Generator/Viewer actions that need interactive dialogs (file pickers, forms, limit/optimize prompts).
+Timeslots: config.time_slots (per weekday blocks: start_time, end_time, spacing_minutes, generated slots). list_timeslots; add_timeslot_block; update_timeslot_block; remove_timeslot_block; set_timeslot_day_enabled. Syncs to time_slot_config.times for the scheduler.
+Class meeting patterns: config.meeting_patterns (credits, meetings with day/duration/lab, optional start_time, disabled). list_meeting_patterns; add_meeting_pattern; update_meeting_pattern; delete_meeting_pattern. Syncs to time_slot_config.classes.
+Weekdays: accept full names (Monday) or MON/TUE/... .
+Native menus: open_native_gui runs File/Edit/Generator/Viewer/Timeslot actions that need interactive dialogs (file pickers, forms, limit/optimize prompts).
 When the user asks to change the config, call the appropriate tools. After tools succeed, briefly confirm what you did.
 Prefer tools over telling the user to edit JSON manually. If a room/course/faculty is missing, say so and use list tools or get_config_json.
 Saving: most mutation tools persist to disk immediately."""
@@ -87,6 +90,64 @@ def _faculty_display_name(entry: Any) -> str:
     if isinstance(entry, dict):
         return str(entry.get("name", entry))
     return str(entry)
+
+
+def _normalize_weekday_for_editor(day: str, day_map: Dict[str, str], reverse: Dict[str, str]) -> Optional[str]:
+    """Return long weekday name (e.g. Monday) for TimeSlotEditor / MeetingPatternEditor."""
+    s = (day or "").strip()
+    if not s:
+        return None
+    if s in day_map:
+        return s
+    up = s.upper()
+    if up in reverse:
+        return reverse[up]
+    # Title case fallback
+    tc = s[:1].upper() + s[1:].lower() if s else ""
+    if tc in day_map:
+        return tc
+    return None
+
+
+def _parse_hhmm(t: str) -> bool:
+    try:
+        parts = str(t).strip().split(":")
+        if len(parts) != 2:
+            return False
+        h, m = int(parts[0]), int(parts[1])
+        return 0 <= h <= 23 and 0 <= m <= 59
+    except (TypeError, ValueError):
+        return False
+
+
+def _normalize_meeting_entries(
+    meetings: List[Any],
+    day_map: Dict[str, str],
+    reverse: Dict[str, str],
+) -> tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
+    out: List[Dict[str, Any]] = []
+    for m in meetings:
+        if not isinstance(m, dict):
+            return None, "Each meeting must be an object."
+        day = _normalize_weekday_for_editor(str(m.get("day", "")), day_map, reverse)
+        if not day:
+            return None, f"Invalid weekday: {m.get('day')!r}"
+        try:
+            dur = int(m.get("duration", 50))
+        except (TypeError, ValueError):
+            return None, "duration must be an integer."
+        if dur < 1:
+            return None, "duration must be >= 1."
+        out.append(
+            {
+                "day": day,
+                "duration": dur,
+                "lab": bool(m.get("lab", False)),
+            }
+        )
+    if not out:
+        return None, "At least one meeting is required."
+    return out, None
 
 
 def _faculty_match_index(faculty: List[Any], target: str) -> Optional[int]:
@@ -406,6 +467,163 @@ def get_tool_schemas() -> List[Dict[str, Any]]:
         {
             "type": "function",
             "function": {
+                "name": "list_timeslots",
+                "description": (
+                    "Return config.time_slots after normalization: each weekday with enabled flag and "
+                    "blocks (start_time, end_time, spacing_minutes, slots). Also notes scheduler time_slot_config.times."
+                ),
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "add_timeslot_block",
+                "description": "Append a time block for one weekday; regenerates slot list and syncs scheduler times, then saves.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "day": {
+                            "type": "string",
+                            "description": "Monday..Friday or MON..FRI",
+                        },
+                        "start_time": {"type": "string", "description": "HH:MM"},
+                        "end_time": {"type": "string", "description": "HH:MM"},
+                        "spacing_minutes": {"type": "integer", "description": "Minutes between slot starts"},
+                    },
+                    "required": ["day", "start_time", "end_time", "spacing_minutes"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "update_timeslot_block",
+                "description": "Replace one block by index for a weekday (0-based). Omitted time/spacing fields keep previous values.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "day": {"type": "string"},
+                        "block_index": {"type": "integer", "description": "0-based index within that day's blocks"},
+                        "start_time": {"type": "string"},
+                        "end_time": {"type": "string"},
+                        "spacing_minutes": {"type": "integer"},
+                    },
+                    "required": ["day", "block_index"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "remove_timeslot_block",
+                "description": "Delete one timeslot block by weekday and 0-based block index; removes the day entry if no blocks left.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "day": {"type": "string"},
+                        "block_index": {"type": "integer"},
+                    },
+                    "required": ["day", "block_index"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "set_timeslot_day_enabled",
+                "description": "Enable or disable all blocks for a weekday (scheduler skips disabled days).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "day": {"type": "string"},
+                        "enabled": {"type": "boolean"},
+                    },
+                    "required": ["day", "enabled"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_meeting_patterns",
+                "description": "List class meeting patterns (index, credits, meetings, start_time, disabled) as JSON.",
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "add_meeting_pattern",
+                "description": "Append a meeting pattern; syncs to time_slot_config.classes and saves.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "credits": {"type": "integer"},
+                        "meetings": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "day": {"type": "string", "description": "Monday..Friday or MON..FRI"},
+                                    "duration": {"type": "integer", "description": "Minutes"},
+                                    "lab": {"type": "boolean"},
+                                },
+                                "required": ["day", "duration"],
+                            },
+                            "description": "At least one meeting with valid weekday",
+                        },
+                        "start_time": {"type": "string", "description": "Optional fixed HH:MM"},
+                        "disabled": {"type": "boolean", "description": "If true, pattern is disabled"},
+                    },
+                    "required": ["credits", "meetings"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "update_meeting_pattern",
+                "description": "Update pattern at pattern_index (0-based). Only provided fields replace existing values.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pattern_index": {"type": "integer"},
+                        "credits": {"type": "integer"},
+                        "meetings": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "day": {"type": "string"},
+                                    "duration": {"type": "integer"},
+                                    "lab": {"type": "boolean"},
+                                },
+                                "required": ["day", "duration"],
+                            },
+                        },
+                        "start_time": {"type": "string"},
+                        "disabled": {"type": "boolean"},
+                    },
+                    "required": ["pattern_index"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "delete_meeting_pattern",
+                "description": "Remove meeting pattern at pattern_index (0-based), sync and save.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"pattern_index": {"type": "integer"}},
+                    "required": ["pattern_index"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "get_config_summary_text",
                 "description": "Return the same tabulated config summary text as the File > View Summary menu (no dialog).",
                 "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
@@ -506,7 +724,8 @@ def get_tool_schemas() -> List[Dict[str, Any]]:
             "function": {
                 "name": "open_native_gui",
                 "description": (
-                    "Open the same interactive dialogs as the menu bar (file pickers, add/modify forms, generator limit/optimize prompts). "
+                    "Open the same interactive dialogs as the menu bar (file pickers, add/modify forms, generator limit/optimize prompts, "
+                    "Edit>Courses>Timeslots for class patterns and timeslots, Viewer>Clear Schedules). "
                     "Use when the user wants to click through the normal UI instead of silent tools."
                 ),
                 "parameters": {
@@ -540,6 +759,13 @@ def get_tool_schemas() -> List[Dict[str, Any]]:
                                 "viewer_open_lab",
                                 "viewer_export",
                                 "viewer_import",
+                                "viewer_clear_schedules",
+                                "meeting_pattern_add",
+                                "meeting_pattern_modify",
+                                "meeting_pattern_delete",
+                                "timeslot_add",
+                                "timeslot_modify",
+                                "timeslot_delete",
                             ],
                         }
                     },
@@ -695,6 +921,19 @@ def _execute_tool_impl(main_window: Any, name: str, arguments: Dict[str, Any]) -
             "viewer_open_lab": lambda: main_window.open_schedule_viewer("lab"),
             "viewer_export": lambda: main_window.handle_export_schedule(),
             "viewer_import": lambda: main_window.handle_import_schedule(),
+            "viewer_clear_schedules": lambda: main_window.handle_clear_schedule(),
+            "meeting_pattern_add": lambda: main_window.meeting_pattern_editor.add_meeting_pattern(
+                main_window
+            ),
+            "meeting_pattern_modify": lambda: main_window.meeting_pattern_editor.modify_meeting_pattern(
+                main_window
+            ),
+            "meeting_pattern_delete": lambda: main_window.meeting_pattern_editor.delete_meeting_pattern(
+                main_window
+            ),
+            "timeslot_add": lambda: main_window.time_slot_editor.add_time_slot(main_window),
+            "timeslot_modify": lambda: main_window.time_slot_editor.modify_time_slot(main_window),
+            "timeslot_delete": lambda: main_window.time_slot_editor.delete_time_slot(main_window),
         }
         fn = dispatch.get(action)
         if fn is None:
@@ -731,6 +970,201 @@ def _execute_tool_impl(main_window: Any, name: str, arguments: Dict[str, Any]) -
         if hasattr(main_window, "mid_panel"):
             main_window.mid_panel.update_title(path)
         return ok(f"Active config is now {path}.")
+
+    if name == "list_timeslots":
+        tse = main_window.time_slot_editor
+        slots = tse._get_timeslots()
+        sched_times = main_window.config_mgr.data.get("time_slot_config", {}).get("times", {})
+        return ok(
+            "Time slots (normalized GUI shape + scheduler times).",
+            time_slots=slots,
+            scheduler_times=sched_times,
+        )
+
+    if name == "list_meeting_patterns":
+        mpe = main_window.meeting_pattern_editor
+        patterns = mpe._get_patterns()
+        enriched = [{"index": i, **copy.deepcopy(p)} for i, p in enumerate(patterns)]
+        sched_classes = main_window.config_mgr.data.get("time_slot_config", {}).get("classes", [])
+        return ok(
+            "Class meeting patterns (GUI + scheduler classes).",
+            patterns=enriched,
+            scheduler_classes=copy.deepcopy(sched_classes),
+        )
+
+    if name in (
+        "add_timeslot_block",
+        "update_timeslot_block",
+        "remove_timeslot_block",
+        "set_timeslot_day_enabled",
+    ):
+        tse = main_window.time_slot_editor
+        day_raw = str(arguments.get("day", ""))
+        day_long = _normalize_weekday_for_editor(day_raw, tse.DAY_MAP, tse.REVERSE_DAY_MAP)
+        if not day_long:
+            return json.dumps({"ok": False, "error": f"Invalid weekday: {day_raw!r}"})
+
+        if name == "add_timeslot_block":
+            st = str(arguments["start_time"]).strip()
+            et = str(arguments["end_time"]).strip()
+            sp = int(arguments["spacing_minutes"])
+            if not _parse_hhmm(st) or not _parse_hhmm(et):
+                return json.dumps({"ok": False, "error": "start_time and end_time must be HH:MM."})
+            if st >= et:
+                return json.dumps({"ok": False, "error": "start_time must be before end_time."})
+            if sp < 1:
+                return json.dumps({"ok": False, "error": "spacing_minutes must be >= 1."})
+            time_slots = tse._get_timeslots()
+            day_entry = tse._normalize_day_entry(time_slots.get(day_long, {"enabled": True, "blocks": []}))
+            block = {
+                "start_time": st,
+                "end_time": et,
+                "spacing_minutes": sp,
+                "slots": tse._generate_slots(st, et, sp),
+            }
+            day_entry.setdefault("blocks", []).append(block)
+            day_entry["enabled"] = True
+            time_slots[day_long] = day_entry
+            tse._sync_time_slot_config()
+            _write_config_silent(main_window)
+            return ok(f"Added timeslot block for {day_long}.", day=day_long, blocks=day_entry["blocks"])
+
+        if name == "update_timeslot_block":
+            bi = int(arguments["block_index"])
+            time_slots = tse._get_timeslots()
+            day_entry = tse._normalize_day_entry(time_slots.get(day_long, {"enabled": True, "blocks": []}))
+            blocks = day_entry.get("blocks", [])
+            if bi < 0 or bi >= len(blocks):
+                return json.dumps(
+                    {"ok": False, "error": f"block_index out of range (0..{max(len(blocks) - 1, 0)})."}
+                )
+            cur = dict(blocks[bi])
+            if "start_time" in arguments and arguments["start_time"] is not None:
+                st = str(arguments["start_time"]).strip()
+            else:
+                st = str(cur["start_time"]).strip()
+            if "end_time" in arguments and arguments["end_time"] is not None:
+                et = str(arguments["end_time"]).strip()
+            else:
+                et = str(cur["end_time"]).strip()
+            if "spacing_minutes" in arguments and arguments["spacing_minutes"] is not None:
+                sp = int(arguments["spacing_minutes"])
+            else:
+                sp = int(cur["spacing_minutes"])
+            if not _parse_hhmm(st) or not _parse_hhmm(et):
+                return json.dumps({"ok": False, "error": "start_time and end_time must be HH:MM."})
+            if st >= et:
+                return json.dumps({"ok": False, "error": "start_time must be before end_time."})
+            if sp < 1:
+                return json.dumps({"ok": False, "error": "spacing_minutes must be >= 1."})
+            blocks[bi] = {
+                "start_time": st,
+                "end_time": et,
+                "spacing_minutes": sp,
+                "slots": tse._generate_slots(st, et, sp),
+            }
+            time_slots[day_long] = day_entry
+            tse._sync_time_slot_config()
+            _write_config_silent(main_window)
+            return ok(f"Updated timeslot block {bi} for {day_long}.", day=day_long, block=blocks[bi])
+
+        if name == "remove_timeslot_block":
+            bi = int(arguments["block_index"])
+            time_slots = tse._get_timeslots()
+            if day_long not in time_slots:
+                return json.dumps({"ok": False, "error": f"No timeslots for {day_long}."})
+            day_entry = tse._normalize_day_entry(time_slots[day_long])
+            blocks = day_entry.get("blocks", [])
+            if bi < 0 or bi >= len(blocks):
+                return json.dumps(
+                    {"ok": False, "error": f"block_index out of range (0..{max(len(blocks) - 1, 0)})."}
+                )
+            del blocks[bi]
+            if not blocks:
+                del time_slots[day_long]
+            else:
+                time_slots[day_long] = day_entry
+            tse._sync_time_slot_config()
+            _write_config_silent(main_window)
+            return ok(f"Removed timeslot block {bi} for {day_long}.")
+
+        if name == "set_timeslot_day_enabled":
+            en = bool(arguments["enabled"])
+            time_slots = tse._get_timeslots()
+            day_entry = tse._normalize_day_entry(time_slots.get(day_long, {"enabled": True, "blocks": []}))
+            day_entry["enabled"] = en
+            time_slots[day_long] = day_entry
+            tse._sync_time_slot_config()
+            _write_config_silent(main_window)
+            return ok(f"Set {day_long} enabled={en}.")
+
+    if name in ("add_meeting_pattern", "update_meeting_pattern", "delete_meeting_pattern"):
+        mpe = main_window.meeting_pattern_editor
+        dm, rv = mpe.DAY_MAP, mpe.REVERSE_DAY_MAP
+
+        if name == "add_meeting_pattern":
+            meetings_arg = arguments.get("meetings") or []
+            if not isinstance(meetings_arg, list):
+                return json.dumps({"ok": False, "error": "meetings must be an array."})
+            norm, err = _normalize_meeting_entries(meetings_arg, dm, rv)
+            if err:
+                return json.dumps({"ok": False, "error": err})
+            credits = int(arguments["credits"])
+            start_time = str(arguments.get("start_time", "")).strip()
+            disabled = bool(arguments.get("disabled", False))
+            pattern: Dict[str, Any] = {
+                "credits": credits,
+                "meetings": norm,
+                "start_time": start_time,
+                "disabled": disabled,
+            }
+            patterns = mpe._get_patterns()
+            patterns.append(pattern)
+            mpe._sync_time_slot_config_classes()
+            _write_config_silent(main_window)
+            return ok("Added meeting pattern.", pattern=pattern, index=len(patterns) - 1)
+
+        if name == "update_meeting_pattern":
+            idx = int(arguments["pattern_index"])
+            patterns = mpe._get_patterns()
+            if idx < 0 or idx >= len(patterns):
+                return json.dumps(
+                    {"ok": False, "error": f"pattern_index out of range (0..{len(patterns) - 1})."}
+                )
+            cur = copy.deepcopy(patterns[idx])
+            if not isinstance(cur, dict):
+                return json.dumps({"ok": False, "error": "Invalid pattern entry."})
+            if "credits" in arguments and arguments["credits"] is not None:
+                cur["credits"] = int(arguments["credits"])
+            if "meetings" in arguments and arguments["meetings"] is not None:
+                if not isinstance(arguments["meetings"], list):
+                    return json.dumps({"ok": False, "error": "meetings must be an array."})
+                norm, err = _normalize_meeting_entries(arguments["meetings"], dm, rv)
+                if err:
+                    return json.dumps({"ok": False, "error": err})
+                cur["meetings"] = norm
+            if "start_time" in arguments and arguments["start_time"] is not None:
+                cur["start_time"] = str(arguments["start_time"]).strip()
+            if "disabled" in arguments and arguments["disabled"] is not None:
+                cur["disabled"] = bool(arguments["disabled"])
+            if not cur.get("meetings"):
+                return json.dumps({"ok": False, "error": "Pattern must have at least one meeting."})
+            patterns[idx] = cur
+            mpe._sync_time_slot_config_classes()
+            _write_config_silent(main_window)
+            return ok(f"Updated meeting pattern at index {idx}.", pattern=cur)
+
+        if name == "delete_meeting_pattern":
+            idx = int(arguments["pattern_index"])
+            patterns = mpe._get_patterns()
+            if idx < 0 or idx >= len(patterns):
+                return json.dumps(
+                    {"ok": False, "error": f"pattern_index out of range (0..{len(patterns) - 1})."}
+                )
+            del patterns[idx]
+            mpe._sync_time_slot_config_classes()
+            _write_config_silent(main_window)
+            return ok(f"Deleted meeting pattern at index {idx}.")
 
     cfg = _ensure_config_block(main_window)
     rooms: List[str] = cfg["rooms"]

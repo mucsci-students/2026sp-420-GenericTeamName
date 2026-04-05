@@ -190,7 +190,9 @@ class MainWindow(QMainWindow):
 
         self.ai_chat_log = QPlainTextEdit()
         self.ai_chat_log.setReadOnly(True)
-        self.ai_chat_log.setPlaceholderText("Ask the assistant to change rooms, faculty, courses, run generation, etc.")
+        self.ai_chat_log.setPlaceholderText(
+            "Ask the assistant to change rooms, faculty, courses, timeslots, class meeting patterns, run generation, etc."
+        )
         self.ai_input = QLineEdit()
         self.ai_input.setPlaceholderText("Message the assistant…")
         self.ai_input.returnPressed.connect(self.send_assistant_message)
