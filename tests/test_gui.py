@@ -1,5 +1,5 @@
 '''
-    File: test_main_window.py
+    File: test_gui.py
     Date: 04/02/2026
     Author: GenericTeamName
     Description: Updated Unit and Integration tests to match MainWindow implementation.
