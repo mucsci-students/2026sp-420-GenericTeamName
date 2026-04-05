@@ -1,6 +1,6 @@
 '''
     File: generator_gui.py
-    Date: 04/01/2026
+    Date: 04/03/2026
     Author: Tyler Strohl, Kyle Smith, & Chayse Altland
     Class: CMSC 420
     Description: Schedule Generator dialogs and helpers for the GUI.
@@ -14,13 +14,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
-    QFileDialog,
-    QInputDialog,
-    QMessageBox,
-    QWidget,
-    QProgressDialog,
-    QApplication,
-    QProgressBar,
+
+    QFileDialog, QInputDialog, QMessageBox, QWidget,
+    QProgressDialog, QApplication, QProgressBar, QDialog,
+    QVBoxLayout, QCheckBox, QDialogButtonBox
 )
 print("DEBUG: loaded app/generator_gui.py from schedule-config-editor")
 #the work-around for scheduler function blocking main GUI thread.
@@ -145,7 +142,7 @@ class GenConfigManager:
 
     #enables/disables the optimization flags in the config file.
     def set_optimize(self, parent: QWidget) -> None:
-        
+        """Opens a checklist dialog to toggle specific optimizer flags."""
         if not self._ensure_config_loaded(parent):
             return
         
@@ -155,24 +152,41 @@ class GenConfigManager:
         ]
 
         current_flags = self._config_data.get("optimizer_flags", [])
-        is_currently_on = len(current_flags) > 0
-        start_index = 0 if is_currently_on else 1
 
-        text, ok = QInputDialog.getItem(
-            parent, "Specify Optimization", "Enable/Disable All:", 
-            ["True", "False"], start_index, False
-        )
+        # --- Build Custom Dialog ---
+        dialog = QDialog(parent)
+        dialog.setWindowTitle("Optimizer Configuration")
+        dialog.setMinimumWidth(300)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Create a checkbox for each flag
+        checkbox_widgets = []
+        for flag in full_flags:
+            cb = QCheckBox(flag.replace("_", " ").title()) # e.g. "faculty_course" -> "Faculty Course"
+            if flag in current_flags:
+                cb.setChecked(True)
+            layout.addWidget(cb)
+            checkbox_widgets.append((flag, cb))
 
-        if ok:
-            if text == "True":
-                self._config_data["optimizer_flags"] = full_flags
-            else:
-                self._config_data["optimizer_flags"] = []
+        # Add Standard OK/Cancel Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
 
+        # --- Execute and Save ---
+        if dialog.exec():
+            # Rebuild the list based on what is checked
+            new_flags = [flag for flag, cb in checkbox_widgets if cb.isChecked()]
+            self._config_data["optimizer_flags"] = new_flags
+
+            # Save logic
             config_mgr = getattr(parent, "config_mgr", None)
             if config_mgr:
                 config_mgr.data = self._config_data
                 config_mgr.save(parent)
+                QMessageBox.information(parent, "Updated", f"Active optimizations:\n{', '.join(new_flags) if new_flags else 'None'}")
             else:
                 self._save(parent)
 
@@ -245,6 +259,10 @@ class GenConfigManager:
 
 
             clean_data = json.loads(json.dumps(self._config_data))
+            
+            optimizer_flags = clean_data.get("optimizer_flags", [])
+            clean_data["optimizer_flags"] = optimizer_flags
+            
             cfg = clean_data.setdefault("config", {})
 
             ui_slots = cfg.pop("time_slots", {})

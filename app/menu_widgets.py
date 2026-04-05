@@ -31,20 +31,11 @@ class ContentPanel(QFrame):
         super().__init__(parent)
         self.layout = QVBoxLayout(self)
 
-        # Set alignment to Top to prevent vertical centering
         self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
         self.label = QLabel(title)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        #What is this?
-        #====================================
         self.layout.addWidget(self.label)
-        if stretch_middle:
-            self.layout.addStretch()
-        # Add a stretch factor to push everything above it to the top
         self.layout.addStretch()
-        #====================================
 
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self._base_color = color
@@ -89,12 +80,17 @@ class ContentPanel(QFrame):
             f"border: none; color: {text_color};"
         )
 
-    def update_title(self, label, file_path):
+    def update_title(self, label, file_path = None):
         """
         Updates the file_path label using the basename of current file_path.
 
         :param file_path: The full path to the active configuration file.
         """
+        #Fall into here when clearing imported schedules
+        if file_path == None:
+            self.label.setText("NO FILE IMPORTED")
+            return
+
         display_text = os.path.basename(file_path)
         #Change which schedule filepath is displayed
         if (isinstance(label, ContentPanel)):
