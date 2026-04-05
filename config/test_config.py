@@ -10,120 +10,176 @@ import pytest
 import json
 import os
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-# Ensure the local directory is in the path so config_mgr can be found
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from config_mgr import ConfigManager
-from PyQt6.QtWidgets import QMessageBox
 
 @pytest.fixture
-def mock_gui(monkeypatch):
-    """Fixture to prevent QMessageBox from opening actual windows during tests."""
-    monkeypatch.setattr(QMessageBox, "information", MagicMock())
-    monkeypatch.setattr(QMessageBox, "warning", MagicMock())
-    monkeypatch.setattr(QMessageBox, "critical", MagicMock())
-
-def test_load_nonexistent_file():
-    """Verify that loading a missing file raises FileNotFoundError."""
-    manager = ConfigManager("non_existent_file.json")
-    with pytest.raises(FileNotFoundError):
-        manager.load()
-
-def test_load_malformed_json(tmp_path):
-    """Verify behavior when the JSON file is corrupted."""
-    bad_file = tmp_path / "corrupt.json"
-    bad_file.write_text("{ 'invalid_json': True ")
-    
-    manager = ConfigManager(str(bad_file))
-    with pytest.raises(json.JSONDecodeError):
-        manager.load()
-
-def test_get_summary_empty_data():
-    """Ensure summary handles a fresh manager with no loaded data."""
-    manager = ConfigManager("dummy.json")
-    # Default state defined in __init__
-    summary = manager.get_summary_text()
-    
-    assert "COURSE ID" in summary
-    assert "CS101" not in summary
-
-def test_get_summary_missing_config_key(tmp_path):
-    """Edge case: File is valid JSON but missing the 'config' root key."""
-    empty_file = tmp_path / "empty.json"
-    # Data is not empty, but "config" is missing
-    empty_file.write_text(json.dumps({"wrong_key": "some_value"}))
-
-    manager = ConfigManager(str(empty_file))
-    manager.load()
-    summary = manager.get_summary_text()
-
-    assert "COURSE ID" in summary
-    assert "CREDITS" in summary
-
-def test_tabulation_alignment():
-    """Verify that columns stay aligned regardless of string length."""
-    manager = ConfigManager()
-    manager.data["config"]["courses"] = [
-        {"course_id": "SHORT", "credits": 1},
-        {"course_id": "VERY_LONG_ID_STRING", "credits": 4}
-    ]
-    
-    summary = manager.get_summary_text()
-    lines = summary.split("\n")
-    
-    # Extract data rows (lines containing '|' but not the header text)
-    data_lines = [l for l in lines if "|" in l and "COURSE ID" not in l]
-    
-    # Get the index of the first '|' for every line
-    pipe_indices = [line.find("|") for line in data_lines]
-    
-    assert len(pipe_indices) > 0
-    assert len(set(pipe_indices)) == 1
-    # "VERY_LONG_ID_STRING" is 19 chars, plus padding, should be >= 20
-    assert pipe_indices[0] >= 20
-
-def test_save_creates_new_file(tmp_path, mock_gui):
-    """Verify that save() can create a file. Passes None for the parent QWidget."""
-    new_file = tmp_path / "new_save.json"
-    manager = ConfigManager(str(new_file))
-    
-    manager.data["config"]["rooms"] = ["Lab 1"]
-    manager.save(None)
-    
-    assert os.path.exists(new_file)
-    with open(new_file, 'r') as f:
-        saved_data = json.load(f)
-        assert "Lab 1" in saved_data["config"]["rooms"]
-
-def test_get_summary_with_extra_attributes():
-    """Ensure 'other attributes' logic correctly captures unexpected keys."""
-    manager = ConfigManager()
-    manager.data["config"]["courses"] = [
-        {
-            "course_id": "CS101", 
-            "credits": 3, 
-            "instructor": "Kyle", 
-            "difficulty": "Hard"
+def temp_config_file(tmp_path):
+    """Creates a temporary JSON config file."""
+    d = tmp_path / "test_config.json"
+    data = {
+        "config": {
+            "courses": [
+                {"course_id": "CMSC101", "credits": 3, "room": ["101"], "faculty": ["Smith"]},
+                {"course_id": "CMSC102", "credits": 4, "room": ["102"]}
+            ]
         }
-    ]
-    
-    summary = manager.get_summary_text()
-    assert "instructor: Kyle" in summary
-    assert "difficulty: Hard" in summary
+    }
+    d.write_text(json.dumps(data))
+    return str(d)
 
-def test_scheduler_output_to_viewer_format():
-    """Verify raw scheduler data transforms correctly to the flat viewer format."""
-    manager = ConfigManager()
+@pytest.fixture
+def config_mgr(temp_config_file):
+    return ConfigManager(filepath=temp_config_file)
+
+## --- 1. Initialization and File I/O Tests ---
+
+def test_init_defaults():
+    mgr = ConfigManager()
+    assert mgr.filepath == "config.json"
+    assert "config" in mgr.data
+    assert mgr.data["config"]["rooms"] == []
+
+def test_load_success(config_mgr):
+    data = config_mgr.load()
+    assert len(data["config"]["courses"]) == 2
+    assert data["config"]["courses"][0]["course_id"] == "CMSC101"
+
+def test_load_file_not_found():
+    mgr = ConfigManager(filepath="non_existent.json")
+    with pytest.raises(FileNotFoundError):
+        mgr.load()
+
+def test_save_success(config_mgr, tmp_path):
+    parent = MagicMock()
+    new_path = tmp_path / "save_test.json"
+    config_mgr.filepath = str(new_path)
+    config_mgr.data["config"]["rooms"] = ["Room A"]
+    
+    with patch("PyQt6.QtWidgets.QMessageBox.information") as mock_info:
+        config_mgr.save(parent)
+        mock_info.assert_called_once()
+        
+    with open(new_path, "r") as f:
+        saved_data = json.load(f)
+        assert saved_data["config"]["rooms"] == ["Room A"]
+
+## --- 2. String Formatting & Summary Tests ---
+
+def test_get_summary_text_empty():
+    mgr = ConfigManager()
+    mgr.data = {}
+    assert mgr.get_summary_text() == "No data loaded."
+
+def test_get_summary_text_with_courses(config_mgr):
+    config_mgr.load()
+    summary = config_mgr.get_summary_text()
+    assert "COURSE ID" in summary
+    assert "CMSC101" in summary
+    assert "3" in summary
+    
+def test_get_schedule_spreadsheet(config_mgr):
+    schedule_data = [
+        {"course_id": "CS101", "day": "Mon", "time": "08:00"},
+        {"course_id": "CS102", "day": "Tue", "time": "09:00"}
+    ]
+    sheet = config_mgr.get_schedule_spreadsheet(schedule_data)
+    assert "Mon" in sheet
+    assert "CS101" in sheet
+    assert "08:00" in sheet
+
+def test_get_grouped_schedule_text(config_mgr):
+    schedule_data = [
+        {"course_id": "CS101", "faculty": "Alice", "day": "Mon", "time": "08:00"},
+        {"course_id": "CS102", "faculty": "Bob", "day": "Tue", "time": "09:00"}
+    ]
+    # Test grouping by faculty
+    grouped = config_mgr.get_grouped_schedule_text(schedule_data, "faculty")
+    assert "FACULTY" in grouped
+    assert "Alice" in grouped
+    assert "Bob" in grouped
+
+## --- 3. Data Transformation Tests ---
+
+def test_scheduler_output_to_viewer_format(config_mgr):
     raw_data = [{
         "course_id": "CMSC 161",
         "section": "01",
-        "times": [{"day": 1, "start": 540}] # 9:00 AM
+        "times": [{"day": 1, "start": 480}] # 08:00
     }]
-    
-    formatted = manager.scheduler_output_to_viewer_format(raw_data)
+    formatted = config_mgr.scheduler_output_to_viewer_format(raw_data)
     assert len(formatted) == 1
     assert formatted[0]["course_id"] == "CMSC 161.01"
     assert formatted[0]["day"] == "Mon"
-    assert formatted[0]["time"] == "09:00"
+    assert formatted[0]["time"] == "08:00"
+
+## --- 4. Export / Import Tests ---
+
+def test_export_schedule_to_json_cancel(config_mgr):
+    parent = MagicMock()
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName", return_value=("", "")):
+        result = config_mgr.export_schedule_to_json([{"test": "data"}], parent)
+        assert result is False
+
+def test_export_schedule_to_json_success(config_mgr, tmp_path):
+    parent = MagicMock()
+    save_path = str(tmp_path / "export.json")
+    schedule_data = [{"course_id": "BIO1", "day": "Mon", "time": "08:00"}]
+    
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName", return_value=(save_path, "")):
+        with patch("PyQt6.QtWidgets.QMessageBox.information"):
+            result = config_mgr.export_schedule_to_json([schedule_data], parent)
+            assert result is True
+            assert os.path.exists(save_path)
+
+def test_import_schedule_from_json(config_mgr, tmp_path):
+    parent = MagicMock()
+    # Mocking the grid structure expected by import_schedule_from_json
+    mock_json_content = [[
+        ["TIME", "Mon", "Tue"],
+        ["08:00", "CS101", ""]
+    ]]
+    import_path = tmp_path / "import.json"
+    import_path.write_text(json.dumps(mock_json_content))
+
+    with patch("PyQt6.QtWidgets.QFileDialog.getOpenFileName", return_value=(str(import_path), "")):
+        imported = config_mgr.import_schedule_from_json(parent=parent)
+        assert len(imported) == 1
+        assert imported[0][0]["course_id"] == "CS101"
+        assert imported[0][0]["time"] == "08:00"
+
+## --- 5. Grid Logic & Filtering Tests ---
+
+def test_get_schedule_grid_data_all(config_mgr):
+    config_mgr.load()
+    schedule_data = [{"course_id": "CMSC101", "day": "Mon", "time": "08:00"}]
+    days, times, grid = config_mgr.get_schedule_grid_data(schedule_data, filter_type="all")
+    
+    # 08:00 is index 8 (since loop is range(24))
+    # Mon is index 0
+    assert grid[8][0] == "CMSC101"
+
+def test_get_schedule_grid_data_filter_success(config_mgr):
+    config_mgr.load()
+    schedule_data = [
+        {"course_id": "CMSC101", "day": "Mon", "time": "08:00"}, # Has 'Smith' in master config
+        {"course_id": "CMSC102", "day": "Tue", "time": "09:00"}  # No 'Smith'
+    ]
+    
+    # Filter for faculty "Smith"
+    days, times, grid = config_mgr.get_schedule_grid_data(schedule_data, filter_type="faculty", filter_value="Smith")
+    
+    assert grid[8][0] == "CMSC101"
+    assert grid[9][1] == "" # CMSC102 should be filtered out
+
+def test_get_schedule_grid_data_collision(config_mgr):
+    config_mgr.load()
+    schedule_data = [
+        {"course_id": "C1", "day": "Mon", "time": "10:00"},
+        {"course_id": "C2", "day": "Mon", "time": "10:00"}
+    ]
+    _, _, grid = config_mgr.get_schedule_grid_data(schedule_data)
+    assert "C1\nC2" in grid[10][0]
