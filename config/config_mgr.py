@@ -1,37 +1,57 @@
 '''
     File: config_mgr.py
-    Date: 02/28/2026
-    Author: Kyle Smith & Shane del Villar
+    Date: 04/02/2026
+    Author: Kyle Smith, Shane del Villar, Chayse Altland, & Tyler Strohl
     Class: CMSC 420
     Description: Implements saving, loading and displaying a config for the scheduler.
-    Implements displaying the schedule in a tabulated format and saving as a CSV.
+    Implements displaying the schedule in a tabulated format and saving as a JSON.
 '''
 
 import json
 import os
-import csv
+from PyQt6.QtWidgets import QMessageBox, QWidget, QFileDialog
 
 class ConfigManager:
-    def __init__(self, filepath="config.json"):
+    def __init__(self, filepath="config.json", import_file = ""):
+        #filepath is used for a config file
         self.filepath = filepath
-        self.data = {"config": {"rooms": [], "labs": [], "courses": [], "faculty": []}}
+        #import_file is used for an imported schedules file
+        self.import_file = import_file
+        self.data = {
+            "config": {
+                "rooms": [],
+                "labs": [],
+                "courses": [],
+                "faculty": [],
+                "time_slots": {},
+                "meeting_patterns": []
+            },
+            "time_slot_config": {
+                "times": {},
+                "classes": []
+            }
+        }
 
     def load(self):
         """Load data from the JSON file."""
         if not os.path.exists(self.filepath):
             raise FileNotFoundError(f"Config file not found: {self.filepath}")
-        with open(self.filepath, 'r') as f:
+        with open(self.filepath, "r") as f:
             self.data = json.load(f)
         return self.data
 
-    def save(self):
+    def save(self, parent: QWidget):
         """Save JSON data with 4 space indent."""
-        with open(self.filepath, 'w') as f:
-            json.dump(self.data, f, indent=4)
+        try:
+            with open(self.filepath, "w") as f:
+                json.dump(self.data, f, indent=4)
+                QMessageBox.information(parent, "Success", f"Saved to: {self.filepath}")
+        except Exception as e:
+            QMessageBox.critical(parent, "Save Error", f"Failed to save: {str(e)}")
 
     def get_summary_text(self):
         """Returns a string formatted as a table with dynamic padding."""
-        # Only return "No data" if the dictionary is literally empty
+        # Only return "No data" if the dictionary is empty
         if not self.data:
             return "No data loaded."
 
@@ -67,6 +87,7 @@ class ConfigManager:
 
         return "\n".join(lines)
 
+    #Used as helper to change which schedule is being displayed.   
     def get_schedule_spreadsheet(self, schedule_data):
         """
         Formats schedule data into an ASCII spreadsheet grid.
@@ -142,146 +163,189 @@ class ConfigManager:
 
         lines.append(divider)
         return "\n".join(lines)
+        
+    def export_schedule_to_json(self, all_schedules, parent: QWidget):
+        """
+        Handles the Save As dialog and writes all schedules to one JSON.
+        """
+        if not all_schedules:
+            QMessageBox.warning(parent, "Export Error", "No schedule data available.")
+            return False
 
-    def export_schedule_to_csv(self, schedule_data, filename="schedule.csv"):
-        """Exports the schedule grid to a CSV file."""
+        # The logic handles the path selection internally
+        file_path, _ = QFileDialog.getSaveFileName(
+            parent,
+            "Save All Generated Schedules",
+            "generated_schedules.json",
+            "JSON Files (*.json);;All Files (*)"
+        )
+
+        if not file_path:
+            return False
+
         days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
         times = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"]
 
         try:
-            with open(filename, mode='w', newline='') as f:
-                writer = csv.writer(f)
-                # Header row
-                writer.writerow(["TIME"] + days)
+            final_output = []
+            data_to_export = all_schedules if isinstance(all_schedules, list) else [all_schedules]
 
-                # Data rows
+            #Create the schedule grid for the file:
+            for i, schedule_data in enumerate(data_to_export):
+                grid = []
+                grid.append([f"--- SCHEDULE OPTION {i+1} ---"])
+                grid.append(["TIME"] + days)
+
                 for t in times:
                     row = [t]
                     for d in days:
                         entry = next((s for s in schedule_data if s['day'] == d and s['time'] == t), None)
                         row.append(entry['course_id'] if entry else "")
-                    writer.writerow(row)
-            return True
-        except Exception as e:
-            print(f"CSV Export Error: {e}")
-            return False
+                    grid.append(row)
+                
+                final_output.append(grid)
 
-    def import_schedule_from_csv(self, filename):
-        """
-        Imports schedule from a CSV file (same format as export_schedule_to_csv).
-        Returns list of dicts [{'course_id': str, 'day': str, 'time': str}, ...] or None on error.
-        """
-        days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
-        try:
-            schedule_data = []
-            with open(filename, mode='r', newline='', encoding='utf-8') as f:
-                reader = csv.reader(f)
-                header = next(reader, None)
-                if not header:
-                    return None
-                # Header: TIME, Mon, Tue, Wed, Thu, Fri (or similar)
-                time_col = 0
-                day_cols = {}
-                for i, cell in enumerate(header):
-                    cell = (cell or "").strip()
-                    if i == 0 and cell.upper() == "TIME":
-                        time_col = 0
-                        continue
-                    if cell in days:
-                        day_cols[i] = cell
-                if not day_cols:
-                    # Fallback: assume columns 1..5 are Mon..Fri
-                    for j, d in enumerate(days):
-                        if j + 1 < len(header):
-                            day_cols[j + 1] = d
-                for row in reader:
-                    if not row:
-                        continue
-                    time_slot = row[time_col].strip() if time_col < len(row) else ""
-                    for col_idx, day in day_cols.items():
-                        if col_idx < len(row) and row[col_idx].strip():
-                            schedule_data.append({
-                                "course_id": row[col_idx].strip(),
-                                "day": day,
-                                "time": time_slot,
-                            })
-            return schedule_data
+            #JSON file written:
+            with open(file_path, mode='w', encoding='utf-8') as f:
+                #json.dump needs TWO arguments: data, file
+                json.dump(final_output, f, indent=4)
+
+            QMessageBox.information(parent, "Success", f"Exported to:\n{file_path}")
+            return True
+
         except Exception as e:
-            print(f"CSV Import Error: {e}")
-            return None
+            QMessageBox.critical(parent, "Export Error", f"Failed to save JSON: {str(e)}")
+            return False
 
     def scheduler_output_to_viewer_format(self, schedule_list):
         """
-        Converts scheduler output (list of dicts with course_str, times) to
-        [{'course_id', 'day', 'time'}, ...] for the schedule viewer.
-        Scheduler uses: course_str, times=[{day: 1-5, start: minutes}]
-        day 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri
-        start: minutes from midnight (e.g. 720 = 12:00)
+        Standardizes raw scheduler dicts into viewer format.
+        Explicitly combines 'course_id' and 'section' (e.g., CMSC 161.01).
         """
         days_map = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri"}
         result = []
         for item in schedule_list:
-            if not isinstance(item, dict):
-                continue
-            cid = item.get("course_str") or item.get("course_id")
-            times = item.get("times", [])
-            for t in times:
-                if not isinstance(t, dict):
-                    continue
+            if not isinstance(item, dict): continue
+
+            # Get base ID and Section
+            cid = item.get("course_id") or item.get("course_str") or "Unknown"
+            section = item.get("section")
+
+            # Courses are formatted as: CMSC 161.01
+            if section is not None:
+                sec_str = str(section)
+                full_name = f"{cid}.{sec_str}" if not sec_str.startswith('.') else f"{cid}{sec_str}"
+            else:
+                full_name = str(cid)
+
+            for t in item.get("times", []):
                 day_num = t.get("day")
                 start_mins = t.get("start", 0)
-                if day_num is None:
-                    continue
-                day_str = days_map.get(day_num, f"Day{day_num}")
-                h = start_mins // 60
-                m = start_mins % 60
-                time_str = f"{h:02d}:{m:02d}"
-                result.append({"course_id": str(cid or ""), "day": day_str, "time": time_str})
+                if day_num:
+                    result.append({
+                        "course_id": full_name,
+                        "day": days_map.get(day_num, "Mon"),
+                        "time": f"{start_mins // 60:02d}:{start_mins % 60:02d}"
+                    })
         return result
 
-    def import_schedule_from_json(self, filename):
+    def import_schedule_from_json(self, filename=None, parent: QWidget = None):
         """
-        Imports schedule from a JSON file.
-        Accepts:
-          - List of assignments: [{"course_id": "...", "day": "...", "time": "..."}, ...]
-          - List of schedules (CLI-style): [[{...}, ...], ...] — uses first schedule and normalizes keys.
-        Returns list of dicts [{'course_id', 'day', 'time'}, ...] or None on error.
+        Imports a JSON file of schedules to view.
         """
-        try:
-            with open(filename, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            if not isinstance(data, list):
-                return None
-            if not data:
-                return []
-            first = data[0]
-            # Single schedule: list of assignment dicts
-            if isinstance(first, dict):
-                result = []
-                for item in data:
-                    cid = item.get("course_id")
-                    day = item.get("day")
-                    time_val = item.get("time")
-                    if cid is not None and day is not None and time_val is not None:
-                        result.append({"course_id": str(cid), "day": str(day), "time": str(time_val)})
-                return result
-            # List of schedules (CLI export or scheduler format): list of lists
-            if isinstance(first, list):
-                schedule = first
-                first_item = schedule[0] if schedule else {}
-                if isinstance(first_item, dict) and "course_str" in first_item and "times" in first_item:
-                    return self.scheduler_output_to_viewer_format(schedule)
-                result = []
-                for item in schedule:
-                    if not isinstance(item, dict):
-                        continue
-                    cid = item.get("course_id")
-                    day = item.get("day")
-                    time_val = item.get("time")
-                    if cid is not None and day is not None and time_val is not None:
-                        result.append({"course_id": str(cid), "day": str(day), "time": str(time_val)})
-                return result
+        if not filename:
+            filename, _ = QFileDialog.getOpenFileName(
+                parent, "Import Schedule JSON", "", "JSON Files (*.json);;All Files (*)"
+            )
+
+        if not filename:
             return None
+
+        #Store the imported JSON filepath
+        self.import_file = filename
+
+        days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+        try:
+            with open(filename, mode='r', encoding='utf-8') as f:
+                imported_data = json.load(f)
+
+            all_schedules = []
+            for grid in imported_data:
+                current_schedule = []
+                day_cols = {}
+
+                for row in grid:
+                    if not row or not any(str(field).strip() for field in row):
+                        continue
+
+                    if str(row[0]).strip().upper() == "TIME":
+                        day_cols = {i: cell.strip() for i, cell in enumerate(row) if cell.strip() in days}
+                        continue
+
+                    if day_cols:
+                        time_slot = str(row[0]).strip()
+                        for col_idx, day_name in day_cols.items():
+                            if col_idx < len(row) and str(row[col_idx]).strip():
+                                current_schedule.append({
+                                    "course_id": str(row[col_idx]).strip(),
+                                    "day": day_name,
+                                    "time": time_slot,
+                                })
+
+                if current_schedule:
+                    all_schedules.append(current_schedule)
+
+            return all_schedules
+
         except Exception as e:
             print(f"JSON Import Error: {e}")
+            if parent:
+                QMessageBox.critical(parent, "Import Error", f"Failed to load JSON: {str(e)}")
             return None
+
+    #NEW SCHEDULE VIEWER GRID [As seen in cfg panel]:
+    def get_schedule_grid_data(self, schedule_data, filter_type="all", filter_value=None):
+        days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+        times = [f"{h:02d}:00" for h in range(24)]
+        grid = [["" for _ in range(len(days))] for _ in range(len(times))]
+        
+        # Access the master course list from config to look up missing attributes
+        master_courses = self.data.get("config", {}).get("courses", [])
+
+        for entry in schedule_data:
+  
+            if filter_type != "all" and filter_value:
+                # Get value from entry (CSV import style) or from master config (JSON style)
+                entry_val = entry.get(filter_type)
+                
+                # If the attribute (like 'room') isn't in the schedule entry, 
+                # find the course in the master config and check its attributes there.
+                if entry_val is None:
+                    # Strip section numbers (e.g., 'CMSC 161.01' -> 'CMSC 161') to match master list
+                    base_id = entry.get('course_id', '').split('.')[0]
+                    course_info = next((c for c in master_courses if c.get('course_id') == base_id), {})
+                    entry_val = course_info.get(filter_type, [])
+
+                # JSON stores rooms/faculty as lists
+                # Check if the filter_value (string) is in the entry_val (list or string)
+                if isinstance(entry_val, list):
+                    if str(filter_value) not in [str(v) for v in entry_val]:
+                        continue
+                else:
+                    if str(entry_val) != str(filter_value):
+                        continue
+
+            # 2. Placement Logic
+            day = entry.get('day')
+            time = entry.get('time')
+            course = entry.get('course_id', '')
+            
+            if day in days and time in times:
+                row = times.index(time)
+                col = days.index(day)
+                if grid[row][col]:
+                    grid[row][col] += f"\n{course}"
+                else:
+                    grid[row][col] = course
+                
+        return days, times, grid
