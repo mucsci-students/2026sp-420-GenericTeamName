@@ -603,8 +603,11 @@ class MainWindow(QMainWindow):
         """'Save As' functionality for exporting the current config state."""
         p, _ = QFileDialog.getSaveFileName(self, "Save JSON", "", "*.json")
         if p:
-            with open(p, 'w') as f:
-                json.dump(self.config_mgr.data, f, indent=4)
+            self.config_mgr.filepath = p
+            self.config_mgr.save(self)
+            #Handle_change_path not called since its for opening a file.
+            self.cfg_panel.update_title(self.path_label, self.config_mgr.filepath)
+
 
     def refresh_config_views_after_mutation(self) -> None:
         """Reload config from disk and refresh read-only views after AI (or other) tools wrote the file."""
