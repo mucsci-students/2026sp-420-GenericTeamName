@@ -8,7 +8,7 @@ The Design-Patterns implemented here are as follows:
     -Singleton
 
 :date: 03/31/2026
-:authors: Kyle Smith, Tyler Strohl, & Shane del Villar
+:authors: Kyle Smith, Tyler Strohl, Chayse Altland, & Shane del Villar
 :class: CMSC 420
 """
 #Note: The """ comment blocks are important for the documentation (see docs folder).
@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     )
 from PyQt6.QtCore import Qt, QCoreApplication
 from PyQt6.QtGui import QAction, QFont
+from PyQt6.QtWidgets import QInputDialog
 
 from .menu_widgets import ContentPanel
 from .ai_assistant import (
@@ -39,6 +40,7 @@ from config.config_mgr import ConfigManager
 from .generator_gui import GenConfigManager
 from .lab_gui import LabConfigManager
 from .time_slot_editor import TimeSlotEditor
+from .meeting_pattern_editor import MeetingPatternEditor
 
 #=================================================================================
 class MainWindow(QMainWindow):
@@ -80,6 +82,7 @@ class MainWindow(QMainWindow):
         self.gen_manager = GenConfigManager()
         self.lab_manager = LabConfigManager()
         self.time_slot_editor = TimeSlotEditor(self.config_mgr)
+        self.meeting_pattern_editor = MeetingPatternEditor(self.config_mgr)
 
         #State Management
         self.schedules = []
@@ -94,6 +97,10 @@ class MainWindow(QMainWindow):
         self._setup_ui_components()
         self.init_menus()
         self.apply_theme()
+
+        #Bug fix to prevent "No Schedules" warning from popping up at wrong time.
+        #See update_schedule_display
+        self.clear_clicked = False
     #=================================================================================
     """
     UI Setup Functions:
@@ -116,7 +123,7 @@ class MainWindow(QMainWindow):
         #Splitter organizes our panels.
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         
-        self.cfg_panel = ContentPanel("Schedule Preview", "#000000")
+        self.cfg_panel = ContentPanel("NO FILE IMPORTED", "#000000")
         self.cfg_panel.layout.setContentsMargins(0, 0, 0, 0)
         self.cfg_panel.layout.setSpacing(0)
 
@@ -183,7 +190,9 @@ class MainWindow(QMainWindow):
 
         self.ai_chat_log = QPlainTextEdit()
         self.ai_chat_log.setReadOnly(True)
-        self.ai_chat_log.setPlaceholderText("Ask the assistant to change rooms, faculty, courses, run generation, etc.")
+        self.ai_chat_log.setPlaceholderText(
+            "Ask the assistant to change rooms, faculty, courses, timeslots, class meeting patterns, run generation, etc."
+        )
         self.ai_input = QLineEdit()
         self.ai_input.setPlaceholderText("Message the assistant…")
         self.ai_input.returnPressed.connect(self.send_assistant_message)
@@ -281,10 +290,10 @@ class MainWindow(QMainWindow):
         menu.addAction("Delete Faculty").triggered.connect(lambda: self.faculty_manager.delete_faculty_via_dialog(self))
 
     def _bind_meeting_pattern_commands(self, menu):
-        """Binds dummy meeting pattern operations."""
-        menu.addAction("Add Meeting Pattern").triggered.connect(lambda: print("Add Meeting Patterns clicked."))
-        menu.addAction("Modify Meeting Pattern").triggered.connect(lambda: print("Modify Meeting Patterns clicked."))
-        menu.addAction("Delete Meeting Pattern").triggered.connect(lambda: print("Delete Meeting Patterns clicked."))
+        """Binds class meeting pattern operations."""
+        menu.addAction("Add Meeting Pattern").triggered.connect(lambda: self.meeting_pattern_editor.add_meeting_pattern(self))
+        menu.addAction("Modify Meeting Pattern").triggered.connect(lambda: self.meeting_pattern_editor.modify_meeting_pattern(self))
+        menu.addAction("Delete Meeting Pattern").triggered.connect(lambda: self.meeting_pattern_editor.delete_meeting_pattern(self))
 
     def _bind_timeslot_commands(self, menu):
         """Binds dummy timeslot operations."""
@@ -318,12 +327,6 @@ class MainWindow(QMainWindow):
 
     def _bind_viewer_commands(self, menu):
         """Binds schedule viewing and I/O operations."""
-        #These view actions (for now) are for the ASCII table.
-        #menu.addAction("View Schedules").triggered.connect(lambda: self.open_schedule_viewer("all"))
-        #menu.addAction("View by Faculty").triggered.connect(lambda: self.open_schedule_viewer("faculty"))
-        #menu.addAction("View by Room").triggered.connect(lambda: self.open_schedule_viewer("room"))
-        #menu.addAction("View by Lab").triggered.connect(lambda: self.open_schedule_viewer("lab"))
-        #TODO: Replace the above view actions with these after some fixes.
         menu.addAction("View Schedules").triggered.connect(lambda: self.update_schedule_display("all"))
         menu.addAction("View by Faculty").triggered.connect(lambda: self.update_schedule_display("faculty"))
         menu.addAction("View by Room").triggered.connect(lambda: self.update_schedule_display("room"))
@@ -421,42 +424,47 @@ class MainWindow(QMainWindow):
                 self.config_mgr.load()
                 self.cfg_panel.update_title(self.path_label, file_path)
                 #self.update_schedule_display()
+                QMessageBox.information(self, "Success", "Configuration File changed.")
                 
             except Exception as e:
                 QMessageBox.warning(self, "Load Warning", str(e))
 
     def handle_import_schedule(self):
         """
-        Delegates CSV parsing to ConfigManager and updates the UI with the result.
+        Delegates JSON parsing to ConfigManager and updates the UI with the result.
         """
 
-        imported_data = self.config_mgr.import_schedule_from_csv(parent=self)
+        imported_data = self.config_mgr.import_schedule_from_json(parent=self)
 
         if imported_data:
 
             self.schedules = imported_data
             self.current_schedule_index = 0
+            #Updates filepath displayed for imported schedules
+            self.cfg_panel.update_title(self.cfg_panel, self.config_mgr.import_file)
             self.update_schedule_display()
 
-            QMessageBox.information(
-                self,
-                "Import Successful",
-                f"Successfully loaded {len(imported_data)} schedule(s)."
-            )
+            try:
+                QMessageBox.information(
+                    self,
+                    "Import Successful",
+                    f"Successfully loaded {len(imported_data)} schedule(s)."
+                )
+            except:
+                QMessageBox.critical(self, "Error", "Import failed.")
 
     def handle_export_schedule(self):
         """
         Delegates the export process to the ConfigManager.
-        The ConfigManager will handle the 'Save As' dialog and CSV formatting.
+        The ConfigManager will handle the 'Save As' dialog and JSON formatting.
         """
         if hasattr(self, 'schedules') and self.schedules:
 
-            success = self.config_mgr.export_schedule_to_csv(self.schedules, self)
+            success = self.config_mgr.export_schedule_to_json(self.schedules, self)
             
             if success:
                 pass
         else:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(
                 self, 
                 "Export Error", 
@@ -474,7 +482,11 @@ class MainWindow(QMainWindow):
             return
         else:
             try:
+                self.clear_clicked = True
                 self.schedules.clear()
+                #Updates imported schedules label
+                self.cfg_panel.update_title(self.cfg_panel)
+                self.import_file = ""
                 self.update_schedule_display()
                 QMessageBox.information(self, "Success", "Schedule/s have been cleared.")
             except:
@@ -489,42 +501,6 @@ class MainWindow(QMainWindow):
         msg.setFont(QFont("Courier New", 10))
         msg.exec()
 
-    #TODO: Revisit this function, i do not think it is finished.
-    def open_schedule_viewer(self, grouping: str):
-        """
-        Opens the schedule viewing strategy.
-        
-        :param grouping: How to group the data ('all', 'faculty', 'room', 'lab').
-        """
-        if not self.schedules:
-            QMessageBox.warning(self, "No schedules", "Generate or import one first.")
-            return
-
-        self.viewer = QDialog(self)
-        self.viewer.setWindowTitle(f"Viewer - {grouping.capitalize()}")
-        self.viewer.resize(900, 500)
-        layout = QVBoxLayout(self.viewer)
-
-        self.schedule_display = QPlainTextEdit()
-        self.schedule_display.setReadOnly(True)
-        self.schedule_display.setFont(QFont("Courier New", 10))
-        layout.addWidget(self.schedule_display)
-
-        if grouping == "all":
-            self._setup_viewer_navigation(layout)
-            self._refresh_schedule_display()
-        else:
-            # Viewer Strategy: Logic for specific data maps
-            config_data = self.config_mgr.data.get("config", {})
-            data_map = {
-                "faculty": config_data.get("faculty", "N/A"),
-                "room": config_data.get("rooms", "N/A"),
-                "lab": config_data.get("labs", "N/A")
-            }
-            self.schedule_display.setPlainText(json.dumps(data_map.get(grouping), indent=4))
-
-        self.viewer.exec()
-
     def _setup_viewer_navigation(self, layout):
         """Adds navigation buttons for cycling through multiple schedules."""
         nav_layout = QHBoxLayout()
@@ -535,6 +511,7 @@ class MainWindow(QMainWindow):
         nav_layout.addWidget(next_btn)
         layout.addLayout(nav_layout)
 
+    #TODO: Move more of this code to config_mgr with design patterns.
     def _refresh_schedule_display(self):
         """Updates the viewer text based on the current schedule index."""
         if not self.schedules: return
@@ -553,14 +530,18 @@ class MainWindow(QMainWindow):
         if self.schedules:
             self.current_schedule_index = (self.current_schedule_index - 1) % len(self.schedules)
 
-    #this function and/or a helper with replace the open_schedule_viewer function
     def update_schedule_display(self, group_by: str = "all"):
         """
         Refreshes the grid based on the current schedule index and optional filters.
+        Also refreshes the grid when new schedules are generated.
         """
         if not self.schedules:
             self.calendar_view.setRowCount(0)
             self.counter_label.setText("NO SCHEDULES LOADED")
+            #this is a little buggy because of when the function is called.
+            #ex: when clearing schedules.
+            if self.clear_clicked == False:
+                QMessageBox.warning(self, "No Schedules", "Generate or import schedule/s first.")
             return
 
         filter_val = None
@@ -578,9 +559,8 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Filter", f"No {group_by} data available to filter by.")
                 group_by = "all"
             
-            #what is this
+            #Prompts user for selection when choosing a view option:
             else:
-                from PyQt6.QtWidgets import QInputDialog
                 item, ok = QInputDialog.getItem(self, f"Filter by {group_by.capitalize()}", 
                                               f"Select {group_by}:", options, 0, False)
                 if ok and item:
@@ -588,9 +568,11 @@ class MainWindow(QMainWindow):
                 else:
                     return
 
-        #this does not work?
+        #Updated filepath displayed for active config
         self.cfg_panel.update_title(self.path_label, self.config_mgr.filepath)
+        #Show schedules through appropriate filter (all, faculty, room, lab)
         filter_suffix = f" | FILTER: {filter_val}" if filter_val else ""
+        #Update label when viewing different schedules
         self.counter_label.setText(
             f"SCHEDULE OPTION {self.current_schedule_index + 1} OF {len(self.schedules)}{filter_suffix}"
         )
@@ -621,8 +603,11 @@ class MainWindow(QMainWindow):
         """'Save As' functionality for exporting the current config state."""
         p, _ = QFileDialog.getSaveFileName(self, "Save JSON", "", "*.json")
         if p:
-            with open(p, 'w') as f:
-                json.dump(self.config_mgr.data, f, indent=4)
+            self.config_mgr.filepath = p
+            self.config_mgr.save(self)
+            #Handle_change_path not called since its for opening a file.
+            self.cfg_panel.update_title(self.path_label, self.config_mgr.filepath)
+
 
     def refresh_config_views_after_mutation(self) -> None:
         """Reload config from disk and refresh read-only views after AI (or other) tools wrote the file."""
