@@ -18,14 +18,16 @@ import json
 import csv
 import os
 import copy
+from collections.abc import Callable
 from PyQt6.QtWidgets import (
     QMainWindow, QSplitter, QMenu, QPushButton,
     QVBoxLayout, QHBoxLayout, QWidget, QFileDialog,
     QMessageBox, QDialog, QPlainTextEdit, QLabel,
-    QMenuBar, QLineEdit, QTableWidget, QHeaderView, QTableWidgetItem
+    QMenuBar, QLineEdit, QTableWidget, QHeaderView, QTableWidgetItem,
+    QToolBar, QToolButton,
     )
-from PyQt6.QtCore import Qt, QCoreApplication
-from PyQt6.QtGui import QAction, QFont
+from PyQt6.QtCore import Qt, QCoreApplication, QSize
+from PyQt6.QtGui import QAction, QFont, QColor, QBrush, QKeySequence
 from PyQt6.QtWidgets import QInputDialog
 
 from .menu_widgets import ContentPanel
@@ -58,15 +60,23 @@ class MainWindow(QMainWindow):
         Initializes the MainWindow, managers, and UI components.
         """
         super().__init__()
-        self.setWindowTitle("Scheduler Program - GenericTeamName")
-        self.resize(900, 600)
+        self.setWindowTitle("Schedule Builder · GenericTeamName")
+        self.resize(1280, 720)
+        self.setMinimumSize(960, 520)
 
-        #Theme Configuration
+        #Theme Configuration (window chrome; panels use slightly elevated surfaces)
         self.theme_colors = {
-            "Light": "#f3f4f6", "Dark": "#1f1f24", "Autumn": "#8a5a44",
-            "Crimson": "#8b2e3c", "Marathon": "#c2fe0b", "Summer": "#f4c95d",
-            "Spring": "#98c379", "Winter": "#cfddeb", "Ocean": "#1f6f8b",
-            "Land": "#6b8f71", "Sky": "#7fb7e6",
+            "Light": "#eef1f6",
+            "Dark": "#18181b",
+            "Autumn": "#8a5a44",
+            "Crimson": "#8b2e3c",
+            "Marathon": "#c2fe0b",
+            "Summer": "#f4c95d",
+            "Spring": "#98c379",
+            "Winter": "#cfddeb",
+            "Ocean": "#1f6f8b",
+            "Land": "#6b8f71",
+            "Sky": "#7fb7e6",
         }
         #Default theme on startup
         self.current_theme = "Light"
@@ -95,8 +105,10 @@ class MainWindow(QMainWindow):
           
         #UI Setup (see functions below)
         self._setup_ui_components()
+        self._setup_quick_toolbar()
         self.init_menus()
         self.apply_theme()
+        self._sync_detail_view()
 
         #Bug fix to prevent "No Schedules" warning from popping up at wrong time.
         #See update_schedule_display
@@ -119,103 +131,248 @@ class MainWindow(QMainWindow):
     def _setup_ui_components(self):
         """
         Initializes the structural layout components of the window.
+        Three columns: configuration JSON | schedule grid | AI assistant.
         """
-        #Splitter organizes our panels.
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        
-        self.cfg_panel = ContentPanel("NO FILE IMPORTED", "#000000")
-        self.cfg_panel.layout.setContentsMargins(0, 0, 0, 0)
-        self.cfg_panel.layout.setSpacing(0)
+        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.main_splitter.setHandleWidth(4)
+        self.main_splitter.setChildrenCollapsible(False)
 
-        # Refined Header Area
+        # --- Left: inspector (JSON) ---
+        self.inspect_panel = ContentPanel("Configuration", "#f1f5f9", add_bottom_stretch=False)
+        self.detail_view = QPlainTextEdit()
+        self.detail_view.setReadOnly(True)
+        self.detail_view.setPlaceholderText("Loaded config JSON appears here…")
+
+        self.inspect_caption = QLabel("Active configuration (read-only)")
+        self.inspect_caption.setFont(QFont("Segoe UI", 9, QFont.Weight.DemiBold))
+
+        self.save_cfg_btn = QPushButton("Save configuration")
+        self.save_cfg_btn.setObjectName("primaryButton")
+        self.save_cfg_btn.setToolTip("Write changes to the active JSON file (Ctrl+S)")
+        self.save_cfg_btn.clicked.connect(lambda: self.config_mgr.save(self))
+
+        inspect_inner = QWidget()
+        inspect_layout = QVBoxLayout(inspect_inner)
+        inspect_layout.setContentsMargins(0, 0, 0, 0)
+        inspect_layout.setSpacing(6)
+        inspect_layout.addWidget(self.inspect_caption, 0)
+        inspect_layout.addWidget(self.detail_view, 1)
+        inspect_layout.addWidget(self.save_cfg_btn, 0)
+        self.inspect_panel.layout.addWidget(inspect_inner, 1)
+
+        # --- Center: schedule ---
+        self.cfg_panel = ContentPanel("Schedule", "#f1f5f9", add_bottom_stretch=False)
+        inner = QWidget()
+        inner_layout = QVBoxLayout(inner)
+        inner_layout.setContentsMargins(0, 0, 0, 0)
+        inner_layout.setSpacing(8)
+
         header_widget = QWidget()
         header_layout = QVBoxLayout(header_widget)
-        header_layout.setContentsMargins(10, 8, 10, 8)
-        header_layout.setSpacing(4)
+        header_layout.setContentsMargins(4, 4, 4, 8)
+        header_layout.setSpacing(6)
 
-        self.counter_label = QLabel("NO SCHEDULES LOADED")
-        counter_font = QFont("Segoe UI", 10)
-        counter_font.setBold(True)
-        self.counter_label.setFont(counter_font)
+        self.counter_label = QLabel(
+            "No schedules yet — use Generate on the toolbar, or Import (Ctrl+Shift+I)"
+        )
+        self.counter_label.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))
         self.counter_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.counter_label.setWordWrap(True)
 
-        self.path_label = QLabel(f"Active Config: <b>{self.config_mgr.filepath}</b>")
-        path_font = QFont("Segoe UI", 8)
-        path_font.setBold(True)
-        self.path_label.setFont(path_font)
-        self.path_label.setStyleSheet("color: #555;")
+        self.path_label = QLabel()
+        self.path_label.setFont(QFont("Segoe UI", 9))
         self.path_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.path_label.setWordWrap(True)
+        self._update_path_label_text()
 
         header_layout.addWidget(self.counter_label)
         header_layout.addWidget(self.path_label)
 
-        # Navigation Bar
         nav_widget = QWidget()
         nav_layout = QHBoxLayout(nav_widget)
-        self.prev_dashboard_btn = QPushButton("◀ Previous")
-        self.next_dashboard_btn = QPushButton("Next ▶")
-        self.prev_dashboard_btn.clicked.connect(lambda: (self.show_prev_schedule(), self.update_schedule_display()))
-        self.next_dashboard_btn.clicked.connect(lambda: (self.show_next_schedule(), self.update_schedule_display()))
+        nav_layout.setSpacing(8)
+        self.prev_dashboard_btn = QPushButton("← Previous")
+        self.next_dashboard_btn = QPushButton("Next →")
+        self.prev_dashboard_btn.setToolTip("Show the previous generated schedule")
+        self.next_dashboard_btn.setToolTip("Show the next generated schedule")
+        self.prev_dashboard_btn.clicked.connect(
+            lambda: (self.show_prev_schedule(), self.update_schedule_display())
+        )
+        self.next_dashboard_btn.clicked.connect(
+            lambda: (self.show_next_schedule(), self.update_schedule_display())
+        )
         nav_layout.addWidget(self.prev_dashboard_btn)
         nav_layout.addWidget(self.next_dashboard_btn)
 
-        # Calendar Table
         self.calendar_view = QTableWidget()
         self.calendar_view.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.calendar_view.setAlternatingRowColors(True)
+        self.calendar_view.setShowGrid(True)
+        self.calendar_view.verticalHeader().setDefaultSectionSize(28)
         self.calendar_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.calendar_view.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
-        # Add schedule widgets to Config Panel
-        self.cfg_panel.layout.addWidget(header_widget, 0)
-        self.cfg_panel.layout.addWidget(nav_widget, 0)
-        self.cfg_panel.layout.addWidget(self.calendar_view, 1)
-        
-        self.right_panel = ContentPanel("Inspector & Assistant", "#1a1a1a", stretch_middle=False)
-        self.detail_view = QPlainTextEdit()
-        self.save_cfg_btn = QPushButton("Save Config")
-        self.save_cfg_btn.clicked.connect(lambda: self.config_mgr.save(self))    
+        inner_layout.addWidget(header_widget, 0)
+        inner_layout.addWidget(nav_widget, 0)
+        inner_layout.addWidget(self.calendar_view, 1)
+        self.cfg_panel.layout.addWidget(inner, 1)
 
-        #Panels are displayed in widgets.
-        self.splitter.addWidget(self.cfg_panel)
-        self.splitter.addWidget(self.right_panel)
-        self.splitter.setSizes([800, 200])
-        self.setCentralWidget(self.splitter)
-        
-        #Remaining function code sets up the AI Chatbot panels:
-        inspect_box = QWidget()
-        inspect_layout = QVBoxLayout(inspect_box)
-        inspect_layout.setContentsMargins(0, 0, 0, 0)
-        inspect_layout.addWidget(self.detail_view, 1)
-        inspect_layout.addWidget(self.save_cfg_btn, 0)
+        # --- Right: assistant (full height) ---
+        self.assistant_panel = ContentPanel("Assistant", "#f1f5f9", add_bottom_stretch=False)
+        self.ai_caption = QLabel("Ask the assistant to edit your config or run tasks")
+        self.ai_caption.setFont(QFont("Segoe UI", 9, QFont.Weight.DemiBold))
+        self.ai_caption.setWordWrap(True)
 
         self.ai_chat_log = QPlainTextEdit()
         self.ai_chat_log.setReadOnly(True)
         self.ai_chat_log.setPlaceholderText(
-            "Ask the assistant to change rooms, faculty, courses, timeslots, class meeting patterns, run generation, etc."
+            "Example: “Add room Roddy 201”, “List faculty”, “Set schedule limit to 5”…"
         )
         self.ai_input = QLineEdit()
-        self.ai_input.setPlaceholderText("Message the assistant…")
+        self.ai_input.setPlaceholderText("Message… (Enter to send)")
         self.ai_input.returnPressed.connect(self.send_assistant_message)
         self.ai_send_btn = QPushButton("Send")
+        self.ai_send_btn.setObjectName("primaryButton")
+        self.ai_send_btn.setToolTip("Send message (Ctrl+Enter)")
         self.ai_send_btn.clicked.connect(self.send_assistant_message)
         ai_row = QHBoxLayout()
+        ai_row.setSpacing(8)
         ai_row.addWidget(self.ai_input, 1)
         ai_row.addWidget(self.ai_send_btn)
 
-        assistant_box = QWidget()
-        assistant_layout = QVBoxLayout(assistant_box)
+        assistant_inner = QWidget()
+        assistant_layout = QVBoxLayout(assistant_inner)
         assistant_layout.setContentsMargins(0, 0, 0, 0)
-        assistant_layout.addWidget(QLabel("AI assistant"), 0)
+        assistant_layout.setSpacing(6)
+        assistant_layout.addWidget(self.ai_caption, 0)
         assistant_layout.addWidget(self.ai_chat_log, 1)
         assistant_layout.addLayout(ai_row)
+        self.assistant_panel.layout.addWidget(assistant_inner, 1)
 
-        #Embed a vertical splitter into existing right panel
-        self.right_splitter = QSplitter(Qt.Orientation.Vertical)
-        self.right_splitter.addWidget(inspect_box)
-        self.right_splitter.addWidget(assistant_box)
-        self.right_splitter.setStretchFactor(0, 2)
-        self.right_splitter.setStretchFactor(1, 3)
-        self.right_panel.layout.addWidget(self.right_splitter, 1)
+        self.main_splitter.addWidget(self.inspect_panel)
+        self.main_splitter.addWidget(self.cfg_panel)
+        self.main_splitter.addWidget(self.assistant_panel)
+        self.main_splitter.setSizes([260, 460, 560])
+
+        shell = QWidget()
+        shell_layout = QVBoxLayout(shell)
+        shell_layout.setContentsMargins(12, 10, 12, 10)
+        shell_layout.setSpacing(0)
+        shell_layout.addWidget(self.main_splitter)
+        self.setCentralWidget(shell)
+
+    def _setup_quick_toolbar(self) -> None:
+        """One-click access to common actions + shortcuts (fewer menu dives)."""
+        tb = QToolBar("Actions")
+        tb.setObjectName("quickToolBar")
+        tb.setMovable(False)
+        tb.setIconSize(QSize(18, 18))
+        tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, tb)
+
+        def add_action(
+            text: str,
+            slot,
+            tip: str,
+            shortcut: QKeySequence | None = None,
+        ) -> QAction:
+            act = QAction(text, self)
+            act.setToolTip(tip)
+            if shortcut is not None:
+                act.setShortcut(shortcut)
+            act.triggered.connect(slot)
+            tb.addAction(act)
+            self.addAction(act)
+            return act
+
+        add_action(
+            "Open…",
+            self.handle_change_path,
+            "Choose a different JSON configuration file (Ctrl+O)",
+            QKeySequence.StandardKey.Open,
+        )
+        add_action(
+            "Save",
+            lambda: self.config_mgr.save(self),
+            "Save configuration to disk (Ctrl+S)",
+            QKeySequence.StandardKey.Save,
+        )
+        tb.addSeparator()
+        add_action(
+            "Generate",
+            lambda: self.gen_manager.run_scheduler(self),
+            "Run schedule generation (Ctrl+G)",
+            QKeySequence("Ctrl+G"),
+        )
+        add_action(
+            "Refresh grid",
+            lambda: self.update_schedule_display("all"),
+            "Redraw the schedule table (F5)",
+            QKeySequence("F5"),
+        )
+        tb.addSeparator()
+        add_action(
+            "Import",
+            self.handle_import_schedule,
+            "Import schedule JSON (Ctrl+Shift+I)",
+            QKeySequence("Ctrl+Shift+I"),
+        )
+        add_action(
+            "Export",
+            self.handle_export_schedule,
+            "Export schedules (Ctrl+Shift+E)",
+            QKeySequence("Ctrl+Shift+E"),
+        )
+        tb.addSeparator()
+        add_action(
+            "Summary",
+            self.handle_view_summary,
+            "View configuration summary (F2)",
+            QKeySequence("F2"),
+        )
+
+        send_act = QAction("Send assistant message", self)
+        send_act.setShortcut(QKeySequence("Ctrl+Return"))
+        send_act.triggered.connect(self.send_assistant_message)
+        self.addAction(send_act)
+
+        tb.addSeparator()
+
+        def _menu_btn(text: str, tip: str, entries: list[tuple[str, Callable[[], None]]]) -> QToolButton:
+            m = QMenu(self)
+            m.setToolTipsVisible(True)
+            for label, fn in entries:
+                m.addAction(label).triggered.connect(fn)
+            b = QToolButton()
+            b.setText(text)
+            b.setToolTip(tip)
+            b.setMenu(m)
+            b.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            return b
+
+        add_entries = [
+            ("Faculty…", lambda: self.faculty_manager.add_faculty_via_dialog(self)),
+            ("Course…", lambda: self.course_manager.add_course_via_dialog(self)),
+            ("Room…", lambda: self.room_manager.add_room_via_dialog(self)),
+            ("Lab…", lambda: self.lab_manager.add_lab_via_dialog(self)),
+        ]
+        tb.addWidget(_menu_btn("Add ▾", "Add faculty, course, room, or lab", add_entries))
+
+        modify_entries = [
+            ("Faculty…", lambda: self.faculty_manager.modify_faculty_via_dialog(self)),
+            ("Course…", lambda: self.course_manager.modify_course_via_dialog(self)),
+            ("Room…", lambda: self.room_manager.modify_room_via_dialog(self)),
+            ("Lab…", lambda: self.lab_manager.modify_lab_via_dialog(self)),
+        ]
+        tb.addWidget(_menu_btn("Modify ▾", "Change an existing entry", modify_entries))
+
+        delete_entries = [
+            ("Faculty…", lambda: self.faculty_manager.delete_faculty_via_dialog(self)),
+            ("Course…", lambda: self.course_manager.delete_course_via_dialog(self)),
+            ("Room…", lambda: self.room_manager.delete_room_via_dialog(self)),
+            ("Lab…", lambda: self.lab_manager.delete_lab_via_dialog(self)),
+        ]
+        tb.addWidget(_menu_btn("Delete ▾", "Remove an entry from the config", delete_entries))
 
     def init_menus(self):
         """
@@ -244,7 +401,9 @@ class MainWindow(QMainWindow):
 
         # Remaining two menubar tabs:
         gen_menu = menubar.addMenu("Generator")
-        viewer_menu = menubar.addMenu("Viewer")     
+        viewer_menu = menubar.addMenu("Viewer")
+        help_menu = menubar.addMenu("Help")
+        help_menu.addAction("Keyboard shortcuts…", self._show_shortcuts_cheat_sheet)
 
         # Command Bindings
         self._bind_file_commands(file_menu)
@@ -280,8 +439,8 @@ class MainWindow(QMainWindow):
         """Binds file-related operations."""
         menu.addAction("Change Config File").triggered.connect(self.handle_change_path)
         menu.addAction("View Summary").triggered.connect(self.handle_view_summary)
-        menu.addAction("Save Config").triggered.connect(lambda: self.config_mgr.save(self))
-        menu.addAction("Save Config As").triggered.connect(self.save_config_to_file)
+        menu.addAction("Save configuration").triggered.connect(lambda: self.config_mgr.save(self))
+        menu.addAction("Save configuration as…").triggered.connect(self.save_config_to_file)
     
     def _bind_faculty_commands(self, menu):
         """Binds faculty management operations."""
@@ -350,41 +509,135 @@ class MainWindow(QMainWindow):
 
     def apply_theme(self) -> None:
         dark = self._is_dark(self.theme_color)
-        text_color = "#e0e0e0" if dark else "#333333"
-        btn_bg = self._darken(self.theme_color, 0.15) if dark else self._lighten(self.theme_color, 0.1)
-        btn_hover = self._darken(self.theme_color, 0.1) if dark else self._lighten(self.theme_color, 0.05)
-        btn_disabled = self._darken(self.theme_color, 0.25) if dark else self._lighten(self.theme_color, 0.2)
-        btn_border = self._lighten(self.theme_color, 0.22) if dark else self._darken(self.theme_color, 0.18)
-        panel_border = self._lighten(self.theme_color, 0.16) if dark else self._darken(self.theme_color, 0.12)
+        text_color = "#f4f4f5" if dark else "#1e293b"
+        muted = "#a1a1aa" if dark else "#64748b"
+        btn_bg = self._darken(self.theme_color, 0.12) if dark else self._lighten(self.theme_color, 0.12)
+        btn_hover = self._darken(self.theme_color, 0.06) if dark else self._lighten(self.theme_color, 0.06)
+        btn_disabled = self._darken(self.theme_color, 0.22) if dark else self._lighten(self.theme_color, 0.18)
+        btn_border = self._lighten(self.theme_color, 0.2) if dark else self._darken(self.theme_color, 0.14)
+        panel_border = self._lighten(self.theme_color, 0.14) if dark else self._darken(self.theme_color, 0.1)
+        splitter_handle = "#3f3f46" if dark else "#d4d4d8"
+        table_bg = "#27272a" if dark else "#ffffff"
+        table_alt = "#2e2e33" if dark else "#f8fafc"
+        header_bg = "#3f3f46" if dark else "#f1f5f9"
+        grid = "#52525b" if dark else "#e2e8f0"
+        primary = "#2563eb" if not dark else "#3b82f6"
+        primary_hover = "#1d4ed8" if not dark else "#2563eb"
 
         self.setStyleSheet(
-            f"QMainWindow, QWidget {{ background-color: {self.theme_color}; }} "
-            f"QPushButton {{ background-color: {btn_bg}; color: {text_color}; border: 1px solid {btn_border}; }} "
-            f"QPushButton:hover {{ background-color: {btn_hover}; }} "
-            f"QPushButton:disabled {{ background-color: {btn_disabled}; color: #888; }} "
+            f"""
+            QMainWindow {{ background-color: {self.theme_color}; }}
+            QWidget {{ color: {text_color}; font-family: "Segoe UI", "SF Pro Text", sans-serif; }}
+            QMenuBar {{
+                background-color: {self.theme_color};
+                border-bottom: 1px solid {panel_border};
+                padding: 4px 2px;
+                spacing: 8px;
+            }}
+            QMenuBar::item {{ padding: 6px 12px; border-radius: 6px; }}
+            QMenuBar::item:selected {{ background-color: {btn_hover}; }}
+            QToolBar {{
+                background-color: {self.theme_color};
+                border: none;
+                border-bottom: 1px solid {panel_border};
+                padding: 6px 8px;
+                spacing: 10px;
+            }}
+            QToolButton {{
+                background-color: {btn_bg};
+                color: {text_color};
+                border: 1px solid {btn_border};
+                border-radius: 8px;
+                padding: 6px 12px;
+                margin: 2px;
+                font-weight: 500;
+            }}
+            QToolButton:hover {{ background-color: {btn_hover}; }}
+            QMenu {{ background-color: {table_bg}; border: 1px solid {btn_border}; padding: 4px; }}
+            QMenu::item {{ padding: 8px 28px; border-radius: 4px; }}
+            QMenu::item:selected {{ background-color: {btn_hover}; }}
+            QPushButton {{
+                background-color: {btn_bg};
+                color: {text_color};
+                border: 1px solid {btn_border};
+                border-radius: 8px;
+                padding: 8px 14px;
+                min-height: 22px;
+            }}
+            QPushButton:hover {{ background-color: {btn_hover}; }}
+            QPushButton:disabled {{ background-color: {btn_disabled}; color: #888888; }}
+            QPushButton#primaryButton {{
+                background-color: {primary};
+                color: #ffffff;
+                border: 1px solid {primary};
+                font-weight: 600;
+            }}
+            QPushButton#primaryButton:hover {{ background-color: {primary_hover}; border-color: {primary_hover}; }}
+            QSplitter::handle {{
+                background-color: {splitter_handle};
+            }}
+            QTableWidget {{
+                background-color: {table_bg};
+                alternate-background-color: {table_alt};
+                gridline-color: {grid};
+                border: none;
+                border-radius: 8px;
+            }}
+            QTableCornerButton::section {{ background-color: {header_bg}; }}
+            QHeaderView::section {{
+                background-color: {header_bg};
+                color: {text_color};
+                padding: 8px 6px;
+                border: none;
+                border-bottom: 1px solid {grid};
+                font-weight: 600;
+            }}
+            QTableWidget::item:selected {{
+                background-color: {primary};
+                color: #ffffff;
+            }}
+            """
         )
-        text_c = "#e0e0e0" if dark else "#333333"
         self.theme_btn.setStyleSheet(
-            f"background-color: {self.theme_color}; color: {text_c}; border: 2px solid {btn_border};"
+            f"background-color: {btn_bg}; color: {text_color}; "
+            f"border: 1px solid {btn_border}; border-radius: 8px; padding: 6px 12px; font-weight: 600;"
         )
         self.theme_btn.setText(self.current_theme)
-        for panel in (self.cfg_panel, self.right_panel):
+        for panel in (self.inspect_panel, self.cfg_panel, self.assistant_panel):
             panel.set_color(self.theme_color, panel_border)
-        self._apply_ai_chat_theme()
+        self._apply_editor_panels_theme(table_bg, text_color, btn_border, muted)
+        self._update_path_label_text()
 
-    def _apply_ai_chat_theme(self) -> None:
+    def _apply_editor_panels_theme(
+        self,
+        surface: str,
+        fg: str,
+        border: str,
+        muted: str,
+    ) -> None:
         if not hasattr(self, "ai_chat_log"):
             return
-        dark = self._is_dark(self.theme_color)
-        bg = "#2b2b2b" if dark else "#ffffff"
-        fg = "#e0e0e0" if dark else "#222222"
-        border = "#555" if dark else "#ccc"
         sheet = (
-            f"QPlainTextEdit, QLineEdit {{ background-color: {bg}; color: {fg}; "
-            f"border: 1px solid {border}; }}"
+            f"QPlainTextEdit, QLineEdit {{ background-color: {surface}; color: {fg}; "
+            f"border: 1px solid {border}; border-radius: 8px; padding: 8px; selection-background-color: #2563eb; }}"
+        )
+        line_sheet = (
+            f"QLineEdit {{ background-color: {surface}; color: {fg}; "
+            f"border: 1px solid {border}; border-radius: 8px; padding: 8px; selection-background-color: #2563eb; }}"
+        )
+        detail_sheet = (
+            f"QPlainTextEdit {{ background-color: {surface}; color: {fg}; "
+            f"border: 1px solid {border}; border-radius: 8px; padding: 8px; selection-background-color: #2563eb; "
+            f"font-family: Consolas, 'Cascadia Mono', 'SF Mono', Menlo, monospace; font-size: 11px; }}"
         )
         self.ai_chat_log.setStyleSheet(sheet)
-        self.ai_input.setStyleSheet(sheet)
+        self.ai_input.setStyleSheet(line_sheet)
+        self.detail_view.setStyleSheet(detail_sheet)
+        cap = f"color: {muted}; padding: 0 2px;"
+        self.inspect_caption.setStyleSheet(cap)
+        self.ai_caption.setStyleSheet(cap)
+        self.path_label.setStyleSheet(f"color: {muted};")
+        self.counter_label.setStyleSheet(f"color: {fg};")
 
     def _darken(self, hex_color: str, amount: float) -> str:
         hex_color = hex_color.lstrip("#")
@@ -400,6 +653,25 @@ class MainWindow(QMainWindow):
         b = min(255, int(int(hex_color[4:6], 16) + 255 * amount))
         return f"#{r:02x}{g:02x}{b:02x}"
 
+    def _sync_detail_view(self) -> None:
+        if not hasattr(self, "detail_view"):
+            return
+        try:
+            self.detail_view.setPlainText(json.dumps(self.config_mgr.data, indent=2))
+        except (TypeError, ValueError):
+            self.detail_view.setPlainText("(Unable to display configuration as JSON.)")
+
+    def _update_path_label_text(self) -> None:
+        if not hasattr(self, "path_label"):
+            return
+        fp = (getattr(self.config_mgr, "filepath", None) or "").strip()
+        if fp:
+            self.path_label.setText(f"Config: {os.path.basename(fp)}")
+            self.path_label.setToolTip(fp)
+        else:
+            self.path_label.setText("Config: (unsaved or unknown path)")
+            self.path_label.setToolTip("")
+
     def set_theme(self, theme_name: str) -> None:
         if theme_name not in self.theme_colors:
             return
@@ -413,6 +685,27 @@ class MainWindow(QMainWindow):
     """
     #=================================================================================    
         
+    def _show_shortcuts_cheat_sheet(self) -> None:
+        mb = QMessageBox(self)
+        mb.setWindowTitle("Keyboard shortcuts")
+        mb.setIcon(QMessageBox.Icon.Information)
+        mb.setTextFormat(Qt.TextFormat.RichText)
+        mb.setText(
+            "<p style='margin-bottom:10px'><b>Toolbar / main window</b></p>"
+            "<table cellspacing='6'>"
+            "<tr><td>Open configuration…</td><td><b>Ctrl+O</b></td></tr>"
+            "<tr><td>Save configuration</td><td><b>Ctrl+S</b></td></tr>"
+            "<tr><td>Generate schedules</td><td><b>Ctrl+G</b></td></tr>"
+            "<tr><td>Refresh schedule grid</td><td><b>F5</b></td></tr>"
+            "<tr><td>Import schedules</td><td><b>Ctrl+Shift+I</b></td></tr>"
+            "<tr><td>Export schedules</td><td><b>Ctrl+Shift+E</b></td></tr>"
+            "<tr><td>Configuration summary</td><td><b>F2</b></td></tr>"
+            "<tr><td>Send assistant message</td><td><b>Ctrl+Enter</b> "
+            "(or Enter in the message field)</td></tr>"
+            "</table>"
+        )
+        mb.exec()
+
     def handle_change_path(self):
         """Opens dialog to update the configuration file path."""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -422,8 +715,8 @@ class MainWindow(QMainWindow):
             self.config_mgr.filepath = file_path
             try:
                 self.config_mgr.load()
-                self.cfg_panel.update_title(self.path_label, file_path)
-                #self.update_schedule_display()
+                self._update_path_label_text()
+                self._sync_detail_view()
                 QMessageBox.information(self, "Success", "Configuration File changed.")
                 
             except Exception as e:
@@ -537,7 +830,9 @@ class MainWindow(QMainWindow):
         """
         if not self.schedules:
             self.calendar_view.setRowCount(0)
-            self.counter_label.setText("NO SCHEDULES LOADED")
+            self.counter_label.setText(
+                "No schedules yet — use Generate on the toolbar, or Import (Ctrl+Shift+I)"
+            )
             #this is a little buggy because of when the function is called.
             #ex: when clearing schedules.
             if self.clear_clicked == False:
@@ -568,13 +863,10 @@ class MainWindow(QMainWindow):
                 else:
                     return
 
-        #Updated filepath displayed for active config
-        self.cfg_panel.update_title(self.path_label, self.config_mgr.filepath)
-        #Show schedules through appropriate filter (all, faculty, room, lab)
-        filter_suffix = f" | FILTER: {filter_val}" if filter_val else ""
-        #Update label when viewing different schedules
+        self._update_path_label_text()
+        filter_suffix = f" · Filter: {filter_val}" if filter_val else ""
         self.counter_label.setText(
-            f"SCHEDULE OPTION {self.current_schedule_index + 1} OF {len(self.schedules)}{filter_suffix}"
+            f"Schedule {self.current_schedule_index + 1} of {len(self.schedules)}{filter_suffix}"
         )
 
         days, times, grid = self.config_mgr.get_schedule_grid_data(
@@ -595,8 +887,8 @@ class MainWindow(QMainWindow):
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 item.setFont(item_font)
                 if cell_value:
-                    item.setBackground(Qt.GlobalColor.blue)
-                    item.setForeground(Qt.GlobalColor.white)
+                    item.setBackground(QBrush(QColor(37, 99, 235)))
+                    item.setForeground(QBrush(QColor(255, 255, 255)))
                 self.calendar_view.setItem(r, c, item)
 
     def save_config_to_file(self):
@@ -605,17 +897,15 @@ class MainWindow(QMainWindow):
         if p:
             self.config_mgr.filepath = p
             self.config_mgr.save(self)
-            #Handle_change_path not called since its for opening a file.
-            self.cfg_panel.update_title(self.path_label, self.config_mgr.filepath)
-
+            self._update_path_label_text()
+            self._sync_detail_view()
 
     def refresh_config_views_after_mutation(self) -> None:
         """Reload config from disk and refresh read-only views after AI (or other) tools wrote the file."""
         path = getattr(self.config_mgr, "filepath", None)
         if path and os.path.isfile(path):
             self._load_config()
-        if hasattr(self, "detail_view"):
-            self.detail_view.setPlainText(json.dumps(self.config_mgr.data, indent=2))
+        self._sync_detail_view()
 
     def _append_ai_chat(self, who: str, text: str) -> None:
         self.ai_chat_log.appendPlainText(f"{who}: {text}\n")
