@@ -1,7 +1,7 @@
 '''
     File: roon_gui.py
-    Date: 3/1/2026
-    Author: Chayse Altland
+    Date: 04/16/2026
+    Author: Chayse Altland & Tyler Strohl
     Class: CMSC 420
     Description: Room management dialogs and helpers for the GUI.
 '''
@@ -24,71 +24,28 @@ class RoomConfigManager:
     Helper to load, modify, and save room entries in a scheduler config JSON file.
     Rooms are stored as a list of strings:
         "rooms": ["Roddy 140", "Roddy 147", ...]
+
+    This class implements the following design patterns:
+        -Dependency Injection
+        -Delegation
+        -Model-View-Controller (controller)
+        -Facade
+        -Template Logic
     """
 
-    def __init__(self) -> None:
-        self.config_path: Optional[Path] = None
-        self._config_data: Dict[str, Any] = {}
+    def __init__(self, config_mgr):
+        self.config_mgr = config_mgr
 
     # -----------------------------
     # Internal Helpers
     # -----------------------------
 
-    def _ensure_config_loaded(self, parent: QWidget) -> bool:
-        """
-        Use the config file selected via the Change Config File button.
-        """
-        config_mgr = getattr(parent, "config_mgr", None)
-        if config_mgr is None or not getattr(config_mgr, "filepath", None):
-            QMessageBox.warning(
-                parent,
-                "No Config",
-                "Please select a config file first using the Change Config File button."
-            )
-            return False
-        try:
-            config_mgr.load()
-        except Exception as e:
-            QMessageBox.critical(
-                parent,
-                "Config Error",
-                f"Could not load config:\n{e}",
-            )
-            return False
-        self.config_path = Path(config_mgr.filepath)
-        self._config_data = config_mgr.data
-        return True
-
     def _get_rooms_list(self) -> List[str]:
-        cfg = self._config_data.setdefault("config", {})
-        rooms = cfg.setdefault("rooms", [])
-        if not isinstance(rooms, list):
-            cfg["rooms"] = []
-        return cfg["rooms"]
-
-    def _save(self, parent: QWidget) -> None:
-        if self.config_path is None:
-            return
-        try:
-            self.config_path.write_text(
-                json.dumps(self._config_data, indent=2),
-                encoding="utf-8"
-            )
-        except OSError as e:
-                QMessageBox.critical(
-                    parent,
-                    "Save failed",
-                    f"Failed to save config:\n{e}",
-                )
-                return
-
-        QMessageBox.information(
-            parent,
-            "Config saved",
-            "Configuration saved.",
-        )
+        """Retrieve the list of rooms from the config file."""
+        return self.config_mgr.data["config"]["rooms"]
 
     def _select_room(self, parent: QWidget) -> Tuple[Optional[int], Optional[str]]:
+        """Retrieves a specific room from list of rooms."""
         rooms = self._get_rooms_list()
 
         if not rooms:
@@ -107,15 +64,16 @@ class RoomConfigManager:
         if not ok or not item:
             return None, None
 
-        index = rooms.index(item)
-        return index, item
+        return rooms.index(item), item
 
     # -----------------------------
     # Public CRUD Methods
     # -----------------------------
 
     def add_room_via_dialog(self, parent: QWidget) -> None:
-        if not self._ensure_config_loaded(parent):
+        """Add a new room to config file."""
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
 
         text, ok = QInputDialog.getText(
@@ -129,10 +87,12 @@ class RoomConfigManager:
 
         rooms = self._get_rooms_list()
         rooms.append(text.strip())
-        self._save(parent)
+        self.config_mgr.save(parent)
 
     def modify_room_via_dialog(self, parent: QWidget) -> None:
-        if not self._ensure_config_loaded(parent):
+        """Modify a room in the config file."""
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
 
         index, existing = self._select_room(parent)
@@ -151,10 +111,12 @@ class RoomConfigManager:
 
         rooms = self._get_rooms_list()
         rooms[index] = text.strip()
-        self._save(parent)
+        self.config_mgr.save(parent)
 
     def delete_room_via_dialog(self, parent: QWidget) -> None:
-        if not self._ensure_config_loaded(parent):
+        """Remove a room from the config file."""
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
 
         index, existing = self._select_room(parent)
@@ -174,4 +136,4 @@ class RoomConfigManager:
 
         rooms = self._get_rooms_list()
         del rooms[index]
-        self._save(parent)
+        self.config_mgr.save(parent)
