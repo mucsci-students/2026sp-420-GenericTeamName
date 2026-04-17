@@ -9,7 +9,7 @@ import json
 import pytest
 from pathlib import Path
 from unittest.mock import patch
-from app.lab_gui import LabConfigManager
+from lab.lab_gui import LabConfigManager
 
 # pytest tests/test_lab_config_manager.py -v to test
 
