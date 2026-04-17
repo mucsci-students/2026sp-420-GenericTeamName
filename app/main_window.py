@@ -80,7 +80,7 @@ class MainWindow(QMainWindow):
 
         #Domain Logic Managers
         self.config_mgr = ConfigManager("config/config.json")
-        self._load_config()
+        self.config_mgr.load(self)
 
         self.faculty_manager = FacultyManager(self.config_mgr)
         self.course_manager = CourseConfigManager(self.config_mgr)
@@ -114,16 +114,6 @@ class MainWindow(QMainWindow):
     UI Setup Functions:
     """
     #=================================================================================
-    
-    #could have config manager init call load function ? yes or no ?
-    def _load_config(self):
-        """
-        Attempts to load the initial configuration file.
-        """
-        try:
-            self.config_mgr.load()
-        except Exception:
-            pass
 
     def _setup_ui_components(self):
         """
@@ -495,6 +485,9 @@ class MainWindow(QMainWindow):
     """
     Theme Functions:
     """
+
+    #TODO: Move all these to a Theme class.
+
     #=================================================================================
         
     def _is_dark(self, hex_color: str) -> bool:
@@ -681,7 +674,8 @@ class MainWindow(QMainWindow):
     Handler Functions:
     """
     #=================================================================================    
-        
+
+    #TODO: Move this function to Viewer class.   
     def _show_shortcuts_cheat_sheet(self) -> None:
         mb = QMessageBox(self)
         mb.setWindowTitle("Keyboard shortcuts")
@@ -712,7 +706,7 @@ class MainWindow(QMainWindow):
         if file_path:
             self.config_mgr.filepath = file_path
             try:
-                self.config_mgr.load()
+                self.config_mgr.load(self)
                 self._update_path_label_text()
                 self._sync_detail_view()
                 QMessageBox.information(self, "Success", "Configuration File changed.")
@@ -723,6 +717,7 @@ class MainWindow(QMainWindow):
 
 
     #TODO: Move the following functions to a new class:
+    #DO THIS BEFORE MOVING MORE FUNCTIONS TO CONFIG_MGR
     #---------------------------------------------------------
     #THESE FUNCTIONS NEED TO BE MOVED TO A NEW VIEWER CLASS
     #---------------------------------------------------------
@@ -898,7 +893,7 @@ class MainWindow(QMainWindow):
     #End of functions that should be moved (see them above)
     #---------------------------------------------------------
 
-
+    #TODO: Move this function to config_mgr
     def save_config_to_file(self):
         """'Save As' functionality for exporting the current config state."""
         p, _ = QFileDialog.getSaveFileName(self, "Save JSON", "", "*.json")
@@ -908,12 +903,18 @@ class MainWindow(QMainWindow):
             self._update_path_label_text()
             self._sync_detail_view()
 
+    #TODO: Move this function to Viewer class.
     def refresh_config_views_after_mutation(self) -> None:
         """Reload config from disk and refresh read-only views after AI (or other) tools wrote the file."""
         path = getattr(self.config_mgr, "filepath", None)
         if path and os.path.isfile(path):
-            self._load_config()
+            self.config_mgr.load(self)
         self._sync_detail_view()
+
+    #---------------------------------------------------------
+    #TODO: Move below ai functions to AI class if possible.
+    #TODO: Refactor AI class code.
+    #---------------------------------------------------------
 
     def _append_ai_chat(self, who: str, text: str) -> None:
         self.ai_chat_log.appendPlainText(f"{who}: {text}\n")
