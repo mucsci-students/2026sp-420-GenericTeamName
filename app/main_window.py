@@ -43,6 +43,7 @@ from .generator_gui import GenConfigManager
 from .lab_gui import LabConfigManager
 from .time_slot_editor import TimeSlotEditor
 from .meeting_pattern_editor import MeetingPatternEditor
+from .ui_styles import SchedulerStyles
 
 #=================================================================================
 class MainWindow(QMainWindow):
@@ -521,82 +522,27 @@ class MainWindow(QMainWindow):
         primary_hover = "#1d4ed8" if not dark else "#2563eb"
 
         self.setStyleSheet(
-            f"""
-            QMainWindow {{ background-color: {self.theme_color}; }}
-            QWidget {{ color: {text_color}; font-family: "Segoe UI", "SF Pro Text", sans-serif; }}
-            QMenuBar {{
-                background-color: {self.theme_color};
-                border-bottom: 1px solid {panel_border};
-                padding: 4px 2px;
-                spacing: 8px;
-            }}
-            QMenuBar::item {{ padding: 6px 12px; border-radius: 6px; }}
-            QMenuBar::item:selected {{ background-color: {btn_hover}; }}
-            QToolBar {{
-                background-color: {self.theme_color};
-                border: none;
-                border-bottom: 1px solid {panel_border};
-                padding: 6px 8px;
-                spacing: 10px;
-            }}
-            QToolButton {{
-                background-color: {btn_bg};
-                color: {text_color};
-                border: 1px solid {btn_border};
-                border-radius: 8px;
-                padding: 6px 12px;
-                margin: 2px;
-                font-weight: 500;
-            }}
-            QToolButton:hover {{ background-color: {btn_hover}; }}
-            QMenu {{ background-color: {table_bg}; border: 1px solid {btn_border}; padding: 4px; }}
-            QMenu::item {{ padding: 8px 28px; border-radius: 4px; }}
-            QMenu::item:selected {{ background-color: {btn_hover}; }}
-            QPushButton {{
-                background-color: {btn_bg};
-                color: {text_color};
-                border: 1px solid {btn_border};
-                border-radius: 8px;
-                padding: 8px 14px;
-                min-height: 22px;
-            }}
-            QPushButton:hover {{ background-color: {btn_hover}; }}
-            QPushButton:disabled {{ background-color: {btn_disabled}; color: #888888; }}
-            QPushButton#primaryButton {{
-                background-color: {primary};
-                color: #ffffff;
-                border: 1px solid {primary};
-                font-weight: 600;
-            }}
-            QPushButton#primaryButton:hover {{ background-color: {primary_hover}; border-color: {primary_hover}; }}
-            QSplitter::handle {{
-                background-color: {splitter_handle};
-            }}
-            QTableWidget {{
-                background-color: {table_bg};
-                alternate-background-color: {table_alt};
-                gridline-color: {grid};
-                border: none;
-                border-radius: 8px;
-            }}
-            QTableCornerButton::section {{ background-color: {header_bg}; }}
-            QHeaderView::section {{
-                background-color: {header_bg};
-                color: {text_color};
-                padding: 8px 6px;
-                border: none;
-                border-bottom: 1px solid {grid};
-                font-weight: 600;
-            }}
-            QTableWidget::item:selected {{
-                background-color: {primary};
-                color: #ffffff;
-            }}
-            """
+            SchedulerStyles.main_window(
+                theme_color=self.theme_color,
+                text_color=text_color,
+                btn_bg=btn_bg,
+                btn_hover=btn_hover,
+                btn_disabled=btn_disabled,
+                btn_border=btn_border,
+                panel_border=panel_border,
+                splitter_handle=splitter_handle,
+                table_bg=table_bg,
+                table_alt=table_alt,
+                header_bg=header_bg,
+                grid=grid,
+                primary=primary,
+                primary_hover=primary_hover,
+            )
         )
         self.theme_btn.setStyleSheet(
-            f"background-color: {btn_bg}; color: {text_color}; "
-            f"border: 1px solid {btn_border}; border-radius: 8px; padding: 6px 12px; font-weight: 600;"
+            SchedulerStyles.theme_corner_button(
+                btn_bg=btn_bg, text_color=text_color, btn_border=btn_border
+            )
         )
         self.theme_btn.setText(self.current_theme)
         for panel in (self.inspect_panel, self.cfg_panel, self.assistant_panel):
@@ -613,18 +559,8 @@ class MainWindow(QMainWindow):
     ) -> None:
         if not hasattr(self, "ai_chat_log"):
             return
-        sheet = (
-            f"QPlainTextEdit, QLineEdit {{ background-color: {surface}; color: {fg}; "
-            f"border: 1px solid {border}; border-radius: 8px; padding: 8px; selection-background-color: #2563eb; }}"
-        )
-        line_sheet = (
-            f"QLineEdit {{ background-color: {surface}; color: {fg}; "
-            f"border: 1px solid {border}; border-radius: 8px; padding: 8px; selection-background-color: #2563eb; }}"
-        )
-        detail_sheet = (
-            f"QPlainTextEdit {{ background-color: {surface}; color: {fg}; "
-            f"border: 1px solid {border}; border-radius: 8px; padding: 8px; selection-background-color: #2563eb; "
-            f"font-family: Consolas, 'Cascadia Mono', 'SF Mono', Menlo, monospace; font-size: 11px; }}"
+        sheet, line_sheet, detail_sheet = SchedulerStyles.editor_panels(
+            surface=surface, fg=fg, border=border
         )
         self.ai_chat_log.setStyleSheet(sheet)
         self.ai_input.setStyleSheet(line_sheet)

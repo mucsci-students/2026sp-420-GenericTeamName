@@ -31,93 +31,13 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from .ui_styles import SchedulerStyles
+
 
 def _faculty_display_name(entry: Any) -> str:
     if isinstance(entry, dict):
         return str(entry.get("name", entry))
     return str(entry)
-
-
-# High-contrast form: white surface, black text (readable regardless of main window theme).
-_COURSE_FORM_STYLE = """
-QDialog {
-    background-color: #ffffff;
-    color: #000000;
-}
-QScrollArea {
-    background-color: #ffffff;
-    border: none;
-}
-QScrollArea > QWidget > QWidget {
-    background-color: #ffffff;
-}
-QLabel {
-    color: #000000;
-    background-color: transparent;
-}
-QGroupBox {
-    color: #000000;
-    background-color: #ffffff;
-    border: 2px solid #000000;
-    border-radius: 6px;
-    margin-top: 16px;
-    padding-top: 14px;
-    font-weight: 600;
-}
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 10px;
-    padding: 0 6px;
-    color: #000000;
-    background-color: #ffffff;
-}
-QListWidget {
-    background-color: #ffffff;
-    color: #000000;
-    border: 2px solid #000000;
-    border-radius: 4px;
-    outline: none;
-}
-QListWidget::item {
-    color: #000000;
-    padding: 4px;
-}
-QListWidget::item:selected {
-    background-color: #000000;
-    color: #ffffff;
-}
-QLineEdit, QSpinBox {
-    background-color: #ffffff;
-    color: #000000;
-    border: 2px solid #000000;
-    border-radius: 4px;
-    padding: 6px 8px;
-    selection-background-color: #000000;
-    selection-color: #ffffff;
-}
-QSpinBox::up-button, QSpinBox::down-button {
-    background-color: #f0f0f0;
-    border: 1px solid #000000;
-    width: 18px;
-}
-QDialogButtonBox QPushButton {
-    background-color: #ffffff;
-    color: #000000;
-    border: 2px solid #000000;
-    border-radius: 4px;
-    padding: 8px 18px;
-    font-weight: 600;
-    min-width: 80px;
-}
-QDialogButtonBox QPushButton:hover {
-    background-color: #f0f0f0;
-}
-QDialogButtonBox QPushButton:pressed {
-    background-color: #000000;
-    color: #ffffff;
-}
-"""
 
 
 class CourseFormDialog(QDialog):
@@ -190,9 +110,7 @@ class CourseFormDialog(QDialog):
         if course is not None:
             self._populate_from_course(course)
 
-        self.setStyleSheet(_COURSE_FORM_STYLE)
-        inner.setStyleSheet("background-color: #ffffff;")
-        scroll.viewport().setStyleSheet("background-color: #ffffff;")
+        SchedulerStyles.apply_high_contrast_shell(self, inner, scroll)
 
     def _preselected_from_course(self, course: Optional[Dict[str, Any]]) -> Dict[str, set]:
         if not course:
