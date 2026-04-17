@@ -66,16 +66,11 @@ class MainWindow(QMainWindow):
 
         #Theme Configuration (window chrome; panels use slightly elevated surfaces)
         self.theme_colors = {
-            "Light": "#eef1f6",
-            "Dark": "#18181b",
-            "Autumn": "#8a5a44",
-            "Crimson": "#8b2e3c",
-            "Marathon": "#c2fe0b",
-            "Summer": "#f4c95d",
-            "Spring": "#98c379",
-            "Winter": "#cfddeb",
-            "Ocean": "#1f6f8b",
-            "Land": "#6b8f71",
+            "Light": "#eef1f6", "Dark": "#18181b",
+            "Autumn": "#8a5a44", "Crimson": "#8b2e3c",
+            "Marathon": "#c2fe0b", "Summer": "#f4c95d",
+            "Spring": "#98c379", "Winter": "#cfddeb",
+            "Ocean": "#1f6f8b", "Land": "#6b8f71",
             "Sky": "#7fb7e6",
         }
         #Default theme on startup
@@ -88,9 +83,9 @@ class MainWindow(QMainWindow):
 
         self.faculty_manager = FacultyManager()
         self.course_manager = CourseConfigManager()
-        self.room_manager = RoomConfigManager()
+        self.room_manager = RoomConfigManager(self.config_mgr)
+        self.lab_manager = LabConfigManager(self.config_mgr)
         self.gen_manager = GenConfigManager()
-        self.lab_manager = LabConfigManager()
         self.time_slot_editor = TimeSlotEditor(self.config_mgr)
         self.meeting_pattern_editor = MeetingPatternEditor(self.config_mgr)
 
@@ -119,6 +114,7 @@ class MainWindow(QMainWindow):
     """
     #=================================================================================
     
+    #could have config manager init call load function ? yes or no ?
     def _load_config(self):
         """
         Attempts to load the initial configuration file.
@@ -252,7 +248,7 @@ class MainWindow(QMainWindow):
         self.main_splitter.addWidget(self.inspect_panel)
         self.main_splitter.addWidget(self.cfg_panel)
         self.main_splitter.addWidget(self.assistant_panel)
-        self.main_splitter.setSizes([260, 460, 560])
+        self.main_splitter.setSizes([160, 760, 360])
 
         shell = QWidget()
         shell_layout = QVBoxLayout(shell)
