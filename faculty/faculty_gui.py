@@ -1,8 +1,9 @@
 '''
+    File: faculty_gui.py
+    Date: 04/16/2026
     Author: Damion Crawford & Tyler Strohl
-    Date: 3/25/26
-    Filename: faculty_gui.py
-    Faculty-Management module for Scheduler Program GUI.
+    Class: CMSC 420
+    Description: Faculty management dialogs and helpers for the GUI.
 '''
 
 from __future__ import annotations
@@ -192,66 +193,33 @@ class FacultyFormDialog(QDialog):
 
 
 class FacultyManager:
+    """
+    Helper to load, modify, and save course entries in a scheduler config JSON file.
     
-    def __init__(self):
-        self.config_path: Optional[Path] = None
-        self.config_data: Dict[str, Any] = {}
+    This class implements the following design patterns:
+        -Dependency Injection
+        -Delegation
+        -Model-View-Controller (controller)
+        -Facade
+        -Factory
+        -Template Logic
+    """
+    def __init__(self, config_mgr):
+        self.config_mgr = config_mgr
 
-    def _ensure_config_loaded(self, parent: QWidget) -> bool:
-   
-        config_mgr = getattr(parent, "config_mgr", None)
-        if config_mgr is None or not getattr(config_mgr, "filepath", None):
-            QMessageBox.warning(parent, "No Config", "Please select a config file first.")
-            return False
-        
-        self.config_path = Path(config_mgr.filepath)
-        self.config_data = config_mgr.data
-        return True
+    def _get_faculty_list(self) -> List[Dict[str, Any]]:
+        """Retrieve the list of faculty from the config file."""
+        return self.config_mgr.data["config"]["faculty"]
 
-    def list_faculty(self) -> List[Dict[str, Any]]:
-
-        cfg = self.config_data.setdefault("config", {})
-        
-        if "faculty" not in cfg:
-            cfg["faculty"] = []
-            
-        if not isinstance(cfg["faculty"], list):
-            cfg["faculty"] = []
-            
-        return cfg["faculty"]
-
-    
     def faculty_display_name(self, f: Any) -> str:
         """Get display string for a faculty item (usually the 'name' key)."""
         if isinstance(f, dict):
             return str(f.get("name", "Unknown Faculty"))
         return str(f)
-    
-    def save(self, parent: QWidget) -> None:
-        """
-        Saves the current config_data back to the JSON file with indentation.
-        """
-        config_mgr = getattr(parent, "config_mgr", None)
-        
-        if config_mgr:
-            config_mgr.data = self.config_data
-            config_mgr.save()
-        else:
- 
-            if self.config_path is None:
-                return
-            try:
-                json_string = json.dumps(self.config_data, indent=4)
-                self.config_path.write_text(json_string, encoding="utf-8")
-            except OSError as e:
-                QMessageBox.critical(parent, "Save failed", f"Failed to save config:\n{e}")
-                return
-
-        QMessageBox.information(parent, "Config saved", "Configuration saved.")
         
     def select_faculty(self, parent: QWidget) -> Tuple[Optional[int], Optional[str]]:
-
-        faculty_list = self.list_faculty()
+        """Retrieves a specific faculty from list of faculty."""
+        faculty_list = self._get_faculty_list()
 
         if not faculty_list:
             QMessageBox.information(parent, "No faculty", "No faculty found in the config.")
@@ -270,22 +238,28 @@ class FacultyManager:
         return labels.index(item), item
 
     def add_faculty_via_dialog(self, parent: QWidget) -> None:
-        if not self._ensure_config_loaded(parent):
+        """Add a new faculty member to config file."""
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
+        
         dialog = FacultyFormDialog(parent)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             faculty_data = dialog.get_faculty_data()
-            faculty_list = self.list_faculty()      
+            faculty_list = self._get_faculty_list()      
             faculty_list.append(faculty_data)
-            self.save(parent)
+            self.config_mgr.save(parent)
 
     def modify_faculty_via_dialog(self, parent: QWidget) -> None:
-        if not self._ensure_config_loaded(parent):
+        """Modify a faculty member in the config file."""
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
+        
         index, name = self.select_faculty(parent)
         if index is None: return
 
-        faculty_list = self.list_faculty()
+        faculty_list = self._get_faculty_list()     
         existing_data = faculty_list[index]
 
         dialog = FacultyFormDialog(parent)
@@ -294,11 +268,14 @@ class FacultyManager:
         if dialog.exec() == QDialog.DialogCode.Accepted:
             updated = dialog.get_faculty_data() 
             faculty_list[index] = updated
-            self.save(parent)
+            self.config_mgr.save(parent)
 
     def delete_faculty_via_dialog(self, parent: QWidget) -> None:
-        if not self._ensure_config_loaded(parent):
+        """Remove a faculty member from the config file."""
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
+        
         index, name = self.select_faculty(parent)
         if index is None: return
 
@@ -308,6 +285,6 @@ class FacultyManager:
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:
-            faculty_list = self.list_faculty()
+            faculty_list = self._get_faculty_list()     
             faculty_list.pop(index)
-            self.save(parent)
+            self.config_mgr.save(parent)
