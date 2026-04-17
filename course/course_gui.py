@@ -1,7 +1,7 @@
 '''
     File: course_gui.py
-    Date: 02/27/2026
-    Author: Shane del Villar
+    Date: 04/16/2026
+    Author: Shane del Villar & Tyler Strohl
     Class: CMSC 420
     Description: Course management dialogs and helpers for the GUI.
 '''
@@ -14,21 +14,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QDialog,
-    QDialogButtonBox,
-    QFileDialog,
-    QFormLayout,
-    QGroupBox,
-    QInputDialog,
-    QLabel,
-    QLineEdit,
-    QListWidget,
-    QListWidgetItem,
-    QMessageBox,
-    QScrollArea,
-    QSpinBox,
-    QVBoxLayout,
-    QWidget,
+    QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
+    QGroupBox, QInputDialog, QLabel, QLineEdit,
+    QListWidget, QListWidgetItem, QMessageBox, QScrollArea,
+    QSpinBox, QVBoxLayout, QWidget,
 )
 
 
@@ -436,64 +425,48 @@ class CourseFormDialog(QDialog):
             "faculty": faculty,
         }
 
+#------------------------------------------------------------------
+#------------------------------------------------------------------
+#------------------------------------------------------------------
+#------------------------------------------------------------------
 
 class CourseConfigManager:
     """
     Helper to load, modify, and save course entries in a scheduler config JSON file.
+    
+    This class implements the following design patterns:
+        -Dependency Injection
+        -Delegation
+        -Model-View-Controller (controller)
+        -Facade
+        -Factory
+        -Template Logic
     """
 
-    def __init__(self) -> None:
-        self.config_path: Optional[Path] = None
-        self._config_data: Dict[str, Any] = {}
-
-    def _ensure_config_loaded(self, parent: QWidget) -> bool:
-        """
-        Use the config file selected via the Change Config File button.
-        """
-        config_mgr = getattr(parent, "config_mgr", None)
-        if config_mgr is None or not getattr(config_mgr, "filepath", None):
-            QMessageBox.warning(
-                parent,
-                "No Config",
-                "Please select a config file first using the Change Config File button."
-            )
-            return False
-        try:
-            config_mgr.load()
-        except Exception as e:
-            QMessageBox.critical(
-                parent,
-                "Config Error",
-                f"Could not load config:\n{e}",
-            )
-            return False
-        self.config_path = Path(config_mgr.filepath)
-        self._config_data = config_mgr.data
-        return True
+    def __init__(self, config_mgr):
+        self.config_mgr = config_mgr
 
     def _get_courses_list(self) -> List[Dict[str, Any]]:
-        cfg = self._config_data.setdefault("config", {})
-        courses = cfg.setdefault("courses", [])
-        # Ensure list of dicts
-        if not isinstance(courses, list):
-            cfg["courses"] = []
-        return cfg["courses"]
+        """Retrieve the list of courses from the config file."""
+        return self.config_mgr.data["config"]["courses"]
 
     def _get_pick_lists(self, exclude_course_id_for_conflicts: Optional[str] = None) -> Dict[str, List[str]]:
-        cfg = self._config_data.get("config", {}) or {}
-        rooms = [str(r) for r in (cfg.get("rooms") or []) if r is not None]
-        labs = [str(l) for l in (cfg.get("labs") or []) if l is not None]
-        faculty: List[str] = []
-        for f in cfg.get("faculty") or []:
-            faculty.append(_faculty_display_name(f))
-        course_ids: List[str] = []
+        """Provides lists for rooms, labs, & faculty for drop-down menus."""
+        data = self.config_mgr.data["config"]
+        
+        #Retrieve lists of rooms, labs, faculty for drop-down options.
+        rooms = [str(r) for r in data["rooms"] if r is not None]
+        labs = [str(l) for l in data["labs"] if l is not None]
+        faculty = [_faculty_display_name(f) for f in data["faculty"]]
+
+        #Filter out the current course ID.
         ex = (exclude_course_id_for_conflicts or "").strip()
-        for c in cfg.get("courses") or []:
-            if not isinstance(c, dict):
-                continue
-            cid = str(c.get("course_id", "")).strip()
-            if cid and cid != ex:
-                course_ids.append(cid)
+        course_ids = [
+            str(c["course_id"]).strip() 
+            for c in data["courses"] 
+            if isinstance(c, dict) and str(c.get("course_id", "")).strip() != ex
+        ]
+
         return {
             "rooms": sorted(set(rooms), key=str.casefold),
             "labs": sorted(set(labs), key=str.casefold),
@@ -501,30 +474,8 @@ class CourseConfigManager:
             "conflict_course_ids": sorted(set(course_ids), key=str.casefold),
         }
 
-    def _save(self, parent: QWidget) -> None:
-        config_mgr = getattr(parent, "config_mgr", None)
-        if config_mgr:
-            config_mgr.data = self._config_data
-            config_mgr.save(parent)
-        else:
-            if self.config_path is None:
-                return
-            try:
-                self.config_path.write_text(json.dumps(self._config_data, indent=2), encoding="utf-8")
-            except OSError as e:
-                QMessageBox.critical(
-                    parent,
-                    "Save failed",
-                    f"Failed to save config:\n{e}",
-                )
-                return
-        QMessageBox.information(
-            parent,
-            "Config saved",
-            "Configuration saved.",
-        )
-
     def _select_course(self, parent: QWidget) -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
+        """Retrieves a specific course from list of courses."""
         courses = self._get_courses_list()
         if not courses:
             QMessageBox.information(parent, "No courses", "No courses found in the config.")
@@ -547,20 +498,27 @@ class CourseConfigManager:
         return index, courses[index]
 
     def add_course_via_dialog(self, parent: QWidget) -> None:
-        if not self._ensure_config_loaded(parent):
+        """Add a new course to config file."""
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
+        
         pick = self._get_pick_lists(exclude_course_id_for_conflicts=None)
         dialog = CourseFormDialog(parent, course=None, pick_lists=pick)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
+        
         course_data = dialog.get_course_data()
         courses = self._get_courses_list()
         courses.append(course_data)
-        self._save(parent)
+        self.config_mgr.save(parent)
 
     def modify_course_via_dialog(self, parent: QWidget) -> None:
-        if not self._ensure_config_loaded(parent):
+        """Modify a course in the config file."""
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
+        
         index, existing = self._select_course(parent)
         if index is None or existing is None:
             return
@@ -578,11 +536,14 @@ class CourseConfigManager:
         courses = self._get_courses_list()
         if 0 <= index < len(courses):
             courses[index] = updated
-            self._save(parent)
+            self.config_mgr.save(parent)
 
     def delete_course_via_dialog(self, parent: QWidget) -> None:
-        if not self._ensure_config_loaded(parent):
+        """Remove a course from the config file."""
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
+
         index, existing = self._select_course(parent)
         if index is None or existing is None:
             return
@@ -599,4 +560,4 @@ class CourseConfigManager:
         courses = self._get_courses_list()
         if 0 <= index < len(courses):
             del courses[index]
-            self._save(parent)
+            self.config_mgr.save(parent)

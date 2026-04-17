@@ -9,7 +9,7 @@ import json
 import pytest
 from pathlib import Path
 from unittest.mock import patch
-from app.course_gui import CourseConfigManager
+from course.course_gui import CourseConfigManager
 
 # Helper
 

@@ -15,7 +15,6 @@ The Design-Patterns implemented here are as follows:
 #TODO: Reformat comments so auto-documentation picks up more files across program.
 
 import json
-import csv
 import os
 import copy
 from collections.abc import Callable
@@ -23,8 +22,8 @@ from PyQt6.QtWidgets import (
     QMainWindow, QSplitter, QMenu, QPushButton,
     QVBoxLayout, QHBoxLayout, QWidget, QFileDialog,
     QMessageBox, QDialog, QPlainTextEdit, QLabel,
-    QMenuBar, QLineEdit, QTableWidget, QHeaderView, QTableWidgetItem,
-    QToolBar, QToolButton,
+    QMenuBar, QLineEdit, QTableWidget, QHeaderView, 
+    QTableWidgetItem, QToolBar, QToolButton,
     )
 from PyQt6.QtCore import Qt, QCoreApplication, QSize
 from PyQt6.QtGui import QAction, QFont, QColor, QBrush, QKeySequence
@@ -35,14 +34,16 @@ from .ai_assistant import (
     AssistantChatWorker, OPENAI_MODEL, SYSTEM_PROMPT,
     default_api_key, execute_tool,
 )
-from .course_gui import CourseConfigManager
-from .room_gui import RoomConfigManager
-from .faculty_gui import FacultyManager
 from config.config_mgr import ConfigManager
+from faculty.faculty_gui import FacultyManager
+from course.course_gui import CourseConfigManager
+from room.room_gui import RoomConfigManager
+from lab.lab_gui import LabConfigManager
 from .generator_gui import GenConfigManager
-from .lab_gui import LabConfigManager
-from .time_slot_editor import TimeSlotEditor
-from .meeting_pattern_editor import MeetingPatternEditor
+from time_slot_config_editor.time_slot_editor import TimeSlotEditor
+from time_slot_config_editor.meeting_pattern_editor import MeetingPatternEditor
+#TODO: Finish implementing this new class.
+from viewer.viewer_gui import ViewerManager
 
 #=================================================================================
 class MainWindow(QMainWindow):
@@ -81,8 +82,8 @@ class MainWindow(QMainWindow):
         self.config_mgr = ConfigManager("config/config.json")
         self._load_config()
 
-        self.faculty_manager = FacultyManager()
-        self.course_manager = CourseConfigManager()
+        self.faculty_manager = FacultyManager(self.config_mgr)
+        self.course_manager = CourseConfigManager(self.config_mgr)
         self.room_manager = RoomConfigManager(self.config_mgr)
         self.lab_manager = LabConfigManager(self.config_mgr)
         self.gen_manager = GenConfigManager()
@@ -702,6 +703,7 @@ class MainWindow(QMainWindow):
         )
         mb.exec()
 
+    #TODO: Move this function over to config_mgr
     def handle_change_path(self):
         """Opens dialog to update the configuration file path."""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -718,6 +720,12 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.warning(self, "Load Warning", str(e))
 
+
+
+    #TODO: Move the following functions to a new class:
+    #---------------------------------------------------------
+    #THESE FUNCTIONS NEED TO BE MOVED TO A NEW VIEWER CLASS
+    #---------------------------------------------------------
     def handle_import_schedule(self):
         """
         Delegates JSON parsing to ConfigManager and updates the UI with the result.
@@ -800,7 +808,6 @@ class MainWindow(QMainWindow):
         nav_layout.addWidget(next_btn)
         layout.addLayout(nav_layout)
 
-    #TODO: Move more of this code to config_mgr with design patterns.
     def _refresh_schedule_display(self):
         """Updates the viewer text based on the current schedule index."""
         if not self.schedules: return
@@ -886,6 +893,11 @@ class MainWindow(QMainWindow):
                     item.setBackground(QBrush(QColor(37, 99, 235)))
                     item.setForeground(QBrush(QColor(255, 255, 255)))
                 self.calendar_view.setItem(r, c, item)
+
+    #---------------------------------------------------------
+    #End of functions that should be moved (see them above)
+    #---------------------------------------------------------
+
 
     def save_config_to_file(self):
         """'Save As' functionality for exporting the current config state."""
