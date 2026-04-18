@@ -9,7 +9,7 @@ import json
 import pytest
 from pathlib import Path
 from unittest.mock import patch
-from app.room_gui import RoomConfigManager
+from room.room_gui import RoomConfigManager
 
 # pytest tests/test_room_config_manager.py -v to test
 

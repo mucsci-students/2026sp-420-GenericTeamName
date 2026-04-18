@@ -12,6 +12,7 @@ import os
 from PyQt6.QtWidgets import QMessageBox, QWidget, QFileDialog
 
 class ConfigManager:
+    #May need to add viewer class in as second param.
     def __init__(self, filepath="config.json", import_file = ""):
         #filepath is used for a config file
         self.filepath = filepath
@@ -32,13 +33,22 @@ class ConfigManager:
             }
         }
 
-    def load(self):
-        """Load data from the JSON file."""
+    def load(self, parent: QWidget):
+        """Load JSON data from file."""
+        
+        #First check if the file exists
         if not os.path.exists(self.filepath):
-            raise FileNotFoundError(f"Config file not found: {self.filepath}")
-        with open(self.filepath, "r") as f:
-            self.data = json.load(f)
-        return self.data
+            QMessageBox.critical(parent, "Load Error", f"Config file not found: {self.filepath}")
+            return None
+        
+        #If file exists, open it, if unsuccessful, return no data.
+        try:
+            with open(self.filepath, "r") as f:
+                self.data = json.load(f)
+            return self.data
+        except Exception as e:
+            QMessageBox.critical(parent, "Load Error", f"Failed to parse JSON:\n{str(e)}")
+            return None
 
     def save(self, parent: QWidget):
         """Save JSON data with 4 space indent."""

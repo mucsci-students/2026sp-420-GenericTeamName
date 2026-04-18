@@ -7,7 +7,7 @@ The Design-Patterns implemented here are as follows:
     -Command
     -Singleton
 
-:date: 03/31/2026
+:date: 04/17/2026
 :authors: Kyle Smith, Tyler Strohl, Chayse Altland, & Shane del Villar
 :class: CMSC 420
 """
@@ -15,7 +15,6 @@ The Design-Patterns implemented here are as follows:
 #TODO: Reformat comments so auto-documentation picks up more files across program.
 
 import json
-import csv
 import os
 import copy
 from collections.abc import Callable
@@ -23,8 +22,8 @@ from PyQt6.QtWidgets import (
     QMainWindow, QSplitter, QMenu, QPushButton,
     QVBoxLayout, QHBoxLayout, QWidget, QFileDialog,
     QMessageBox, QDialog, QPlainTextEdit, QLabel,
-    QMenuBar, QLineEdit, QTableWidget, QHeaderView, QTableWidgetItem,
-    QToolBar, QToolButton,
+    QMenuBar, QLineEdit, QTableWidget, QHeaderView, 
+    QTableWidgetItem, QToolBar, QToolButton,
     )
 from PyQt6.QtCore import Qt, QCoreApplication, QSize
 from PyQt6.QtGui import QAction, QFont, QColor, QBrush, QKeySequence
@@ -35,14 +34,16 @@ from .ai_assistant import (
     AssistantChatWorker, OPENAI_MODEL, SYSTEM_PROMPT,
     default_api_key, execute_tool,
 )
-from .course_gui import CourseConfigManager
-from .room_gui import RoomConfigManager
-from .faculty_gui import FacultyManager
 from config.config_mgr import ConfigManager
+from faculty.faculty_gui import FacultyManager
+from course.course_gui import CourseConfigManager
+from room.room_gui import RoomConfigManager
+from lab.lab_gui import LabConfigManager
 from .generator_gui import GenConfigManager
-from .lab_gui import LabConfigManager
-from .time_slot_editor import TimeSlotEditor
-from .meeting_pattern_editor import MeetingPatternEditor
+from time_slot_config_editor.time_slot_editor import TimeSlotEditor
+from time_slot_config_editor.meeting_pattern_editor import MeetingPatternEditor
+#TODO: Finish implementing this new class.
+from viewer.viewer_gui import ViewerManager
 from .ui_styles import SchedulerStyles
 
 #=================================================================================
@@ -80,10 +81,10 @@ class MainWindow(QMainWindow):
 
         #Domain Logic Managers
         self.config_mgr = ConfigManager("config/config.json")
-        self._load_config()
+        self.config_mgr.load(self)
 
-        self.faculty_manager = FacultyManager()
-        self.course_manager = CourseConfigManager()
+        self.faculty_manager = FacultyManager(self.config_mgr)
+        self.course_manager = CourseConfigManager(self.config_mgr)
         self.room_manager = RoomConfigManager(self.config_mgr)
         self.lab_manager = LabConfigManager(self.config_mgr)
         self.gen_manager = GenConfigManager()
@@ -114,16 +115,6 @@ class MainWindow(QMainWindow):
     UI Setup Functions:
     """
     #=================================================================================
-    
-    #could have config manager init call load function ? yes or no ?
-    def _load_config(self):
-        """
-        Attempts to load the initial configuration file.
-        """
-        try:
-            self.config_mgr.load()
-        except Exception:
-            pass
 
     def _setup_ui_components(self):
         """
@@ -495,6 +486,9 @@ class MainWindow(QMainWindow):
     """
     Theme Functions:
     """
+
+    #TODO: Move all these to a Theme class.
+
     #=================================================================================
         
     def _is_dark(self, hex_color: str) -> bool:
@@ -616,7 +610,8 @@ class MainWindow(QMainWindow):
     Handler Functions:
     """
     #=================================================================================    
-        
+
+    #TODO: Move this function to Viewer class.   
     def _show_shortcuts_cheat_sheet(self) -> None:
         mb = QMessageBox(self)
         mb.setWindowTitle("Keyboard shortcuts")
@@ -638,6 +633,7 @@ class MainWindow(QMainWindow):
         )
         mb.exec()
 
+    #TODO: Move this function over to config_mgr
     def handle_change_path(self):
         """Opens dialog to update the configuration file path."""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -646,7 +642,7 @@ class MainWindow(QMainWindow):
         if file_path:
             self.config_mgr.filepath = file_path
             try:
-                self.config_mgr.load()
+                self.config_mgr.load(self)
                 self._update_path_label_text()
                 self._sync_detail_view()
                 QMessageBox.information(self, "Success", "Configuration File changed.")
@@ -654,6 +650,13 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.warning(self, "Load Warning", str(e))
 
+
+
+    #TODO: Move the following functions to a new class:
+    #DO THIS BEFORE MOVING MORE FUNCTIONS TO CONFIG_MGR
+    #---------------------------------------------------------
+    #THESE FUNCTIONS NEED TO BE MOVED TO A NEW VIEWER CLASS
+    #---------------------------------------------------------
     def handle_import_schedule(self):
         """
         Delegates JSON parsing to ConfigManager and updates the UI with the result.
@@ -736,7 +739,6 @@ class MainWindow(QMainWindow):
         nav_layout.addWidget(next_btn)
         layout.addLayout(nav_layout)
 
-    #TODO: Move more of this code to config_mgr with design patterns.
     def _refresh_schedule_display(self):
         """Updates the viewer text based on the current schedule index."""
         if not self.schedules: return
@@ -823,6 +825,11 @@ class MainWindow(QMainWindow):
                     item.setForeground(QBrush(QColor(255, 255, 255)))
                 self.calendar_view.setItem(r, c, item)
 
+    #---------------------------------------------------------
+    #End of functions that should be moved (see them above)
+    #---------------------------------------------------------
+
+    #TODO: Move this function to config_mgr
     def save_config_to_file(self):
         """'Save As' functionality for exporting the current config state."""
         p, _ = QFileDialog.getSaveFileName(self, "Save JSON", "", "*.json")
@@ -832,12 +839,18 @@ class MainWindow(QMainWindow):
             self._update_path_label_text()
             self._sync_detail_view()
 
+    #TODO: Move this function to Viewer class.
     def refresh_config_views_after_mutation(self) -> None:
         """Reload config from disk and refresh read-only views after AI (or other) tools wrote the file."""
         path = getattr(self.config_mgr, "filepath", None)
         if path and os.path.isfile(path):
-            self._load_config()
+            self.config_mgr.load(self)
         self._sync_detail_view()
+
+    #---------------------------------------------------------
+    #TODO: Move below ai functions to AI class if possible.
+    #TODO: Refactor AI class code.
+    #---------------------------------------------------------
 
     def _append_ai_chat(self, who: str, text: str) -> None:
         self.ai_chat_log.appendPlainText(f"{who}: {text}\n")
