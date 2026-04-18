@@ -20,95 +20,10 @@ from PyQt6.QtWidgets import (
     QSpinBox, QVBoxLayout, QWidget,
 )
 
-
-def _faculty_display_name(entry: Any) -> str:
-    if isinstance(entry, dict):
-        return str(entry.get("name", entry))
-    return str(entry)
+from app.ui_styles import SchedulerStyles
 
 
-# High-contrast form: white surface, black text (readable regardless of main window theme).
-_COURSE_FORM_STYLE = """
-QDialog {
-    background-color: #ffffff;
-    color: #000000;
-}
-QScrollArea {
-    background-color: #ffffff;
-    border: none;
-}
-QScrollArea > QWidget > QWidget {
-    background-color: #ffffff;
-}
-QLabel {
-    color: #000000;
-    background-color: transparent;
-}
-QGroupBox {
-    color: #000000;
-    background-color: #ffffff;
-    border: 2px solid #000000;
-    border-radius: 6px;
-    margin-top: 16px;
-    padding-top: 14px;
-    font-weight: 600;
-}
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 10px;
-    padding: 0 6px;
-    color: #000000;
-    background-color: #ffffff;
-}
-QListWidget {
-    background-color: #ffffff;
-    color: #000000;
-    border: 2px solid #000000;
-    border-radius: 4px;
-    outline: none;
-}
-QListWidget::item {
-    color: #000000;
-    padding: 4px;
-}
-QListWidget::item:selected {
-    background-color: #000000;
-    color: #ffffff;
-}
-QLineEdit, QSpinBox {
-    background-color: #ffffff;
-    color: #000000;
-    border: 2px solid #000000;
-    border-radius: 4px;
-    padding: 6px 8px;
-    selection-background-color: #000000;
-    selection-color: #ffffff;
-}
-QSpinBox::up-button, QSpinBox::down-button {
-    background-color: #f0f0f0;
-    border: 1px solid #000000;
-    width: 18px;
-}
-QDialogButtonBox QPushButton {
-    background-color: #ffffff;
-    color: #000000;
-    border: 2px solid #000000;
-    border-radius: 4px;
-    padding: 8px 18px;
-    font-weight: 600;
-    min-width: 80px;
-}
-QDialogButtonBox QPushButton:hover {
-    background-color: #f0f0f0;
-}
-QDialogButtonBox QPushButton:pressed {
-    background-color: #000000;
-    color: #ffffff;
-}
-"""
-
-
+#TODO: Clean up this class. It is way too long & redundant.
 class CourseFormDialog(QDialog):
     """Dialog for creating or editing a single course entry."""
 
@@ -179,9 +94,7 @@ class CourseFormDialog(QDialog):
         if course is not None:
             self._populate_from_course(course)
 
-        self.setStyleSheet(_COURSE_FORM_STYLE)
-        inner.setStyleSheet("background-color: #ffffff;")
-        scroll.viewport().setStyleSheet("background-color: #ffffff;")
+        SchedulerStyles.apply_high_contrast_shell(self, inner, scroll)
 
     def _preselected_from_course(self, course: Optional[Dict[str, Any]]) -> Dict[str, set]:
         if not course:
@@ -450,6 +363,15 @@ class CourseConfigManager:
         """Retrieve the list of courses from the config file."""
         return self.config_mgr.data["config"]["courses"]
 
+
+    #TODO: see next function todo.
+    def faculty_display_name(self, f: Any) -> str:
+        """Get display string for a faculty item (usually the 'name' key)."""
+        if isinstance(f, dict):
+            return str(f.get("name", "Unknown Faculty"))
+        return str(f)
+
+    #TODO: This function should only be written in one class. Fix that.
     def _get_pick_lists(self, exclude_course_id_for_conflicts: Optional[str] = None) -> Dict[str, List[str]]:
         """Provides lists for rooms, labs, & faculty for drop-down menus."""
         data = self.config_mgr.data["config"]
@@ -457,7 +379,7 @@ class CourseConfigManager:
         #Retrieve lists of rooms, labs, faculty for drop-down options.
         rooms = [str(r) for r in data["rooms"] if r is not None]
         labs = [str(l) for l in data["labs"] if l is not None]
-        faculty = [_faculty_display_name(f) for f in data["faculty"]]
+        faculty = [self.faculty_display_name(f) for f in data["faculty"]]
 
         #Filter out the current course ID.
         ex = (exclude_course_id_for_conflicts or "").strip()
