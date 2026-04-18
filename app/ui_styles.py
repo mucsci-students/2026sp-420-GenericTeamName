@@ -115,6 +115,11 @@ QDialogButtonBox QPushButton:pressed {
         scroll.viewport().setStyleSheet("background-color: #ffffff;")
 
     @classmethod
+    def apply_high_contrast_dialog_flat(cls, dialog: QDialog) -> None:
+        """Same modal styling for a single-column dialog with no outer QScrollArea."""
+        dialog.setStyleSheet(cls.high_contrast_modal_form())
+
+    @classmethod
     def main_window(
         cls,
         *,

@@ -24,7 +24,6 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QScrollArea,
-    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -46,8 +45,8 @@ class FacultyFormDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Faculty Details")
-        self.setMinimumWidth(400)
-        self.resize(420, 560)
+        self.setMinimumWidth(520)
+        self.resize(560, 680)
 
         self._pick_lists = pick_lists or {}
 
@@ -55,10 +54,19 @@ class FacultyFormDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         inner = QWidget()
-        inner.setFixedWidth(400)
-        inner.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        inner.setMinimumWidth(500)
+
+        main = QVBoxLayout(self)
+        main.setSpacing(0)
+        main.setContentsMargins(14, 14, 14, 14)
+        main.addWidget(scroll, 1)
+
+        form = QVBoxLayout(inner)
+        form.setSpacing(10)
+        form.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.name_edit = QLineEdit(inner)
         self.min_credit_edit = QLineEdit(inner)
@@ -85,10 +93,6 @@ class FacultyFormDialog(QDialog):
         self._room_extra: Optional[QLineEdit] = None
         self._lab_list: Optional[QListWidget] = None
         self._lab_extra: Optional[QLineEdit] = None
-
-        form = QVBoxLayout(inner)
-        form.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        form.setContentsMargins(4, 4, 8, 4)
 
         basics = QGroupBox("Basics", inner)
         bf = QFormLayout(basics)
@@ -138,17 +142,13 @@ class FacultyFormDialog(QDialog):
 
         scroll.setWidget(inner)
 
-        outer = QVBoxLayout(self)
-        outer.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        outer.addWidget(scroll, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-
         fac_buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
             parent=self,
         )
         fac_buttons.accepted.connect(self.on_accept)
         fac_buttons.rejected.connect(self.reject)
-        outer.addWidget(fac_buttons, 0, Qt.AlignmentFlag.AlignLeft)
+        main.addWidget(fac_buttons, 0, Qt.AlignmentFlag.AlignRight)
 
         if faculty is not None:
             self.populate_from_faculty(faculty)
@@ -168,8 +168,7 @@ class FacultyFormDialog(QDialog):
 
     def _make_day_checklist(self, selected: Set[str]) -> QListWidget:
         w = QListWidget()
-        w.setMinimumHeight(96)
-        w.setMaximumWidth(380)
+        w.setFixedHeight(100)
         sel = {d.strip().upper() for d in selected}
         for d in WEEKDAYS:
             it = QListWidgetItem(d)
@@ -193,13 +192,11 @@ class FacultyFormDialog(QDialog):
         lay.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         catalog = self._pick_lists.get(list_key) or []
 
-        extra = QLineEdit(box)
-        extra.setPlaceholderText(f"Additional {kind} preferences as name:weight, …")
-
         if catalog:
+            extra = QLineEdit(box)
+            extra.setPlaceholderText(f"Additional {kind} preferences as name:weight, …")
             lw = QListWidget(box)
-            lw.setMinimumHeight(min(120, 22 * min(len(catalog) + 1, 6)))
-            lw.setMaximumWidth(380)
+            lw.setFixedHeight(120)
             for x in sorted(catalog, key=str.casefold):
                 it = QListWidgetItem(x)
                 it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
