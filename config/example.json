@@ -225,24 +225,24 @@
                 "faculty": []
             },
             {
-                "course_id": "CMSC 380",
+                "course_id": "CMSC 3800",
                 "credits": 4,
                 "room": [
                     "Roddy 140"
                 ],
                 "lab": [
-                    "Mac",
-                    "Linux"
+                    "Linux",
+                    "Mac"
                 ],
                 "conflicts": [
-                    "CMSC 420",
                     "CMSC 453",
-                    "CMSC 476"
+                    "CMSC 476",
+                    "CMSC 420"
                 ],
                 "faculty": []
             },
             {
-                "course_id": "CMSC 420",
+                "course_id": "CMSC 421",
                 "credits": 4,
                 "room": [
                     "Roddy 140"
