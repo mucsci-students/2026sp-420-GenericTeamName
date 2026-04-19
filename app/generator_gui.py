@@ -77,7 +77,7 @@ class GenConfigManager:
             return False
 
         try:
-            config_mgr.load()
+            config_mgr.load(parent)
         except Exception as e:
             QMessageBox.critical(parent, "Config Error", f"Could not load config:\n{e}")
             return False

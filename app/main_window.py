@@ -110,6 +110,10 @@ class MainWindow(QMainWindow):
         #Bug fix to prevent "No Schedules" warning from popping up at wrong time.
         #See update_schedule_display
         self.clear_clicked = False
+
+        #Undo and redo
+        self.undo_stack = []
+        self.redo_stack = []
     #=================================================================================
     """
     UI Setup Functions:
@@ -318,6 +322,18 @@ class MainWindow(QMainWindow):
             "View configuration summary (F2)",
             QKeySequence("F2"),
         )
+        add_action(
+            "Undo",
+            self.undo,
+            "Undo last config change (Ctrl+Z)",
+            QKeySequence("Ctrl+Z"),
+        )
+        add_action(
+            "Redo",
+            self.redo,
+            "Redo last undone config change (Ctrl+Y)",
+            QKeySequence("Ctrl+Y"),
+        )
 
         send_act = QAction("Send assistant message", self)
         send_act.setShortcut(QKeySequence("Ctrl+Return"))
@@ -339,27 +355,28 @@ class MainWindow(QMainWindow):
             return b
 
         add_entries = [
-            ("Faculty…", lambda: self.faculty_manager.add_faculty_via_dialog(self)),
-            ("Course…", lambda: self.course_manager.add_course_via_dialog(self)),
-            ("Room…", lambda: self.room_manager.add_room_via_dialog(self)),
-            ("Lab…", lambda: self.lab_manager.add_lab_via_dialog(self)),
+            ("Faculty…", lambda: self.run_with_undo(lambda: self.faculty_manager.add_faculty_via_dialog(self))),
+            ("Course…", lambda: self.run_with_undo(lambda: self.course_manager.add_course_via_dialog(self))),
+            ("Room…", lambda: self.run_with_undo(lambda: self.room_manager.add_room_via_dialog(self))),
+            ("Lab…", lambda: self.run_with_undo(lambda: self.lab_manager.add_lab_via_dialog(self))),
         ]
-        tb.addWidget(_menu_btn("Add ▾", "Add faculty, course, room, or lab", add_entries))
 
         modify_entries = [
-            ("Faculty…", lambda: self.faculty_manager.modify_faculty_via_dialog(self)),
-            ("Course…", lambda: self.course_manager.modify_course_via_dialog(self)),
-            ("Room…", lambda: self.room_manager.modify_room_via_dialog(self)),
-            ("Lab…", lambda: self.lab_manager.modify_lab_via_dialog(self)),
+            ("Faculty…", lambda: self.run_with_undo(lambda: self.faculty_manager.modify_faculty_via_dialog(self))),
+            ("Course…", lambda: self.run_with_undo(lambda: self.course_manager.modify_course_via_dialog(self))),
+            ("Room…", lambda: self.run_with_undo(lambda: self.room_manager.modify_room_via_dialog(self))),
+            ("Lab…", lambda: self.run_with_undo(lambda: self.lab_manager.modify_lab_via_dialog(self))),
         ]
-        tb.addWidget(_menu_btn("Modify ▾", "Change an existing entry", modify_entries))
 
         delete_entries = [
-            ("Faculty…", lambda: self.faculty_manager.delete_faculty_via_dialog(self)),
-            ("Course…", lambda: self.course_manager.delete_course_via_dialog(self)),
-            ("Room…", lambda: self.room_manager.delete_room_via_dialog(self)),
-            ("Lab…", lambda: self.lab_manager.delete_lab_via_dialog(self)),
+            ("Faculty…", lambda: self.run_with_undo(lambda: self.faculty_manager.delete_faculty_via_dialog(self))),
+            ("Course…", lambda: self.run_with_undo(lambda: self.course_manager.delete_course_via_dialog(self))),
+            ("Room…", lambda: self.run_with_undo(lambda: self.room_manager.delete_room_via_dialog(self))),
+            ("Lab…", lambda: self.run_with_undo(lambda: self.lab_manager.delete_lab_via_dialog(self))),
         ]
+        
+        tb.addWidget(_menu_btn("Add ▾", "Add faculty, course, room, or lab", add_entries))
+        tb.addWidget(_menu_btn("Modify ▾", "Change an existing entry", modify_entries))
         tb.addWidget(_menu_btn("Delete ▾", "Remove an entry from the config", delete_entries))
 
     def init_menus(self):
@@ -407,6 +424,10 @@ class MainWindow(QMainWindow):
         self._bind_generator_commands(gen_menu)
         self._bind_viewer_commands(viewer_menu)
 
+        edit_menu.addSeparator()
+        edit_menu.addAction("Undo").triggered.connect(self.undo)
+        edit_menu.addAction("Redo").triggered.connect(self.redo)
+
     def _setup_theme_menu(self, menubar):
         """
         Configures the theme selection button in the corner of the menubar.
@@ -432,39 +453,39 @@ class MainWindow(QMainWindow):
     
     def _bind_faculty_commands(self, menu):
         """Binds faculty management operations."""
-        menu.addAction("Add Faculty").triggered.connect(lambda: self.faculty_manager.add_faculty_via_dialog(self))
-        menu.addAction("Modify Faculty").triggered.connect(lambda: self.faculty_manager.modify_faculty_via_dialog(self))
-        menu.addAction("Delete Faculty").triggered.connect(lambda: self.faculty_manager.delete_faculty_via_dialog(self))
+        menu.addAction("Add Faculty").triggered.connect(lambda: self.run_with_undo(lambda: self.faculty_manager.add_faculty_via_dialog(self)))
+        menu.addAction("Modify Faculty").triggered.connect(lambda: self.run_with_undo(lambda: self.faculty_manager.modify_faculty_via_dialog(self)))
+        menu.addAction("Delete Faculty").triggered.connect(lambda: self.run_with_undo(lambda: self.faculty_manager.delete_faculty_via_dialog(self)))
 
     def _bind_meeting_pattern_commands(self, menu):
         """Binds class meeting pattern operations."""
-        menu.addAction("Add Meeting Pattern").triggered.connect(lambda: self.meeting_pattern_editor.add_meeting_pattern(self))
-        menu.addAction("Modify Meeting Pattern").triggered.connect(lambda: self.meeting_pattern_editor.modify_meeting_pattern(self))
-        menu.addAction("Delete Meeting Pattern").triggered.connect(lambda: self.meeting_pattern_editor.delete_meeting_pattern(self))
+        menu.addAction("Add Meeting Pattern").triggered.connect(lambda: self.run_with_undo(lambda: self.meeting_pattern_editor.add_meeting_pattern(self)))
+        menu.addAction("Modify Meeting Pattern").triggered.connect(lambda: self.run_with_undo(lambda: self.meeting_pattern_editor.modify_meeting_pattern(self)))
+        menu.addAction("Delete Meeting Pattern").triggered.connect(lambda: self.run_with_und(lambda: self.meeting_pattern_editor.delete_meeting_pattern(self)))
 
     def _bind_timeslot_commands(self, menu):
         """Binds dummy timeslot operations."""
-        menu.addAction("Add Timeslot").triggered.connect(lambda: self.time_slot_editor.add_time_slot(self))
-        menu.addAction("Modify Timeslot").triggered.connect(lambda: self.time_slot_editor.modify_time_slot(self))
-        menu.addAction("Delete Timeslot").triggered.connect(lambda: self.time_slot_editor.delete_time_slot(self))
+        menu.addAction("Add Timeslot").triggered.connect(lambda: self.run_with_undo(lambda: self.time_slot_editor.add_time_slot(self)))
+        menu.addAction("Modify Timeslot").triggered.connect(lambda: self.run_with_undo(lambda: self.time_slot_editor.modify_time_slot(self)))
+        menu.addAction("Delete Timeslot").triggered.connect(lambda: self.run_with_undo(lambda: self.time_slot_editor.delete_time_slot(self)))
 
     def _bind_course_commands(self, menu):
         """Binds course management operations."""
-        menu.addAction("Add Courses").triggered.connect(lambda: self.course_manager.add_course_via_dialog(self))
-        menu.addAction("Modify Courses").triggered.connect(lambda: self.course_manager.modify_course_via_dialog(self))
-        menu.addAction("Delete Courses").triggered.connect(lambda: self.course_manager.delete_course_via_dialog(self))
+        menu.addAction("Add Courses").triggered.connect(lambda: self.run_with_undo(lambda: self.course_manager.add_course_via_dialog(self)))
+        menu.addAction("Modify Courses").triggered.connect(lambda: self.run_with_undo(lambda: self.course_manager.modify_course_via_dialog(self)))
+        menu.addAction("Delete Courses").triggered.connect(lambda: self.run_with_undo(lambda: self.course_manager.delete_course_via_dialog(self)))
 
     def _bind_room_commands(self, menu):
         """Binds room management operations."""
-        menu.addAction("Add Rooms").triggered.connect(lambda: self.room_manager.add_room_via_dialog(self))
-        menu.addAction("Modify Rooms").triggered.connect(lambda: self.room_manager.modify_room_via_dialog(self))
-        menu.addAction("Delete Rooms").triggered.connect(lambda: self.room_manager.delete_room_via_dialog(self))
+        menu.addAction("Add Rooms").triggered.connect(lambda: self.run_with_undo(lambda: self.room_manager.add_room_via_dialog(self)))
+        menu.addAction("Modify Rooms").triggered.connect(lambda: self.run_with_undo(lambda: self.room_manager.modify_room_via_dialog(self)))
+        menu.addAction("Delete Rooms").triggered.connect(lambda: self.run_with_undo(lambda: self.room_manager.delete_room_via_dialog(self)))
 
     def _bind_lab_commands(self, menu):
         """Binds lab management operations."""
-        menu.addAction("Add Labs").triggered.connect(lambda: self.lab_manager.add_lab_via_dialog(self))
-        menu.addAction("Modify Labs").triggered.connect(lambda: self.lab_manager.modify_lab_via_dialog(self))
-        menu.addAction("Delete Labs").triggered.connect(lambda: self.lab_manager.delete_lab_via_dialog(self))
+        menu.addAction("Add Labs").triggered.connect(lambda: self.run_with_undo(lambda: self.lab_manager.add_lab_via_dialog(self)))
+        menu.addAction("Modify Labs").triggered.connect(lambda: self.run_with_undo(lambda: self.lab_manager.modify_lab_via_dialog(self)))
+        menu.addAction("Delete Labs").triggered.connect(lambda: self.run_with_undo(lambda: self.lab_manager.delete_lab_via_dialog(self)))
 
     def _bind_generator_commands(self, menu):
         """Binds schedule generation operations."""
@@ -887,6 +908,8 @@ class MainWindow(QMainWindow):
         w.finished.connect(lambda worker=w: self._dispose_assistant_chat_worker(worker))
         w.start()
 
+    #Undo redo methods
+
     def _on_assistant_need_tools(self, tool_calls: list) -> None:
         results = []
         for tc in tool_calls:
@@ -917,3 +940,38 @@ class MainWindow(QMainWindow):
         self._append_ai_chat("Assistant", f"(Error) {err}")
         self.ai_send_btn.setEnabled(True)
         self.ai_input.setEnabled(True)
+
+    def run_with_undo(self, action):
+        before = copy.deepcopy(self.config_mgr.data)
+        action()
+        after = self.config_mgr.data
+
+        if after != before:
+            self.undo_stack.append(before)
+            self.redo_stack.clear()
+            self._sync_detail_view()
+            self._update_path_label_text()
+
+    def undo(self):
+        if not self.undo_stack:
+            QMessageBox.information(self, "Undo", "Nothing to undo.")
+            return
+
+        current = copy.deepcopy(self.config_mgr.data)
+        self.redo_stack.append(current)
+        self.config_mgr.data = self.undo_stack.pop()
+        self.config_mgr.save(self)
+        self._sync_detail_view()
+        self._update_path_label_text()
+
+    def redo(self):
+        if not self.redo_stack:
+            QMessageBox.information(self, "Redo", "Nothing to redo.")
+            return
+
+        current = copy.deepcopy(self.config_mgr.data)
+        self.undo_stack.append(current)
+        self.config_mgr.data = self.redo_stack.pop()
+        self.config_mgr.save(self)
+        self._sync_detail_view()
+        self._update_path_label_text()
