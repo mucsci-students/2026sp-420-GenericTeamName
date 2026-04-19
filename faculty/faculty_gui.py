@@ -1,6 +1,6 @@
 '''
     File: faculty_gui.py
-    Date: 04/17/2026
+    Date: 04/18/2026
     Author: Damion Crawford, Tyler Strohl, & Shane del Villar
     Class: CMSC 420
     Description: Faculty management dialogs and helpers for the GUI.
@@ -19,375 +19,252 @@ from PyQt6.QtWidgets import (
     QListWidgetItem, QMessageBox, QScrollArea, QSpinBox,
     QVBoxLayout, QWidget,
 )
-
 from app.ui_styles import SchedulerStyles
+DAYS = ("MON", "TUE", "WED", "THU", "FRI")
 
-WEEKDAYS = ("MON", "TUE", "WED", "THU", "FRI")
-
-#TODO: Clean up this class. It is way too long & redundant.
 class FacultyFormDialog(QDialog):
-    """Add/edit faculty with pick lists from config (like course form)."""
+    """Add/edit faculty with pick lists from config."""
 
     def __init__(
         self, parent: Optional[QWidget] = None,
         faculty: Optional[Dict[str, Any]] = None,
         pick_lists: Optional[Dict[str, List[str]]] = None,
     ) -> None:
-        
         super().__init__(parent)
-        self.setWindowTitle("Faculty Details")
-        self.setMinimumWidth(520)
-        self.resize(560, 680)
-
         self._pick_lists = pick_lists or {}
 
-        scroll = QScrollArea(self)
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setMinimumWidth(520)
+        self.resize(560, 680)
+        self._setup_containers()
+        self._init_form_widgets(faculty)
+        self._assemble_form_sections()
 
-        inner = QWidget()
-        inner.setMinimumWidth(500)
-
-        main = QVBoxLayout(self)
-        main.setSpacing(0)
-        main.setContentsMargins(14, 14, 14, 14)
-        main.addWidget(scroll, 1)
-
-        form = QVBoxLayout(inner)
-        form.setSpacing(10)
-        form.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        self.name_edit = QLineEdit(inner)
-        self.min_credit_edit = QLineEdit(inner)
-        self.max_credit_edit = QLineEdit(inner)
-        self.courses_taught_edit = QLineEdit(inner)
-
-        self._days_list = self._make_day_checklist(self._pre_days(faculty))
-
-        self._times_edit = QLineEdit(inner)
-        self._times_edit.setPlaceholderText(
-            "Comma-separated, one range per checked weekday in MON→FRI order (skip unchecked days)"
-        )
-
-        self.course_weight_spin = QSpinBox(inner)
-        self.course_weight_spin.setRange(1, 10)
-        self.room_weight_spin = QSpinBox(inner)
-        self.room_weight_spin.setRange(1, 10)
-        self.lab_weight_spin = QSpinBox(inner)
-        self.lab_weight_spin.setRange(1, 10)
-
-        self._course_list: Optional[QListWidget] = None
-        self._course_extra: Optional[QLineEdit] = None
-        self._room_list: Optional[QListWidget] = None
-        self._room_extra: Optional[QLineEdit] = None
-        self._lab_list: Optional[QListWidget] = None
-        self._lab_extra: Optional[QLineEdit] = None
-
-        basics = QGroupBox("Basics", inner)
-        bf = QFormLayout(basics)
-        bf.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        bf.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
-        bf.addRow("Faculty name:", self.name_edit)
-        bf.addRow("Minimum credits:", self.min_credit_edit)
-        bf.addRow("Maximum credits:", self.max_credit_edit)
-        bf.addRow("Unique course limit:", self.courses_taught_edit)
-        form.addWidget(basics)
-
-        avail = QGroupBox("Availability (weekdays)", inner)
-        av = QVBoxLayout(avail)
-        _lbl_days = QLabel("Tick days this faculty is available.")
-        _lbl_days.setWordWrap(True)
-        av.addWidget(_lbl_days)
-        av.addWidget(self._days_list)
-        _lbl_times = QLabel(
-            "Time ranges — one per checked day, MON→FRI order (e.g. MON & WED: 09:00-12:00, 14:00-17:00)."
-        )
-        _lbl_times.setWordWrap(True)
-        av.addWidget(_lbl_times)
-        av.addWidget(self._times_edit)
-        form.addWidget(avail)
-
-        form.addWidget(self._section_weighted_prefs(
-            "Course preferences",
-            inner,
-            "course_ids",
-            self.course_weight_spin,
-            "course",
-        ))
-        form.addWidget(self._section_weighted_prefs(
-            "Room preferences",
-            inner,
-            "rooms",
-            self.room_weight_spin,
-            "room",
-        ))
-        form.addWidget(self._section_weighted_prefs(
-            "Lab preferences",
-            inner,
-            "labs",
-            self.lab_weight_spin,
-            "lab",
-        ))
-
-        scroll.setWidget(inner)
-
-        fac_buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
-        fac_buttons.accepted.connect(self.on_accept)
-        fac_buttons.rejected.connect(self.reject)
-        main.addWidget(fac_buttons, 0, Qt.AlignmentFlag.AlignRight)
-
-        if faculty is not None:
+        self._add_button_box()
+        if faculty:
             self.populate_from_faculty(faculty)
+        
+        SchedulerStyles.apply_high_contrast_shell(self, self.inner, self.scroll)
 
-        SchedulerStyles.apply_high_contrast_shell(self, inner, scroll)
+    # --- UI SETUP METHODS ---
 
-    def _pre_days(self, faculty: Optional[Dict[str, Any]]) -> Set[str]:
-        if not faculty:
-            return set()
-        md = faculty.get("mandatory_days")
-        if isinstance(md, list) and md:
-            return {str(d).strip().upper() for d in md}
-        td = faculty.get("times") or {}
-        if isinstance(td, dict):
-            return {str(k).strip().upper() for k in td.keys() if k}
-        return set()
+    def _setup_containers(self):
+        """Builds the main scrollable skeleton."""
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(14, 14, 14, 14)
 
-    def _make_day_checklist(self, selected: Set[str]) -> QListWidget:
+        self.scroll = QScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        
+        self.inner = QWidget()
+        self.form_layout = QVBoxLayout(self.inner)
+        self.form_layout.setSpacing(10)
+        self.form_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        self.scroll.setWidget(self.inner)
+        self.main_layout.addWidget(self.scroll, 1)
+
+    def _init_form_widgets(self, faculty):
+        """Initializes raw input variables."""
+        self.name_edit, self.min_credit_edit, self.max_credit_edit, self.courses_taught_edit = [
+            QLineEdit(self.inner) for _ in range(4)]
+        self._days_list = self._create_day_selector(faculty)
+        self._times_edit = QLineEdit(self.inner)
+        self._times_edit.setPlaceholderText("MON→FRI order (e.g. 09:00-12:00, 13:00-15:00)")
+        
+        self.course_weight_spin, self.room_weight_spin, self.lab_weight_spin = [
+            QSpinBox(self.inner) for _ in range(3)]
+        for s in [self.course_weight_spin, self.room_weight_spin, self.lab_weight_spin]:
+            s.setRange(1, 10)
+
+        self._course_list = self._course_extra = self._room_list = \
+        self._room_extra = self._lab_list = self._lab_extra = None
+
+    def _assemble_form_sections(self):
+        """Groups widgets into visual sections."""
+        basics = QGroupBox("Basics", self.inner)
+        bf = QFormLayout(basics)
+        for label, widget in [("Name:", self.name_edit), ("Min credits:", self.min_credit_edit), 
+                              ("Max credits:", self.max_credit_edit), ("Limit:", self.courses_taught_edit)]:
+            bf.addRow(label, widget)
+        self.form_layout.addWidget(basics)
+
+        avail = QGroupBox("Availability", self.inner)
+        av = QVBoxLayout(avail)
+        for widget in [QLabel("Tick days:"), self._days_list, QLabel("Time ranges:"), self._times_edit]:
+            av.addWidget(widget)
+        self.form_layout.addWidget(avail)
+
+        prefs = [
+            ("Course preferences", "course_ids", self.course_weight_spin, "course"),
+            ("Room preferences", "rooms", self.room_weight_spin, "room"),
+            ("Lab preferences", "labs", self.lab_weight_spin, "lab")
+        ]
+        for title, key, spin, kind in prefs:
+            self.form_layout.addWidget(self._section_weighted_prefs(title, self.inner, key, spin, kind))
+
+
+    def _add_button_box(self):
+        bbox = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        bbox.accepted.connect(self.on_accept)
+        bbox.rejected.connect(self.reject)
+        self.main_layout.addWidget(bbox, 0, Qt.AlignmentFlag.AlignRight)
+
+    # --- DATA PROCESSING & HELPERS ---
+
+    def _create_day_selector(self, faculty: Optional[Dict[str, Any]]) -> QListWidget:
+        """Determines saved days and builds the checkbox list widget."""
+        selected = set()
+        if faculty:
+            md = faculty.get("mandatory_days") or []
+            td = faculty.get("times") or {}
+            source = md if isinstance(md, list) and md else td.keys()
+            selected = {str(d).strip().upper() for d in source if d}
+
         w = QListWidget()
         w.setFixedHeight(100)
-        sel = {d.strip().upper() for d in selected}
-        for d in WEEKDAYS:
+        for d in DAYS:
             it = QListWidgetItem(d)
             it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            it.setCheckState(
-                Qt.CheckState.Checked if d in sel else Qt.CheckState.Unchecked
-            )
+            it.setCheckState(Qt.CheckState.Checked if d in selected else Qt.CheckState.Unchecked)
             w.addItem(it)
         return w
 
-    def _section_weighted_prefs(
-        self,
-        title: str,
-        parent: QWidget,
-        list_key: str,
-        weight_spin: QSpinBox,
-        kind: str,
-    ) -> QGroupBox:
+    def _checked_days(self) -> List[str]:
+        """Track all days user checks."""
+        checked = {
+            self._days_list.item(i).text() 
+            for i in range(self._days_list.count()) 
+            if self._days_list.item(i).checkState() == Qt.CheckState.Checked
+        }
+        return [d for d in DAYS if d in checked]
+
+    def _populate_weighted_prefs(self, prefs: Any, checklist: Optional[QListWidget], 
+                                 extra_edit: Optional[QLineEdit], spin: QSpinBox, catalog_key: str) -> None:
+        """Hydrates a preference section with saved weights and checkmarks."""
+        if not isinstance(prefs, dict) or not prefs: return
+        
+        catalog = set(self._pick_lists.get(catalog_key) or [])
+        weights = [int(v) for v in prefs.values()]
+        if weights:
+            spin.setValue(weights[0])
+            same = all(v == weights[0] for v in weights)
+        else: same = True
+
+        if checklist:
+            for i in range(checklist.count()):
+                it = checklist.item(i)
+                it.setCheckState(Qt.CheckState.Checked if it.text() in prefs else Qt.CheckState.Unchecked)
+
+            extras = [f"{k}:{v}" for k, v in prefs.items() if k not in catalog or (not same and int(v) != spin.value())]
+            if extras and extra_edit: extra_edit.setText(", ".join(extras))
+        elif extra_edit:
+            extra_edit.setText(", ".join(f"{k}:{v}" for k, v in prefs.items()))
+
+    def _section_weighted_prefs(self, title, parent, list_key, weight_spin, kind) -> QGroupBox:
+        """Generates a weighted preference section and maps UI references to the class."""
         box = QGroupBox(title, parent)
         lay = QVBoxLayout(box)
-        lay.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         catalog = self._pick_lists.get(list_key) or []
+        extra = QLineEdit(box)
+        lw = None
 
         if catalog:
-            extra = QLineEdit(box)
-            extra.setPlaceholderText(f"Additional {kind} preferences as name:weight, …")
-            lw = QListWidget(box)
-            lw.setFixedHeight(120)
+            lw = QListWidget(box); lw.setFixedHeight(120)
             for x in sorted(catalog, key=str.casefold):
-                it = QListWidgetItem(x)
-                it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                it.setCheckState(Qt.CheckState.Unchecked)
-                lw.addItem(it)
-            if kind == "course":
-                self._course_list = lw
-                self._course_extra = extra
-            elif kind == "room":
-                self._room_list = lw
-                self._room_extra = extra
-            else:
-                self._lab_list = lw
-                self._lab_extra = extra
-            kind_plural = {"course": "courses", "room": "rooms", "lab": "labs"}[kind]
-            _h = QLabel(
-                f"Tick {kind_plural} from your config; default weight applies to checked rows."
-            )
-            _h.setWordWrap(True)
-            lay.addWidget(_h)
-            lay.addWidget(lw)
-            lay.addWidget(QLabel("Additional (comma-separated, name:weight):"))
-            lay.addWidget(extra)
-        else:
-            fallback = QLineEdit(box)
-            fallback.setPlaceholderText(f"No {kind}s in config — enter as name:weight, …")
-            if kind == "course":
-                self._course_extra = fallback
-            elif kind == "room":
-                self._room_extra = fallback
-            else:
-                self._lab_extra = fallback
-            lay.addWidget(
-                QLabel(f"No {kind}s listed in config — enter preferences manually.")
-            )
-            lay.addWidget(fallback)
+                it = QListWidgetItem(x); it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                it.setCheckState(Qt.CheckState.Unchecked); lw.addItem(it)
+            lay.addWidget(QLabel(f"Tick {kind}s from config:")); lay.addWidget(lw)
+        
+        setattr(self, f"_{kind}_list", lw)
+        setattr(self, f"_{kind}_extra", extra)
 
-        wlabel = "Default preference weight:"
-        lay.addWidget(QLabel(wlabel))
-        lay.addWidget(weight_spin)
+        for lbl in ["Additional (name:weight, ...):", extra, "Default weight:", weight_spin]:
+            lay.addWidget(lbl if isinstance(lbl, QWidget) else QLabel(lbl))
         return box
 
     def populate_from_faculty(self, faculty: Dict[str, Any]) -> None:
-        self.name_edit.setText(str(faculty.get("name") or ""))
-        self.min_credit_edit.setText(str(faculty.get("minimum_credits") or 0))
-        self.max_credit_edit.setText(str(faculty.get("maximum_credits") or 0))
-        self.courses_taught_edit.setText(str(faculty.get("unique_course_limit") or 0))
+        """Populate UI from faculty dictionary."""
+        fields = {"name": self.name_edit, "minimum_credits": self.min_credit_edit,
+                "maximum_credits": self.max_credit_edit, "unique_course_limit": self.courses_taught_edit}
+        for key, widget in fields.items():
+            widget.setText(str(faculty.get(key) or (0 if "credits" in key or "limit" in key else "")))
 
-        times_dict = faculty.get("times", {}) or {}
-        parts: List[str] = []
-        for d in WEEKDAYS:
-            if d in times_dict and times_dict[d]:
-                parts.append(str(times_dict[d][0]))
+        td = faculty.get("times", {}) or {}
+        parts = [str(td[d][0]) for d in DAYS if d in td and td[d]]
         self._times_edit.setText(", ".join(parts))
 
-        cp = faculty.get("course_preferences") or {}
-        rp = faculty.get("room_preferences") or {}
-        lp = faculty.get("lab_preferences") or {}
-
-        self._populate_weighted_prefs(cp, self._course_list, self._course_extra, self.course_weight_spin, "course_ids")
-        self._populate_weighted_prefs(rp, self._room_list, self._room_extra, self.room_weight_spin, "rooms")
-        self._populate_weighted_prefs(lp, self._lab_list, self._lab_extra, self.lab_weight_spin, "labs")
-
-    def _populate_weighted_prefs(
-        self,
-        prefs: Any,
-        checklist: Optional[QListWidget],
-        extra_or_fallback: Optional[QLineEdit],
-        spin: QSpinBox,
-        catalog_key: str,
-    ) -> None:
-        if not isinstance(prefs, dict) or not prefs:
-            return
-        catalog = set(self._pick_lists.get(catalog_key) or [])
-        weights = list(prefs.values())
-        if weights:
-            w0 = int(weights[0])
-            spin.setValue(w0)
-            same = all(int(v) == w0 for v in weights)
-        else:
-            same = True
-
-        if checklist is not None:
-            for i in range(checklist.count()):
-                it = checklist.item(i)
-                name = it.text()
-                if name in prefs:
-                    it.setCheckState(Qt.CheckState.Checked)
-            extra_parts: List[str] = []
-            for k, v in prefs.items():
-                if k not in catalog:
-                    extra_parts.append(f"{k}:{v}")
-                elif not same and int(v) != spin.value():
-                    extra_parts.append(f"{k}:{v}")
-            if extra_parts and extra_or_fallback is not None:
-                extra_or_fallback.setText(", ".join(extra_parts))
-        else:
-            if extra_or_fallback is not None:
-                extra_or_fallback.setText(
-                    ", ".join(f"{k}:{v}" for k, v in prefs.items())
-                )
-
-    def on_accept(self) -> None:
-        if not self.name_edit.text().strip():
-            QMessageBox.warning(self, "Missing data", "Name is required.")
-            return
-        if not self.min_credit_edit.text().strip():
-            QMessageBox.warning(self, "Missing data", "Minimum credits are required.")
-            return
-        if not self.max_credit_edit.text().strip():
-            QMessageBox.warning(self, "Missing data", "Maximum credits are required.")
-            return
-        if not self.courses_taught_edit.text().strip():
-            QMessageBox.warning(self, "Missing data", "Number of courses taught is required.")
-            return
-        checked_days = self._checked_weekdays()
-        if not checked_days:
-            QMessageBox.warning(self, "Missing data", "Select at least one weekday.")
-            return
-        times_parts = self.parse_csv_field(self._times_edit.text())
-        if len(times_parts) < len(checked_days):
-            QMessageBox.warning(
-                self,
-                "Missing data",
-                "Enter a time range for each checked weekday (comma-separated, same order as MON→FRI).",
+        prefs_map = {"course": "course_ids", "room": "rooms", "lab": "labs"}
+        for kind, cat_key in prefs_map.items():
+            self._populate_weighted_prefs(
+                faculty.get(f"{kind}_preferences", {}),
+                getattr(self, f"_{kind}_list"), 
+                getattr(self, f"_{kind}_extra"),
+                getattr(self, f"{kind}_weight_spin"), 
+                cat_key
             )
-            return
-        self.accept()
+    def _merge_weighted(self, checklist, extra_input, spin) -> Dict[str, int]:
+        """Merges GUI selections and manual text inputs into a JSON-ready dictionary."""
+        default_w = spin.value()
+        result = {}
 
-    def parse_csv_field(self, text: str) -> List[str]:
-        parts = [p.strip() for p in text.split(",")]
-        return [p for p in parts if p]
-
-    def parse_weighted_csv(self, text: str, default_weight: int) -> Dict[str, int]:
-        result: Dict[str, int] = {}
-        parts = [p.strip() for p in text.split(",") if p.strip()]
-        for part in parts:
-            if ":" in part:
-                name_part, weight_part = part.rsplit(":", 1)
-                try:
-                    result[name_part.strip()] = int(weight_part.strip())
-                except ValueError:
-                    result[name_part.strip()] = default_weight
-            else:
-                result[part] = default_weight
-        return result
-
-    def _checked_weekdays(self) -> List[str]:
-        checked: Set[str] = set()
-        for i in range(self._days_list.count()):
-            it = self._days_list.item(i)
-            if it.checkState() == Qt.CheckState.Checked:
-                checked.add(it.text())
-        return [d for d in WEEKDAYS if d in checked]
-
-    def _merge_weighted(
-        self,
-        checklist: Optional[QListWidget],
-        extra_fallback: Optional[QLineEdit],
-        spin: QSpinBox,
-    ) -> Dict[str, int]:
-        d: Dict[str, int] = {}
-        if checklist is not None:
+        if checklist:
             for i in range(checklist.count()):
                 it = checklist.item(i)
                 if it.checkState() == Qt.CheckState.Checked:
-                    d[it.text()] = spin.value()
-            if extra_fallback is not None:
-                d.update(self.parse_weighted_csv(extra_fallback.text(), spin.value()))
-        else:
-            if extra_fallback is not None:
-                d = self.parse_weighted_csv(extra_fallback.text(), spin.value())
-        return d
+                    result[it.text()] = default_w
+
+        if extra_input and extra_input.text().strip():
+            for entry in extra_input.text().split(","):
+                if ":" in entry:
+                    name, weight = entry.rsplit(":", 1)
+                    try:
+                        result[name.strip()] = int(weight.strip())
+                    except ValueError:
+                        result[name.strip()] = default_w
+                elif entry.strip():
+                    result[entry.strip()] = default_w
+                    
+        return result
 
     def get_faculty_data(self) -> Dict[str, Any]:
-        checked_days = self._checked_weekdays()
-        time_list = self.parse_csv_field(self._times_edit.text())
-        times_dict: Dict[str, List[str]] = {}
-        for idx, day in enumerate(checked_days):
-            slot = [time_list[idx]] if idx < len(time_list) else []
-            times_dict[day] = slot
-
+        checked_days = self._checked_days()
+        time_list = [p.strip() for p in self._times_edit.text().split(",") if p.strip()]
         return {
             "name": self.name_edit.text().strip(),
-            "maximum_credits": int(self.max_credit_edit.text().strip() or 0),
-            "minimum_credits": int(self.min_credit_edit.text().strip() or 0),
-            "unique_course_limit": int(self.courses_taught_edit.text().strip() or 0),
-            "maximum_days": len(checked_days),
+            "maximum_credits": int(self.max_credit_edit.text() or 0),
+            "minimum_credits": int(self.min_credit_edit.text() or 0),
+            "unique_course_limit": int(self.courses_taught_edit.text() or 0),
             "mandatory_days": checked_days,
-            "times": times_dict,
-            "course_preferences": self._merge_weighted(
-                self._course_list, self._course_extra, self.course_weight_spin
-            ),
-            "room_preferences": self._merge_weighted(
-                self._room_list, self._room_extra, self.room_weight_spin
-            ),
-            "lab_preferences": self._merge_weighted(
-                self._lab_list, self._lab_extra, self.lab_weight_spin
-            ),
+            "times": {d: [time_list[i]] if i < len(time_list) else [] for i, d in enumerate(checked_days)},
+            "course_preferences": self._merge_weighted(self._course_list, self._course_extra, self.course_weight_spin),
+            "room_preferences": self._merge_weighted(self._room_list, self._room_extra, self.room_weight_spin),
+            "lab_preferences": self._merge_weighted(self._lab_list, self._lab_extra, self.lab_weight_spin),
         }
+
+    def on_accept(self) -> None:
+        """Checks all input requirements."""
+        
+        #Gather all the conditions
+        has_name = bool(self.name_edit.text().strip())
+        has_credits = bool(self.min_credit_edit.text().strip() and self.max_credit_edit.text().strip())
+        has_limit = bool(self.courses_taught_edit.text().strip())
+        
+        checked_days = self._checked_days()
+        time_parts = [p.strip() for p in self._times_edit.text().split(",") if p.strip()]
+        has_availability = len(checked_days) > 0 and len(time_parts) >= len(checked_days)
+
+        #Bulk check
+        if not (has_name and has_credits and has_limit and has_availability):
+            QMessageBox.warning(
+                self, 
+                "Missing Information", 
+                "Please ensure all basic fields are filled and you have provided "
+                "a time range for every checked weekday."
+            )
+            return
+
+        self.accept()
 
 
 class FacultyManager:
@@ -402,43 +279,13 @@ class FacultyManager:
         -Factory
         -Template Logic
     """
-    def __init__(self, config_mgr):
+    def __init__(self, config_mgr, viewer_mgr):
         self.config_mgr = config_mgr
+        self.viewer_mgr = viewer_mgr
 
     def _get_faculty_list(self) -> List[Dict[str, Any]]:
         """Retrieve the list of faculty from the config file."""
         return self.config_mgr.data["config"]["faculty"]
-
-    #TODO: This function should only be written in one class. Fix that.
-    def _get_pick_lists(self, exclude_course_id_for_conflicts: Optional[str] = None) -> Dict[str, List[str]]:
-        """Provides lists for rooms, labs, & faculty for drop-down menus."""
-        data = self.config_mgr.data["config"]
-        
-        #Retrieve lists of rooms, labs, faculty for drop-down options.
-        rooms = [str(r) for r in data["rooms"] if r is not None]
-        labs = [str(l) for l in data["labs"] if l is not None]
-        faculty = [self.faculty_display_name(f) for f in data["faculty"]]
-
-        #Filter out the current course ID.
-        ex = (exclude_course_id_for_conflicts or "").strip()
-        course_ids = [
-            str(c["course_id"]).strip() 
-            for c in data["courses"] 
-            if isinstance(c, dict) and str(c.get("course_id", "")).strip() != ex
-        ]
-
-        return {
-            "rooms": sorted(set(rooms), key=str.casefold),
-            "labs": sorted(set(labs), key=str.casefold),
-            "faculty": sorted(set(faculty), key=str.casefold),
-            "conflict_course_ids": sorted(set(course_ids), key=str.casefold),
-        }
-
-    def faculty_display_name(self, f: Any) -> str:
-        """Get display string for a faculty item (usually the 'name' key)."""
-        if isinstance(f, dict):
-            return str(f.get("name", "Unknown Faculty"))
-        return str(f)
         
     def select_faculty(self, parent: QWidget) -> Tuple[Optional[int], Optional[str]]:
         """Retrieves a specific faculty from list of faculty."""
@@ -449,7 +296,7 @@ class FacultyManager:
             return None, None
 
         # labels is for the selection dropdown
-        labels = [self.faculty_display_name(f) for f in faculty_list]
+        labels = [str(f.get("name", "Unknown Faculty")) for f in faculty_list]
 
         item, ok = QInputDialog.getItem(
             parent, "Select Faculty", "Faculty:", labels, 0, False
@@ -466,9 +313,12 @@ class FacultyManager:
             QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
         
-        pick = self._get_pick_lists()
+        # Pass None explicitly to ensure no filtering happens
+        pick = self.viewer_mgr._get_pick_lists(exclude_course_id_for_conflicts=None)
+
         dialog = FacultyFormDialog(parent, faculty=None, pick_lists=pick)
-        
+        dialog.setWindowTitle("Add Faculty")
+
         if dialog.exec() == QDialog.DialogCode.Accepted:
             faculty_data = dialog.get_faculty_data()
             faculty_list = self._get_faculty_list()      
@@ -488,8 +338,9 @@ class FacultyManager:
         faculty_list = self._get_faculty_list()     
         existing_data = faculty_list[index]
 
-        pick = self._get_pick_lists()
+        pick = self.viewer_mgr._get_pick_lists(exclude_course_id_for_conflicts=None)
         dialog = FacultyFormDialog(parent, faculty=existing_data, pick_lists=pick)
+        dialog.setWindowTitle("Modify Faculty")
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
             updated = dialog.get_faculty_data()

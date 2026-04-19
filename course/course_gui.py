@@ -356,45 +356,13 @@ class CourseConfigManager:
         -Template Logic
     """
 
-    def __init__(self, config_mgr):
+    def __init__(self, config_mgr, viewer_mgr):
         self.config_mgr = config_mgr
+        self.viewer_mgr = viewer_mgr
 
     def _get_courses_list(self) -> List[Dict[str, Any]]:
         """Retrieve the list of courses from the config file."""
         return self.config_mgr.data["config"]["courses"]
-
-
-    #TODO: see next function todo.
-    def faculty_display_name(self, f: Any) -> str:
-        """Get display string for a faculty item (usually the 'name' key)."""
-        if isinstance(f, dict):
-            return str(f.get("name", "Unknown Faculty"))
-        return str(f)
-
-    #TODO: This function should only be written in one class. Fix that.
-    def _get_pick_lists(self, exclude_course_id_for_conflicts: Optional[str] = None) -> Dict[str, List[str]]:
-        """Provides lists for rooms, labs, & faculty for drop-down menus."""
-        data = self.config_mgr.data["config"]
-        
-        #Retrieve lists of rooms, labs, faculty for drop-down options.
-        rooms = [str(r) for r in data["rooms"] if r is not None]
-        labs = [str(l) for l in data["labs"] if l is not None]
-        faculty = [self.faculty_display_name(f) for f in data["faculty"]]
-
-        #Filter out the current course ID.
-        ex = (exclude_course_id_for_conflicts or "").strip()
-        course_ids = [
-            str(c["course_id"]).strip() 
-            for c in data["courses"] 
-            if isinstance(c, dict) and str(c.get("course_id", "")).strip() != ex
-        ]
-
-        return {
-            "rooms": sorted(set(rooms), key=str.casefold),
-            "labs": sorted(set(labs), key=str.casefold),
-            "faculty": sorted(set(faculty), key=str.casefold),
-            "conflict_course_ids": sorted(set(course_ids), key=str.casefold),
-        }
 
     def _select_course(self, parent: QWidget) -> Tuple[Optional[int], Optional[Dict[str, Any]]]:
         """Retrieves a specific course from list of courses."""
@@ -425,7 +393,7 @@ class CourseConfigManager:
             QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
         
-        pick = self._get_pick_lists(exclude_course_id_for_conflicts=None)
+        pick = self.viewer_mgr._get_pick_lists(exclude_course_id_for_conflicts=None)
         dialog = CourseFormDialog(parent, course=None, pick_lists=pick)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -445,7 +413,7 @@ class CourseConfigManager:
         if index is None or existing is None:
             return
         cid = str(existing.get("course_id", "")).strip()
-        pick = self._get_pick_lists(exclude_course_id_for_conflicts=cid)
+        pick = self.viewer_mgr._get_pick_lists(exclude_course_id_for_conflicts=None)
         dialog = CourseFormDialog(
             parent,
             existing,
