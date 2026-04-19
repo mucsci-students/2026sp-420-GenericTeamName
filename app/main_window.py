@@ -95,6 +95,8 @@ class MainWindow(QMainWindow):
         self.schedules = []
         self.current_schedule_index = 0
         self.imported_schedule = None
+        self._assistant_config_undo_stack: list = []
+        self._assistant_config_redo_stack: list = []
 
         #AI Chatbot Setup
         self.assistant_messages: list = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -846,6 +848,48 @@ class MainWindow(QMainWindow):
         if path and os.path.isfile(path):
             self.config_mgr.load(self)
         self._sync_detail_view()
+
+    def assistant_push_config_undo_snapshot(self) -> None:
+        """Remember config state before an assistant tool changes config_mgr.data (same file path)."""
+        path = getattr(self.config_mgr, "filepath", None)
+        if not path:
+            return
+        self._assistant_config_redo_stack.clear()
+        self._assistant_config_undo_stack.append(copy.deepcopy(self.config_mgr.data))
+        if len(self._assistant_config_undo_stack) > 40:
+            self._assistant_config_undo_stack.pop(0)
+
+    def assistant_undo_config_change(self) -> bool:
+        """Restore configuration to before the last assistant-driven change (writes the active JSON file)."""
+        if not self._assistant_config_undo_stack:
+            return False
+        path = getattr(self.config_mgr, "filepath", None)
+        self._assistant_config_redo_stack.append(copy.deepcopy(self.config_mgr.data))
+        self.config_mgr.data = self._assistant_config_undo_stack.pop()
+        if path:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(self.config_mgr.data, f, indent=4)
+            except OSError:
+                return False
+        self._sync_detail_view()
+        return True
+
+    def assistant_redo_config_change(self) -> bool:
+        """Re-apply configuration after undo (writes the active JSON file)."""
+        if not self._assistant_config_redo_stack:
+            return False
+        path = getattr(self.config_mgr, "filepath", None)
+        self._assistant_config_undo_stack.append(copy.deepcopy(self.config_mgr.data))
+        self.config_mgr.data = self._assistant_config_redo_stack.pop()
+        if path:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(self.config_mgr.data, f, indent=4)
+            except OSError:
+                return False
+        self._sync_detail_view()
+        return True
 
     #---------------------------------------------------------
     #TODO: Move below ai functions to AI class if possible.

@@ -35,7 +35,9 @@ Generator: start schedule generation (progress dialog).
 Schedules in memory: use get_schedule_session_info; set_current_schedule_index to choose which generated/imported schedule is "current";
 get_current_schedule_display_text to read the tabular view as text; open_schedule_viewer opens the same Schedule Viewer window as the menu
 (mode: all, faculty, room, lab); export_current_schedule_to_csv writes the current schedule to a path (no file picker);
+export_all_schedules_to_pdf and export_all_schedules_to_json write every loaded schedule option to a path (no dialogs).
 import_schedule_from_file loads CSV or JSON into the schedule list.
+undo_configuration_change / redo_configuration_change step through a small stack of configuration snapshots from assistant-driven edits (reload from disk, course updates/deletes, etc.); they do not undo manual GUI edits outside the assistant.
 Summary: get_config_summary_text returns the table summary as text; show_config_summary_dialog opens the menu's summary message box.
 Timeslots: config.time_slots (per weekday blocks: start_time, end_time, spacing_minutes, generated slots). list_timeslots; add_timeslot_block; update_timeslot_block; remove_timeslot_block; set_timeslot_day_enabled. Syncs to time_slot_config.times for the scheduler.
 Class meeting patterns: config.meeting_patterns (credits, meetings with day/duration/lab, optional start_time, disabled). list_meeting_patterns; add_meeting_pattern; update_meeting_pattern; delete_meeting_pattern. Syncs to time_slot_config.classes.
@@ -55,9 +57,13 @@ _SKIP_ACTIVE_CONFIG_PATH = frozenset(
         "open_schedule_viewer",
         "open_native_gui",
         "export_current_schedule_to_csv",
+        "export_all_schedules_to_pdf",
+        "export_all_schedules_to_json",
         "import_schedule_from_file",
         "get_config_summary_text",
         "show_config_summary_dialog",
+        "undo_configuration_change",
+        "redo_configuration_change",
     }
 )
 
@@ -724,6 +730,65 @@ def get_tool_schemas() -> List[Dict[str, Any]]:
         {
             "type": "function",
             "function": {
+                "name": "export_all_schedules_to_pdf",
+                "description": (
+                    "Export all loaded schedule options (same as Viewer Export Schedules PDF) to an absolute path; "
+                    "no file dialog."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pdf_path": {
+                            "type": "string",
+                            "description": "Destination .pdf path (e.g. /tmp/schedules.pdf)",
+                        }
+                    },
+                    "required": ["pdf_path"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "export_all_schedules_to_json",
+                "description": (
+                    "Export all loaded schedule options to one JSON file (same grid format as the menu export); "
+                    "no file dialog."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "json_path": {
+                            "type": "string",
+                            "description": "Destination .json path",
+                        }
+                    },
+                    "required": ["json_path"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "undo_configuration_change",
+                "description": (
+                    "Undo the last assistant-driven configuration change (reload, silent course save, etc.). "
+                    "Does not affect schedule memory (generated/imported schedules)."
+                ),
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "redo_configuration_change",
+                "description": "Redo after undo_configuration_change.",
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "open_native_gui",
                 "description": (
                     "Open the same interactive dialogs as the menu bar (file pickers, add/modify forms, generator limit/optimize prompts, "
@@ -803,6 +868,10 @@ def _execute_tool_impl(main_window: Any, name: str, arguments: Dict[str, Any]) -
         "reload_config_from_disk": lambda: _handle_reload(main_window, cm, ok),
         "save_config_to_disk": lambda: (_write_config_silent(main_window), ok(f"Saved to {cm.filepath}."))[1],
         "open_native_gui": lambda: _handle_native_gui(main_window, arguments, ok),
+        "export_all_schedules_to_pdf": lambda: _export_all_schedules_pdf(main_window, arguments, ok),
+        "export_all_schedules_to_json": lambda: _export_all_schedules_json(main_window, arguments, ok),
+        "undo_configuration_change": lambda: _assistant_undo(main_window, ok),
+        "redo_configuration_change": lambda: _assistant_redo(main_window, ok),
     }
 
     if name in handlers:
@@ -822,9 +891,67 @@ def _handle_get_json(cm, ok_fn):
     return ok_fn("JSON.", json=raw if len(raw) <= 80000 else raw[:80000] + "... [truncated]")
 
 def _handle_reload(mw, cm, ok_fn):
-    cm.load()
-    if hasattr(mw, "mid_panel"): mw.mid_panel.update_title(cm.filepath)
-    return ok_fn("Reloaded.")
+    mw.assistant_push_config_undo_snapshot()
+    loaded = cm.load(mw)
+    if loaded is None:
+        return json.dumps(
+            {"ok": False, "error": "Failed to reload config (missing file or invalid JSON)."}
+        )
+    if hasattr(mw, "mid_panel"):
+        mw.mid_panel.update_title(cm.filepath)
+    mw._sync_detail_view()
+    return ok_fn("Reloaded from disk.")
+
+
+def _export_all_schedules_pdf(mw, args: Dict[str, Any], ok_fn):
+    path = str(args.get("pdf_path", "")).strip()
+    if not path:
+        return json.dumps({"ok": False, "error": "pdf_path is required."})
+    path = os.path.abspath(os.path.expanduser(path))
+    if not path.lower().endswith(".pdf"):
+        path = path + ".pdf"
+    schedules = getattr(mw, "schedules", []) or []
+    if not schedules:
+        return json.dumps({"ok": False, "error": "No schedules loaded."})
+    try:
+        mw.config_mgr._write_schedules_pdf(path, schedules)
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)})
+    return ok_fn(f"Exported {len(schedules)} schedule option(s) to PDF.", path=path)
+
+
+def _export_all_schedules_json(mw, args: Dict[str, Any], ok_fn):
+    path = str(args.get("json_path", "")).strip()
+    if not path:
+        return json.dumps({"ok": False, "error": "json_path is required."})
+    path = os.path.abspath(os.path.expanduser(path))
+    if not path.lower().endswith(".json"):
+        path = path + ".json"
+    schedules = getattr(mw, "schedules", []) or []
+    if not schedules:
+        return json.dumps({"ok": False, "error": "No schedules loaded."})
+    try:
+        mw.config_mgr.write_schedules_json_file(path, schedules)
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)})
+    return ok_fn(f"Exported {len(schedules)} schedule option(s) to JSON.", path=path)
+
+
+def _assistant_undo(mw, ok_fn):
+    if not mw.assistant_undo_config_change():
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "Nothing to undo (stack holds assistant-driven config changes only).",
+            }
+        )
+    return ok_fn("Undid the last assistant configuration change.")
+
+
+def _assistant_redo(mw, ok_fn):
+    if not mw.assistant_redo_config_change():
+        return json.dumps({"ok": False, "error": "Nothing to redo."})
+    return ok_fn("Redid the last undone configuration change.")
 
 def _handle_native_gui(mw, args, ok_fn):
     action = str(args["action"])
@@ -848,6 +975,7 @@ def _execute_crud_operations(mw, name, args, ok):
     courses = cfg.get("courses", [])
 
     if name == "update_course":
+        mw.assistant_push_config_undo_snapshot()
         cid = str(args["course_id"])
         for c in courses:
             if isinstance(c, dict) and str(c.get("course_id")) == cid:
@@ -858,6 +986,7 @@ def _execute_crud_operations(mw, name, args, ok):
         return json.dumps({"ok": False, "error": f"Course {cid} not found."})
 
     if name == "delete_course":
+        mw.assistant_push_config_undo_snapshot()
         cid = str(args["course_id"])
         for i, c in enumerate(courses):
             if isinstance(c, dict) and str(c.get("course_id")) == cid:

@@ -4,11 +4,13 @@
     Author: Kyle Smith, Shane del Villar, Chayse Altland, & Tyler Strohl
     Class: CMSC 420
     Description: Implements saving, loading and displaying a config for the scheduler.
-    Implements displaying the schedule in a tabulated format and saving as a JSON.
+    Implements displaying the schedule in a tabulated format and saving as JSON or PDF.
 '''
 
 import json
 import os
+
+from fpdf import FPDF
 from PyQt6.QtWidgets import QMessageBox, QWidget, QFileDialog
 
 class ConfigManager:
@@ -173,59 +175,165 @@ class ConfigManager:
 
         lines.append(divider)
         return "\n".join(lines)
-        
+
+    @staticmethod
+    def _export_format_from_path_and_filter(file_path: str, selected_filter: str) -> str:
+        """Return 'json' or 'pdf' from extension, else from the dialog filter."""
+        lower = file_path.lower()
+        if lower.endswith(".pdf"):
+            return "pdf"
+        if lower.endswith(".json"):
+            return "json"
+        sf = (selected_filter or "").upper()
+        if "PDF" in sf and "JSON" not in sf:
+            return "pdf"
+        return "json"
+
+    @staticmethod
+    def _trim_schedule_grid_for_export(days, times, grid):
+        """
+        Drop leading/trailing empty time rows; if the grid is empty, show a typical day window.
+        """
+        row_has_content = [any(str(c).strip() for c in row) for row in grid]
+        if not any(row_has_content):
+            try:
+                lo = next(i for i, t in enumerate(times) if t >= "08:00")
+            except StopIteration:
+                lo = 0
+            try:
+                hi = next(i for i in range(len(times) - 1, -1, -1) if times[i] <= "17:00")
+            except StopIteration:
+                hi = len(times) - 1
+        else:
+            indices = [i for i, has in enumerate(row_has_content) if has]
+            lo, hi = min(indices), max(indices)
+            lo = max(0, lo - 1)
+            hi = min(len(times) - 1, hi + 1)
+        return days, times[lo : hi + 1], grid[lo : hi + 1]
+
+    @staticmethod
+    def _pdf_cell_text(cell) -> str:
+        if not cell:
+            return ""
+        return " / ".join(str(cell).splitlines())
+
+    def _write_schedules_pdf(self, file_path: str, data_to_export: list) -> None:
+        pdf = FPDF(orientation="L", unit="mm", format="Letter")
+        pdf.set_margins(10, 10, 10)
+        pdf.set_auto_page_break(True, margin=15)
+
+        for i, schedule_data in enumerate(data_to_export):
+            pdf.add_page()
+            pdf.set_font("Helvetica", "B", 14)
+            pdf.cell(text=f"Schedule option {i + 1}")
+            pdf.ln(10)
+
+            days, times_full, grid_full = self.get_schedule_grid_data(
+                schedule_data, filter_type="all", filter_value=None
+            )
+            days, times_trim, grid_trim = self._trim_schedule_grid_for_export(
+                days, times_full, grid_full
+            )
+
+            # Time column slightly narrower than day columns.
+            col_widths = (1,) + tuple(2 for _ in days)
+            pdf.set_font("Helvetica", size=8)
+            with pdf.table(
+                col_widths=col_widths,
+                text_align="C",
+                line_height=6,
+                first_row_as_headings=True,
+            ) as table:
+                table.row(["Time", *[str(d) for d in days]])
+                for ti, t in enumerate(times_trim):
+                    row_cells = [str(t)]
+                    for d in range(len(days)):
+                        cell = (
+                            grid_trim[ti][d]
+                            if ti < len(grid_trim) and d < len(grid_trim[ti])
+                            else ""
+                        )
+                        row_cells.append(self._pdf_cell_text(cell))
+                    table.row(row_cells)
+
+        pdf.output(file_path)
+
     def export_schedule_to_json(self, all_schedules, parent: QWidget):
         """
-        Handles the Save As dialog and writes all schedules to one JSON.
+        Handles the Save As dialog and writes all schedules to one JSON or PDF file.
         """
         if not all_schedules:
             QMessageBox.warning(parent, "Export Error", "No schedule data available.")
             return False
 
-        # The logic handles the path selection internally
-        file_path, _ = QFileDialog.getSaveFileName(
+        file_path, selected_filter = QFileDialog.getSaveFileName(
             parent,
-            "Save All Generated Schedules",
-            "generated_schedules.json",
-            "JSON Files (*.json);;All Files (*)"
+            "Export Schedules",
+            "generated_schedules",
+            "JSON (*.json);;PDF (*.pdf);;All Files (*)",
         )
 
         if not file_path:
             return False
 
-        days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
-        times = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"]
+        fmt = self._export_format_from_path_and_filter(file_path, selected_filter)
+        if fmt == "pdf" and not file_path.lower().endswith(".pdf"):
+            file_path = file_path + ".pdf"
+        elif fmt == "json" and not file_path.lower().endswith(".json"):
+            file_path = file_path + ".json"
+
+        data_to_export = (
+            all_schedules if isinstance(all_schedules, list) else [all_schedules]
+        )
+
+        if fmt == "pdf":
+            try:
+                self._write_schedules_pdf(file_path, data_to_export)
+                QMessageBox.information(parent, "Success", f"Exported to:\n{file_path}")
+                return True
+            except Exception as e:
+                QMessageBox.critical(
+                    parent, "Export Error", f"Failed to save PDF: {str(e)}"
+                )
+                return False
 
         try:
-            final_output = []
-            data_to_export = all_schedules if isinstance(all_schedules, list) else [all_schedules]
-
-            #Create the schedule grid for the file:
-            for i, schedule_data in enumerate(data_to_export):
-                grid = []
-                grid.append([f"--- SCHEDULE OPTION {i+1} ---"])
-                grid.append(["TIME"] + days)
-
-                for t in times:
-                    row = [t]
-                    for d in days:
-                        entry = next((s for s in schedule_data if s['day'] == d and s['time'] == t), None)
-                        row.append(entry['course_id'] if entry else "")
-                    grid.append(row)
-                
-                final_output.append(grid)
-
-            #JSON file written:
-            with open(file_path, mode='w', encoding='utf-8') as f:
-                #json.dump needs TWO arguments: data, file
-                json.dump(final_output, f, indent=4)
-
+            self.write_schedules_json_file(file_path, data_to_export)
             QMessageBox.information(parent, "Success", f"Exported to:\n{file_path}")
             return True
 
         except Exception as e:
             QMessageBox.critical(parent, "Export Error", f"Failed to save JSON: {str(e)}")
             return False
+
+    def write_schedules_json_file(self, file_path: str, data_to_export: list) -> None:
+        """Write all schedule options to one JSON file (same grid layout as Export Schedules JSON)."""
+        days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+        times = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"]
+        final_output = []
+        for i, schedule_data in enumerate(data_to_export):
+            grid = []
+            grid.append([f"--- SCHEDULE OPTION {i+1} ---"])
+            grid.append(["TIME"] + days)
+
+            for t in times:
+                row = [t]
+                for d in days:
+                    entry = next(
+                        (
+                            s
+                            for s in schedule_data
+                            if s["day"] == d and s["time"] == t
+                        ),
+                        None,
+                    )
+                    row.append(entry["course_id"] if entry else "")
+                grid.append(row)
+
+            final_output.append(grid)
+
+        with open(file_path, mode="w", encoding="utf-8") as f:
+            json.dump(final_output, f, indent=4)
 
     def scheduler_output_to_viewer_format(self, schedule_list):
         """
