@@ -80,16 +80,19 @@ class MainWindow(QMainWindow):
         self.theme_color = self.theme_colors[self.current_theme]
 
         #Domain Logic Managers
+        #--------------------------------------------------------------
         self.config_mgr = ConfigManager("config/config.json")
         self.config_mgr.load(self)
+        self.viewer_mgr = ViewerManager(self.config_mgr)
 
-        self.faculty_manager = FacultyManager(self.config_mgr)
-        self.course_manager = CourseConfigManager(self.config_mgr)
+        self.faculty_manager = FacultyManager(self.config_mgr, self.viewer_mgr)
+        self.course_manager = CourseConfigManager(self.config_mgr, self.viewer_mgr)
         self.room_manager = RoomConfigManager(self.config_mgr)
         self.lab_manager = LabConfigManager(self.config_mgr)
         self.gen_manager = GenConfigManager()
         self.time_slot_editor = TimeSlotEditor(self.config_mgr)
         self.meeting_pattern_editor = MeetingPatternEditor(self.config_mgr)
+        #--------------------------------------------------------------
 
         #State Management
         self.schedules = []
@@ -908,8 +911,6 @@ class MainWindow(QMainWindow):
         w.finished.connect(lambda worker=w: self._dispose_assistant_chat_worker(worker))
         w.start()
 
-    #Undo redo methods
-
     def _on_assistant_need_tools(self, tool_calls: list) -> None:
         results = []
         for tc in tool_calls:
@@ -940,6 +941,8 @@ class MainWindow(QMainWindow):
         self._append_ai_chat("Assistant", f"(Error) {err}")
         self.ai_send_btn.setEnabled(True)
         self.ai_input.setEnabled(True)
+
+    #Undo redo methods
 
     def run_with_undo(self, action):
         before = copy.deepcopy(self.config_mgr.data)
