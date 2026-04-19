@@ -1,6 +1,6 @@
 '''
     File: course_gui.py
-    Date: 04/16/2026
+    Date: 04/18/2026
     Author: Shane del Villar & Tyler Strohl
     Class: CMSC 420
     Description: Course management dialogs and helpers for the GUI.
@@ -19,84 +19,95 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QMessageBox, QScrollArea,
     QSpinBox, QVBoxLayout, QWidget,
 )
-
 from app.ui_styles import SchedulerStyles
 
-
-#TODO: Clean up this class. It is way too long & redundant.
 class CourseFormDialog(QDialog):
-    """Dialog for creating or editing a single course entry."""
+    """Add/edit courses with pick lists from config (mirrors Faculty setup)."""
 
     def __init__(
-        self,
-        parent: Optional[QWidget] = None,
+        self, parent: Optional[QWidget] = None,
         course: Optional[Dict[str, Any]] = None,
         pick_lists: Optional[Dict[str, List[str]]] = None,
-        exclude_conflict_course_id: Optional[str] = None,
+        exclude_conflict_course_id: Optional[str] = None, # Unique to Course
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Course Details")
-        self.setMinimumWidth(520)
-        self.resize(560, 560)
-
         self._pick_lists = pick_lists or {}
         self._exclude_conflict = (exclude_conflict_course_id or "").strip()
 
-        # Rooms / labs / faculty / conflicts — created only in the branch that uses them
-        # (orphan QLineEdits as children of the dialog with no layout appear top-left).
-        self._rooms_list: Optional[QListWidget] = None
-        self._rooms_extra: Optional[QLineEdit] = None
-        self._labs_list: Optional[QListWidget] = None
-        self._labs_extra: Optional[QLineEdit] = None
-        self._faculty_list: Optional[QListWidget] = None
-        self._faculty_extra: Optional[QLineEdit] = None
-        self._conflicts_list: Optional[QListWidget] = None
-        self._conflicts_extra: Optional[QLineEdit] = None
-        self._rooms_fallback: Optional[QLineEdit] = None
-        self._labs_fallback: Optional[QLineEdit] = None
-        self._faculty_fallback: Optional[QLineEdit] = None
-        self._conflicts_fallback: Optional[QLineEdit] = None
+        self.setMinimumWidth(520)
+        self.resize(560, 680)
+        
+        self._setup_containers()
+        self._init_form_widgets(course)
+        self._assemble_form_sections()
 
-        scroll = QScrollArea(self)
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        inner = QWidget()
-        self.course_id_edit = QLineEdit(inner)
-        self.credits_spin = QSpinBox(inner)
+        self._add_button_box()
+        if course:
+            self.populate_from_course(course)
+        
+        SchedulerStyles.apply_high_contrast_shell(self, self.inner, self.scroll)
+
+    # --- UI SETUP METHODS ---
+
+    def _setup_containers(self):
+        """Builds the main scrollable skeleton (identical to Faculty)."""
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(14, 14, 14, 14)
+
+        self.scroll = QScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        
+        self.inner = QWidget()
+        self.form_layout = QVBoxLayout(self.inner)
+        self.form_layout.setSpacing(10)
+        self.form_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        self.scroll.setWidget(self.inner)
+        self.main_layout.addWidget(self.scroll, 1)
+
+    def _init_form_widgets(self, course):
+        """Initializes raw input variables (No weights)."""
+        self.course_id_edit = QLineEdit(self.inner)
+        self.credits_spin = QSpinBox(self.inner)
         self.credits_spin.setRange(0, 20)
-        form = QVBoxLayout(inner)
 
-        id_row = QFormLayout()
-        id_row.addRow("Course ID:", self.course_id_edit)
-        id_row.addRow("Credits:", self.credits_spin)
-        form.addLayout(id_row)
+        self._rooms_list = self._rooms_extra = None
+        self._labs_list = self._labs_extra = None
+        self._faculty_list = self._faculty_extra = None
+        self._conflicts_list = self._conflicts_extra = None
 
-        pre = self._preselected_from_course(course)
+    def _assemble_form_sections(self):
+        """Groups course widgets into visual sections (Weight-free version)."""
+        basics = QGroupBox("Course Basics", self.inner)
+        bf = QFormLayout(basics)
+        bf.addRow("Course ID:", self.course_id_edit)
+        bf.addRow("Credits:", self.credits_spin)
+        self.form_layout.addWidget(basics)
 
-        form.addWidget(self._section_rooms(pre["rooms"]))
-        form.addWidget(self._section_labs(pre["labs"]))
-        form.addWidget(self._section_faculty(pre["faculty"]))
-        form.addWidget(self._section_conflicts(pre["conflicts"]))
+        prefs = [
+            ("Rooms this course may use", "rooms", "rooms"),
+            ("Labs this course may use", "labs", "labs"),
+            ("Faculty", "faculty", "faculty"),
+            ("Cannot overlap with (conflicts)", "course_ids", "conflicts")
+        ]
+        
+        for title, key, kind in prefs:
+            section_box = self._add_pref_section(title, key, kind)
+            self.form_layout.addWidget(section_box)
 
-        scroll.setWidget(inner)
+    def _add_button_box(self):
+        """Standard Dialog buttons."""
+        bbox = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        bbox.accepted.connect(self.on_accept)
+        bbox.rejected.connect(self.reject)
+        self.main_layout.addWidget(bbox, 0, Qt.AlignmentFlag.AlignRight)
 
-        outer = QVBoxLayout(self)
-        outer.addWidget(scroll)
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
-        buttons.accepted.connect(self._on_accept)
-        buttons.rejected.connect(self.reject)
-        outer.addWidget(buttons)
-
-        if course is not None:
-            self._populate_from_course(course)
-
-        SchedulerStyles.apply_high_contrast_shell(self, inner, scroll)
+    # --- DATA PROCESSING & HELPERS ---
 
     def _preselected_from_course(self, course: Optional[Dict[str, Any]]) -> Dict[str, set]:
+        """Finds what was already saved in the JSON."""
+        
         if not course:
             return {"rooms": set(), "labs": set(), "faculty": set(), "conflicts": set()}
         return {
@@ -106,242 +117,112 @@ class CourseFormDialog(QDialog):
             "conflicts": set(course.get("conflicts", []) or []),
         }
 
-    def _make_checklist(self, items: List[str], selected: set[str]) -> QListWidget:
-        w = QListWidget()
-        row_h = 22
-        visible = min(len(items), 8)
-        w.setMinimumHeight(max(80, visible * row_h + 8))
-        for x in sorted(items, key=str.casefold):
-            it = QListWidgetItem(x)
-            it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            it.setCheckState(
-                Qt.CheckState.Checked if x in selected else Qt.CheckState.Unchecked
-            )
-            w.addItem(it)
-        return w
+    def _populate_section(self, selected_list: List[str], checklist: Optional[QListWidget], 
+                          extra_edit: QLineEdit, catalog_key: str) -> None:
+        """Checks boxes for items in the config; puts others in the text box."""
+        if not isinstance(selected_list, list):
+            selected_list = []
+            
+        catalog = set(self._pick_lists.get(catalog_key) or [])
+        
+        if checklist:
+            for i in range(checklist.count()):
+                it = checklist.item(i)
+                it.setCheckState(Qt.CheckState.Checked if it.text() in selected_list else Qt.CheckState.Unchecked)
 
-    def _extra_row(self, label: str, edit: QLineEdit, tip: str) -> QWidget:
-        row = QWidget()
-        lay = QFormLayout(row)
-        lay.setContentsMargins(8, 0, 0, 8)
-        edit.setPlaceholderText(tip)
-        lay.addRow(QLabel(label), edit)
-        return row
+        extras = [x for x in selected_list if x not in catalog]
+        extra_edit.setText(", ".join(extras))
 
-    def _section_rooms(self, pre: set[str]) -> QGroupBox:
-        box = QGroupBox("Rooms this course may use")
+    def _add_pref_section(self, title, list_key, kind) -> QGroupBox:
+        """Builds a section for Rooms, Labs, etc. without weight spinboxes."""
+        box = QGroupBox(title, self.inner)
         lay = QVBoxLayout(box)
-        rooms = self._pick_lists.get("rooms") or []
-        if rooms:
-            self._rooms_list = self._make_checklist(rooms, pre)
-            self._rooms_extra = QLineEdit(box)
-            lay.addWidget(QLabel("Tick all that apply (from your config)."))
-            lay.addWidget(self._rooms_list)
-            lay.addWidget(
-                self._extra_row(
-                    "Additional rooms (comma-separated)",
-                    self._rooms_extra,
-                    "Any room names not listed above",
-                )
-            )
-        else:
-            self._rooms_fallback = QLineEdit(box)
-            lay.addWidget(
-                QLabel("No rooms are defined in the config yet — enter names manually.")
-            )
-            lay.addWidget(self._rooms_fallback)
+        
+        catalog = list(self._pick_lists.get(list_key) or [])
+        if kind == "conflicts" and self._exclude_conflict:
+            catalog = [c for c in catalog if c != self._exclude_conflict]
+
+        extra = QLineEdit(box)
+        lw = None
+
+        if catalog:
+            lw = QListWidget(box)
+            lw.setFixedHeight(120)
+            for x in sorted(catalog, key=str.casefold):
+                it = QListWidgetItem(x)
+                it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                it.setCheckState(Qt.CheckState.Unchecked)
+                lw.addItem(it)
+            lay.addWidget(QLabel(f"Select {kind}:"))
+            lay.addWidget(lw)
+
+        setattr(self, f"_{kind}_list", lw)
+        setattr(self, f"_{kind}_extra", extra)
+
+        lay.addWidget(QLabel(f"Additional {kind} (comma-separated):"))
+        lay.addWidget(extra)
         return box
 
-    def _section_labs(self, pre: set[str]) -> QGroupBox:
-        box = QGroupBox("Labs this course may use")
-        lay = QVBoxLayout(box)
-        labs = self._pick_lists.get("labs") or []
-        if labs:
-            self._labs_list = self._make_checklist(labs, pre)
-            self._labs_extra = QLineEdit(box)
-            lay.addWidget(QLabel("Tick all that apply (from your config)."))
-            lay.addWidget(self._labs_list)
-            lay.addWidget(
-                self._extra_row(
-                    "Additional labs (comma-separated)",
-                    self._labs_extra,
-                    "Any lab names not listed above",
-                )
+    def populate_from_course(self, course: Dict[str, Any]) -> None:
+        """Populates UI fields from a course dictionary."""
+        self.course_id_edit.setText(str(course.get("course_id") or ""))
+        
+        try:
+            val = int(course.get("credits", 0))
+            self.credits_spin.setValue(val)
+        except (ValueError, TypeError):
+            self.credits_spin.setValue(0)
+
+        prefs_map = {
+            "rooms": "room",      
+            "labs": "lab",        
+            "faculty": "faculty",  
+            "conflicts": "conflicts" 
+        }
+
+        for ui_kind, json_key in prefs_map.items():
+            saved_list = course.get(json_key, []) or []
+            
+            self._populate_section(
+                saved_list,
+                getattr(self, f"_{ui_kind}_list"),
+                getattr(self, f"_{ui_kind}_extra"),
+                "course_ids" if ui_kind == "conflicts" else ui_kind
             )
-        else:
-            self._labs_fallback = QLineEdit(box)
-            lay.addWidget(
-                QLabel("No labs are defined in the config yet — enter names manually.")
-            )
-            lay.addWidget(self._labs_fallback)
-        return box
 
-    def _section_faculty(self, pre: set[str]) -> QGroupBox:
-        box = QGroupBox("Faculty")
-        lay = QVBoxLayout(box)
-        fac = self._pick_lists.get("faculty") or []
-        if fac:
-            self._faculty_list = self._make_checklist(fac, pre)
-            self._faculty_extra = QLineEdit(box)
-            lay.addWidget(QLabel("Tick all instructors (from your config)."))
-            lay.addWidget(self._faculty_list)
-            lay.addWidget(
-                self._extra_row(
-                    "Additional faculty (comma-separated)",
-                    self._faculty_extra,
-                    "Names must match how they appear in the faculty list",
-                )
-            )
-        else:
-            self._faculty_fallback = QLineEdit(box)
-            lay.addWidget(
-                QLabel("No faculty are defined in the config yet — enter names manually.")
-            )
-            lay.addWidget(self._faculty_fallback)
-        return box
+    def _merge_list(self, checklist, extra_input) -> List[str]:
+        """Simple scraper that returns a list of names (No weights)."""
+        result = []
+        if checklist:
+            for i in range(checklist.count()):
+                it = checklist.item(i)
+                if it.checkState() == Qt.CheckState.Checked:
+                    result.append(it.text())
+        
+        if extra_input and extra_input.text().strip():
+            for entry in extra_input.text().split(","):
+                name = entry.strip()
+                if name and name not in result:
+                    result.append(name)
+        return result
 
-    def _section_conflicts(self, pre: set[str]) -> QGroupBox:
-        box = QGroupBox("Cannot overlap with these courses (conflicts)")
-        lay = QVBoxLayout(box)
-        ids = list(self._pick_lists.get("conflict_course_ids") or [])
-        if self._exclude_conflict:
-            ids = [i for i in ids if i != self._exclude_conflict]
-        if ids:
-            self._conflicts_list = self._make_checklist(ids, pre)
-            self._conflicts_extra = QLineEdit(box)
-            lay.addWidget(
-                QLabel("Tick course IDs that must not run at the same time as this course.")
-            )
-            lay.addWidget(self._conflicts_list)
-            lay.addWidget(
-                self._extra_row(
-                    "Additional conflict IDs (comma-separated)",
-                    self._conflicts_extra,
-                    "Course IDs not shown above",
-                )
-            )
-        else:
-            self._conflicts_fallback = QLineEdit(box)
-            lay.addWidget(
-                QLabel("No other courses in config — add more courses first, or type IDs.")
-            )
-            lay.addWidget(self._conflicts_fallback)
-        return box
+    def get_course_data(self) -> Dict[str, Any]:
+        return {
+            "course_id": self.course_id_edit.text().strip(),
+            "credits": self.credits_spin.value(),
+            "room": self._merge_list(self._rooms_list, self._rooms_extra),
+            "lab": self._merge_list(self._labs_list, self._labs_extra),
+            "faculty": self._merge_list(self._faculty_list, self._faculty_extra),
+            "conflicts": self._merge_list(self._conflicts_list, self._conflicts_extra),
+        }
 
-    def _extras_not_in_catalog(self, selected: set[str], catalog: List[str]) -> str:
-        cat = set(catalog)
-        extra = [x for x in selected if x not in cat]
-        return ", ".join(extra)
-
-    def _populate_from_course(self, course: Dict[str, Any]) -> None:
-        self.course_id_edit.setText(str(course.get("course_id", "")))
-        self.credits_spin.setValue(int(course.get("credits", 0) or 0))
-        pre = self._preselected_from_course(course)
-        rooms_cat = self._pick_lists.get("rooms") or []
-        labs_cat = self._pick_lists.get("labs") or []
-        fac_cat = self._pick_lists.get("faculty") or []
-        conf_cat = self._pick_lists.get("conflict_course_ids") or []
-
-        if self._rooms_list is None:
-            if self._rooms_fallback is not None:
-                self._rooms_fallback.setText(", ".join(course.get("room", []) or []))
-        else:
-            x = self._extras_not_in_catalog(pre["rooms"], rooms_cat)
-            if x and self._rooms_extra is not None:
-                self._rooms_extra.setText(x)
-
-        if self._labs_list is None:
-            if self._labs_fallback is not None:
-                self._labs_fallback.setText(", ".join(course.get("lab", []) or []))
-        else:
-            x = self._extras_not_in_catalog(pre["labs"], labs_cat)
-            if x and self._labs_extra is not None:
-                self._labs_extra.setText(x)
-
-        if self._faculty_list is None:
-            if self._faculty_fallback is not None:
-                self._faculty_fallback.setText(", ".join(course.get("faculty", []) or []))
-        else:
-            x = self._extras_not_in_catalog(pre["faculty"], fac_cat)
-            if x and self._faculty_extra is not None:
-                self._faculty_extra.setText(x)
-
-        if self._conflicts_list is None:
-            if self._conflicts_fallback is not None:
-                self._conflicts_fallback.setText(", ".join(course.get("conflicts", []) or []))
-        else:
-            x = self._extras_not_in_catalog(pre["conflicts"], conf_cat)
-            if x and self._conflicts_extra is not None:
-                self._conflicts_extra.setText(x)
-
-    def _on_accept(self) -> None:
+    def on_accept(self) -> None:
+        """Validation: Ensures Course ID is provided before closing."""
         if not self.course_id_edit.text().strip():
             QMessageBox.warning(self, "Missing data", "Course ID is required.")
             return
         self.accept()
 
-    def _parse_csv_field(self, text: str) -> List[str]:
-        parts = [p.strip() for p in text.split(",")]
-        return [p for p in parts if p]
-
-    def _merge_pick(
-        self,
-        checklist: Optional[QListWidget],
-        fallback: Optional[QLineEdit],
-        extra: Optional[QLineEdit],
-    ) -> List[str]:
-        out: List[str] = []
-        seen: set[str] = set()
-
-        def add_one(s: str) -> None:
-            s = s.strip()
-            if s and s not in seen:
-                seen.add(s)
-                out.append(s)
-
-        if checklist is not None:
-            for i in range(checklist.count()):
-                it = checklist.item(i)
-                if it.checkState() == Qt.CheckState.Checked:
-                    add_one(it.text())
-            extra_txt = extra.text() if extra is not None else ""
-            for p in self._parse_csv_field(extra_txt):
-                add_one(p)
-        else:
-            fb_txt = fallback.text() if fallback is not None else ""
-            for p in self._parse_csv_field(fb_txt):
-                add_one(p)
-        return out
-
-    def _merge_conflicts(self) -> List[str]:
-        if self._conflicts_list is not None:
-            return self._merge_pick(
-                self._conflicts_list,
-                self._conflicts_fallback,
-                self._conflicts_extra,
-            )
-        if self._conflicts_fallback is not None:
-            return self._parse_csv_field(self._conflicts_fallback.text())
-        return []
-
-    def get_course_data(self) -> Dict[str, Any]:
-        rooms = self._merge_pick(self._rooms_list, self._rooms_fallback, self._rooms_extra)
-        labs = self._merge_pick(self._labs_list, self._labs_fallback, self._labs_extra)
-        faculty = self._merge_pick(self._faculty_list, self._faculty_fallback, self._faculty_extra)
-        conflicts = self._merge_conflicts()
-        return {
-            "course_id": self.course_id_edit.text().strip(),
-            "credits": int(self.credits_spin.value()),
-            "room": rooms,
-            "lab": labs,
-            "conflicts": conflicts,
-            "faculty": faculty,
-        }
-
-#------------------------------------------------------------------
-#------------------------------------------------------------------
-#------------------------------------------------------------------
-#------------------------------------------------------------------
 
 class CourseConfigManager:
     """
@@ -413,7 +294,7 @@ class CourseConfigManager:
         if index is None or existing is None:
             return
         cid = str(existing.get("course_id", "")).strip()
-        pick = self.viewer_mgr._get_pick_lists(exclude_course_id_for_conflicts=None)
+        pick = self.viewer_mgr._get_pick_lists(exclude_course_id_for_conflicts=cid)
         dialog = CourseFormDialog(
             parent,
             existing,
