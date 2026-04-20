@@ -258,6 +258,160 @@ class ConfigManager:
 
         pdf.output(file_path)
 
+    @staticmethod
+    def _time_sort_key(time_str: str):
+        try:
+            hh, mm = str(time_str).split(":")
+            return (int(hh), int(mm))
+        except (ValueError, AttributeError):
+            return (99, 99)
+
+    def _course_lookup_by_base_id(self) -> dict:
+        lookup = {}
+        for c in self.data.get("config", {}).get("courses", []):
+            cid = str(c.get("course_id", "")).strip()
+            if cid:
+                lookup[cid] = c
+        return lookup
+
+    def _values_for_group(self, entry: dict, group_mode: str, course_lookup: dict) -> list:
+        base_id = str(entry.get("course_id", "")).split(".")[0]
+        course_info = course_lookup.get(base_id, {})
+
+        def as_list(v):
+            if isinstance(v, list):
+                return [str(x).strip() for x in v if str(x).strip()]
+            if v is None:
+                return []
+            s = str(v).strip()
+            return [s] if s else []
+
+        if group_mode == "faculty":
+            direct = as_list(entry.get("faculty"))
+            fallback = as_list(course_info.get("faculty"))
+            vals = direct or fallback
+        else:
+            room_vals = as_list(entry.get("room")) or as_list(course_info.get("room"))
+            lab_vals = as_list(entry.get("lab")) or as_list(course_info.get("lab"))
+            vals = room_vals + lab_vals
+
+        return vals or ["Unassigned"]
+
+    def _build_grouped_schedule_rows(self, schedule_data: list, group_mode: str) -> dict:
+        grouped = {}
+        course_lookup = self._course_lookup_by_base_id()
+        for entry in schedule_data:
+            day = str(entry.get("day", "N/A"))
+            time = str(entry.get("time", "N/A"))
+            course_id = str(entry.get("course_id", "N/A"))
+            for label in self._values_for_group(entry, group_mode, course_lookup):
+                grouped.setdefault(label, []).append(
+                    {"course_id": course_id, "day": day, "time": time}
+                )
+
+        day_order = {"Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4}
+        for label in grouped:
+            grouped[label].sort(
+                key=lambda r: (
+                    day_order.get(r["day"], 99),
+                    self._time_sort_key(r["time"]),
+                    r["course_id"],
+                )
+            )
+        return dict(sorted(grouped.items(), key=lambda kv: kv[0].lower()))
+
+    def _write_grouped_printable_pdf(
+        self, file_path: str, data_to_export: list, group_mode: str
+    ) -> None:
+        title = "By Faculty" if group_mode == "faculty" else "By Room/Lab"
+        label = "Faculty" if group_mode == "faculty" else "Room/Lab"
+
+        pdf = FPDF(orientation="P", unit="mm", format="Letter")
+        pdf.set_margins(10, 10, 10)
+        pdf.set_auto_page_break(True, margin=12)
+
+        for i, schedule_data in enumerate(data_to_export):
+            grouped = self._build_grouped_schedule_rows(schedule_data, group_mode)
+            if not grouped:
+                pdf.add_page()
+                pdf.set_font("Helvetica", "B", 14)
+                pdf.cell(text=f"Schedule option {i + 1}: {title}")
+                pdf.ln(8)
+                pdf.set_font("Helvetica", size=10)
+                pdf.cell(text="No data.")
+                continue
+
+            if group_mode == "faculty":
+                # One printable page per faculty member.
+                for group_name, rows in grouped.items():
+                    pdf.add_page()
+                    pdf.set_font("Helvetica", "B", 14)
+                    pdf.cell(text=f"Schedule option {i + 1}: Faculty posting")
+                    pdf.ln(8)
+                    pdf.set_font("Helvetica", "B", 12)
+                    pdf.cell(text=f"Faculty: {group_name}")
+                    pdf.ln(6)
+                    pdf.set_font("Helvetica", size=9)
+                    with pdf.table(
+                        col_widths=(3, 1.2, 1.2),
+                        text_align="L",
+                        line_height=5.2,
+                        first_row_as_headings=True,
+                    ) as table:
+                        table.row(["Course ID", "Day", "Time"])
+                        for r in rows:
+                            table.row([r["course_id"], r["day"], r["time"]])
+            else:
+                # One printable page per room/lab.
+                for group_name, rows in grouped.items():
+                    pdf.add_page()
+                    pdf.set_font("Helvetica", "B", 14)
+                    pdf.cell(text=f"Schedule option {i + 1}: Room/Lab posting")
+                    pdf.ln(8)
+                    pdf.set_font("Helvetica", "B", 12)
+                    pdf.cell(text=f"Room/Lab: {group_name}")
+                    pdf.ln(6)
+                    pdf.set_font("Helvetica", size=9)
+                    with pdf.table(
+                        col_widths=(3, 1.2, 1.2),
+                        text_align="L",
+                        line_height=5.2,
+                        first_row_as_headings=True,
+                    ) as table:
+                        table.row(["Course ID", "Day", "Time"])
+                        for r in rows:
+                            table.row([r["course_id"], r["day"], r["time"]])
+
+        pdf.output(file_path)
+
+    def export_grouped_printable(self, all_schedules, parent: QWidget, group_mode: str) -> bool:
+        if not all_schedules:
+            QMessageBox.warning(parent, "Export Error", "No schedule data available.")
+            return False
+
+        default_stem = "faculty_postings" if group_mode == "faculty" else "room_lab_postings"
+        file_path, _ = QFileDialog.getSaveFileName(
+            parent,
+            "Export Printable Grouped Schedules",
+            default_stem + ".pdf",
+            "PDF (*.pdf);;All Files (*)",
+        )
+        if not file_path:
+            return False
+
+        lower = file_path.lower()
+        if not lower.endswith(".pdf"):
+            file_path += ".pdf"
+
+        data_to_export = all_schedules if isinstance(all_schedules, list) else [all_schedules]
+        try:
+            self._write_grouped_printable_pdf(file_path, data_to_export, group_mode)
+            QMessageBox.information(parent, "Success", f"Exported to:\n{file_path}")
+            return True
+        except Exception as e:
+            QMessageBox.critical(parent, "Export Error", f"Failed to export printable file: {str(e)}")
+            return False
+
     def export_schedule_to_json(self, all_schedules, parent: QWidget):
         """
         Handles the Save As dialog and writes all schedules to one JSON or PDF file.

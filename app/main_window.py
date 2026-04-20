@@ -685,22 +685,39 @@ class MainWindow(QMainWindow):
 
     def handle_export_schedule(self):
         """
-        Delegates the export process to the ConfigManager.
-        The ConfigManager will handle the 'Save As' dialog and JSON formatting.
+        Delegates schedule export with selectable output mode.
         """
-        if hasattr(self, 'schedules') and self.schedules:
-
-            success = self.config_mgr.export_schedule_to_json(self.schedules, self)
-            
-            if success:
-                pass
-        else:
+        if not (hasattr(self, "schedules") and self.schedules):
             QMessageBox.warning(
                 self, 
                 "Export Error", 
                 "There are no schedules currently loaded to export. "
                 "Please generate schedules first."
             )
+            return
+
+        options = [
+            "Full schedules (JSON/PDF)",
+            "By room/lab postings (PDF printable)",
+            "By faculty postings (PDF printable)",
+        ]
+        choice, ok = QInputDialog.getItem(
+            self,
+            "Export Schedules",
+            "Export format:",
+            options,
+            0,
+            False,
+        )
+        if not ok:
+            return
+
+        if choice == options[0]:
+            self.config_mgr.export_schedule_to_json(self.schedules, self)
+        elif choice == options[1]:
+            self.config_mgr.export_grouped_printable(self.schedules, self, "room_lab")
+        else:
+            self.config_mgr.export_grouped_printable(self.schedules, self, "faculty")
 
     def handle_clear_schedule(self) -> None:
 

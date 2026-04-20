@@ -151,6 +151,34 @@ def test_export_schedule_to_pdf_success(config_mgr, tmp_path):
             with open(save_path, "rb") as f:
                 assert f.read(5).startswith(b"%PDF-")
 
+
+def test_export_grouped_room_lab_pdf_success(config_mgr, tmp_path):
+    parent = MagicMock()
+    save_path = str(tmp_path / "room_lab.pdf")
+    schedule_data = [{"course_id": "CMSC101", "day": "Mon", "time": "08:00"}]
+
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName", return_value=(save_path, "PDF (*.pdf)")):
+        with patch("PyQt6.QtWidgets.QMessageBox.information"):
+            result = config_mgr.export_grouped_printable([schedule_data], parent, "room_lab")
+            assert result is True
+            assert os.path.exists(save_path)
+            with open(save_path, "rb") as f:
+                assert f.read(5).startswith(b"%PDF-")
+
+
+def test_export_grouped_faculty_pdf_success(config_mgr, tmp_path):
+    parent = MagicMock()
+    save_path = str(tmp_path / "faculty.pdf")
+    schedule_data = [{"course_id": "CMSC101", "day": "Mon", "time": "08:00"}]
+
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName", return_value=(save_path, "PDF (*.pdf)")):
+        with patch("PyQt6.QtWidgets.QMessageBox.information"):
+            result = config_mgr.export_grouped_printable([schedule_data], parent, "faculty")
+            assert result is True
+            assert os.path.exists(save_path)
+            with open(save_path, "rb") as f:
+                assert f.read(5).startswith(b"%PDF-")
+
 def test_import_schedule_from_json(config_mgr, tmp_path):
     parent = MagicMock()
     # Mocking the grid structure expected by import_schedule_from_json
