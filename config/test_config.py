@@ -126,6 +126,14 @@ def test_export_schedule_to_json_cancel(config_mgr):
         result = config_mgr.export_schedule_to_json([{"test": "data"}], parent)
         assert result is False
 
+
+def test_export_schedule_to_pdf_cancel(config_mgr):
+    parent = MagicMock()
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName", return_value=("", "")):
+        result = config_mgr.export_schedule_to_pdf([{"test": "data"}], parent)
+        assert result is False
+
+
 def test_export_schedule_to_json_success(config_mgr, tmp_path):
     parent = MagicMock()
     save_path = str(tmp_path / "export.json")
@@ -145,7 +153,7 @@ def test_export_schedule_to_pdf_success(config_mgr, tmp_path):
 
     with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName", return_value=(save_path, "PDF (*.pdf)")):
         with patch("PyQt6.QtWidgets.QMessageBox.information"):
-            result = config_mgr.export_schedule_to_json([schedule_data], parent)
+            result = config_mgr.export_schedule_to_pdf([schedule_data], parent)
             assert result is True
             assert os.path.exists(save_path)
             with open(save_path, "rb") as f:

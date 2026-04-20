@@ -697,7 +697,8 @@ class MainWindow(QMainWindow):
             return
 
         options = [
-            "Full schedules (JSON/PDF)",
+            "Full schedules (JSON)",
+            "Full schedules (PDF)",
             "By room/lab postings (PDF printable)",
             "By faculty postings (PDF printable)",
         ]
@@ -715,6 +716,8 @@ class MainWindow(QMainWindow):
         if choice == options[0]:
             self.config_mgr.export_schedule_to_json(self.schedules, self)
         elif choice == options[1]:
+            self.config_mgr.export_schedule_to_pdf(self.schedules, self)
+        elif choice == options[2]:
             self.config_mgr.export_grouped_printable(self.schedules, self, "room_lab")
         else:
             self.config_mgr.export_grouped_printable(self.schedules, self, "faculty")

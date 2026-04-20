@@ -4,7 +4,7 @@
     Author: Kyle Smith, Shane del Villar, Chayse Altland, & Tyler Strohl
     Class: CMSC 420
     Description: Implements saving, loading and displaying a config for the scheduler.
-    Implements displaying the schedule in a tabulated format and saving as JSON or PDF.
+    Implements displaying the schedule in a tabulated format and saving schedules as JSON or PDF (separate export flows).
 '''
 
 import json
@@ -175,19 +175,6 @@ class ConfigManager:
 
         lines.append(divider)
         return "\n".join(lines)
-
-    @staticmethod
-    def _export_format_from_path_and_filter(file_path: str, selected_filter: str) -> str:
-        """Return 'json' or 'pdf' from extension, else from the dialog filter."""
-        lower = file_path.lower()
-        if lower.endswith(".pdf"):
-            return "pdf"
-        if lower.endswith(".json"):
-            return "json"
-        sf = (selected_filter or "").upper()
-        if "PDF" in sf and "JSON" not in sf:
-            return "pdf"
-        return "json"
 
     @staticmethod
     def _trim_schedule_grid_for_export(days, times, grid):
@@ -434,42 +421,28 @@ class ConfigManager:
 
     def export_schedule_to_json(self, all_schedules, parent: QWidget):
         """
-        Handles the Save As dialog and writes all schedules to one JSON or PDF file.
+        Save As dialog for JSON only: writes all schedule options to one JSON file.
         """
         if not all_schedules:
             QMessageBox.warning(parent, "Export Error", "No schedule data available.")
             return False
 
-        file_path, selected_filter = QFileDialog.getSaveFileName(
+        file_path, _ = QFileDialog.getSaveFileName(
             parent,
-            "Export Schedules",
-            "generated_schedules",
-            "JSON (*.json);;PDF (*.pdf);;All Files (*)",
+            "Export Schedules (JSON)",
+            "generated_schedules.json",
+            "JSON (*.json);;All Files (*)",
         )
 
         if not file_path:
             return False
 
-        fmt = self._export_format_from_path_and_filter(file_path, selected_filter)
-        if fmt == "pdf" and not file_path.lower().endswith(".pdf"):
-            file_path = file_path + ".pdf"
-        elif fmt == "json" and not file_path.lower().endswith(".json"):
+        if not file_path.lower().endswith(".json"):
             file_path = file_path + ".json"
 
         data_to_export = (
             all_schedules if isinstance(all_schedules, list) else [all_schedules]
         )
-
-        if fmt == "pdf":
-            try:
-                self._write_schedules_pdf(file_path, data_to_export)
-                QMessageBox.information(parent, "Success", f"Exported to:\n{file_path}")
-                return True
-            except Exception as e:
-                QMessageBox.critical(
-                    parent, "Export Error", f"Failed to save PDF: {str(e)}"
-                )
-                return False
 
         try:
             self.write_schedules_json_file(file_path, data_to_export)
@@ -478,6 +451,41 @@ class ConfigManager:
 
         except Exception as e:
             QMessageBox.critical(parent, "Export Error", f"Failed to save JSON: {str(e)}")
+            return False
+
+    def export_schedule_to_pdf(self, all_schedules, parent: QWidget):
+        """
+        Save As dialog for PDF only: writes all schedule options to one PDF (full grid).
+        """
+        if not all_schedules:
+            QMessageBox.warning(parent, "Export Error", "No schedule data available.")
+            return False
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            parent,
+            "Export Schedules (PDF)",
+            "generated_schedules.pdf",
+            "PDF (*.pdf);;All Files (*)",
+        )
+
+        if not file_path:
+            return False
+
+        if not file_path.lower().endswith(".pdf"):
+            file_path = file_path + ".pdf"
+
+        data_to_export = (
+            all_schedules if isinstance(all_schedules, list) else [all_schedules]
+        )
+
+        try:
+            self._write_schedules_pdf(file_path, data_to_export)
+            QMessageBox.information(parent, "Success", f"Exported to:\n{file_path}")
+            return True
+        except Exception as e:
+            QMessageBox.critical(
+                parent, "Export Error", f"Failed to save PDF: {str(e)}"
+            )
             return False
 
     def write_schedules_json_file(self, file_path: str, data_to_export: list) -> None:
