@@ -271,12 +271,12 @@ class ConfigManager:
         for c in self.data.get("config", {}).get("courses", []):
             cid = str(c.get("course_id", "")).strip()
             if cid:
-                lookup[cid] = c
+                lookup.setdefault(cid, []).append(c)
         return lookup
 
     def _values_for_group(self, entry: dict, group_mode: str, course_lookup: dict) -> list:
         base_id = str(entry.get("course_id", "")).split(".")[0]
-        course_info = course_lookup.get(base_id, {})
+        course_infos = course_lookup.get(base_id, [])
 
         def as_list(v):
             if isinstance(v, list):
@@ -286,13 +286,33 @@ class ConfigManager:
             s = str(v).strip()
             return [s] if s else []
 
+        def unique_preserve(items):
+            out = []
+            seen = set()
+            for v in items:
+                if v not in seen:
+                    seen.add(v)
+                    out.append(v)
+            return out
+
         if group_mode == "faculty":
             direct = as_list(entry.get("faculty"))
-            fallback = as_list(course_info.get("faculty"))
+            fallback = []
+            for ci in course_infos:
+                fallback.extend(as_list(ci.get("faculty")))
+            fallback = unique_preserve(fallback)
             vals = direct or fallback
         else:
-            room_vals = as_list(entry.get("room")) or as_list(course_info.get("room"))
-            lab_vals = as_list(entry.get("lab")) or as_list(course_info.get("lab"))
+            fallback_room = []
+            fallback_lab = []
+            for ci in course_infos:
+                fallback_room.extend(as_list(ci.get("room")))
+                fallback_lab.extend(as_list(ci.get("lab")))
+            fallback_room = unique_preserve(fallback_room)
+            fallback_lab = unique_preserve(fallback_lab)
+
+            room_vals = as_list(entry.get("room")) or fallback_room
+            lab_vals = as_list(entry.get("lab")) or fallback_lab
             vals = room_vals + lab_vals
 
         return vals or ["Unassigned"]

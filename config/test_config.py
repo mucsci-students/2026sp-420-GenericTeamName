@@ -179,6 +179,17 @@ def test_export_grouped_faculty_pdf_success(config_mgr, tmp_path):
             with open(save_path, "rb") as f:
                 assert f.read(5).startswith(b"%PDF-")
 
+
+def test_grouped_faculty_uses_all_matching_course_entries(config_mgr):
+    config_mgr.data["config"]["courses"] = [
+        {"course_id": "CMSC101", "faculty": ["Dr. A"]},
+        {"course_id": "CMSC101", "faculty": []},
+    ]
+    schedule_data = [{"course_id": "CMSC101.01", "day": "Mon", "time": "08:00"}]
+    grouped = config_mgr._build_grouped_schedule_rows(schedule_data, "faculty")
+    assert "Dr. A" in grouped
+    assert "Unassigned" not in grouped
+
 def test_import_schedule_from_json(config_mgr, tmp_path):
     parent = MagicMock()
     # Mocking the grid structure expected by import_schedule_from_json
