@@ -26,7 +26,7 @@
             }
         }
     },
-    "limit": 5,
+    "limit": 1,
     "optimizer_flags": [
         "faculty_course",
         "faculty_room",

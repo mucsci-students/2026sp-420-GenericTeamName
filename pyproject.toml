@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fpdf2>=2.8.0",
     "pyqt6>=6.10.2",
     "openai>=1.0.0",
     "course-constraint-scheduler @ git+https://github.com/mucsci/Scheduler@5d904d0156cce60cd8ea4c333f26229019119487",
