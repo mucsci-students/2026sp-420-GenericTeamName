@@ -8,6 +8,7 @@
 
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+#TODO: Finish implementing this new class.
 class ViewerManager:
 
     def __init__(self, config_mgr):

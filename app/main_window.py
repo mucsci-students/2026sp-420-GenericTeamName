@@ -34,16 +34,7 @@ from .ai_assistant import (
     AssistantChatWorker, OPENAI_MODEL, SYSTEM_PROMPT,
     default_api_key, execute_tool,
 )
-from config.config_mgr import ConfigManager
-from faculty.faculty_gui import FacultyManager
-from course.course_gui import CourseConfigManager
-from room.room_gui import RoomConfigManager
-from lab.lab_gui import LabConfigManager
-from .generator_gui import GenConfigManager
-from time_slot_config_editor.time_slot_editor import TimeSlotEditor
-from time_slot_config_editor.meeting_pattern_editor import MeetingPatternEditor
-#TODO: Finish implementing this new class.
-from viewer.viewer_gui import ViewerManager
+from .proxy_manager import ProxyManager
 from .ui_styles import SchedulerStyles
 
 #=================================================================================
@@ -81,17 +72,19 @@ class MainWindow(QMainWindow):
 
         #Domain Logic Managers
         #--------------------------------------------------------------
-        self.config_mgr = ConfigManager("config/config.json")
+        self.proxy = ProxyManager(self)
+        
+        self.config_mgr = self.proxy.config_mgr
         self.config_mgr.load(self)
-        self.viewer_mgr = ViewerManager(self.config_mgr)
+        self.viewer_mgr = self.proxy.viewer_mgr
 
-        self.faculty_manager = FacultyManager(self.config_mgr, self.viewer_mgr)
-        self.course_manager = CourseConfigManager(self.config_mgr, self.viewer_mgr)
-        self.room_manager = RoomConfigManager(self.config_mgr)
-        self.lab_manager = LabConfigManager(self.config_mgr)
-        self.gen_manager = GenConfigManager()
-        self.time_slot_editor = TimeSlotEditor(self.config_mgr)
-        self.meeting_pattern_editor = MeetingPatternEditor(self.config_mgr)
+        self.faculty_manager = self.proxy.faculty_manager
+        self.course_manager = self.proxy.course_manager
+        self.room_manager = self.proxy.room_manager
+        self.lab_manager = self.proxy.lab_manager
+        self.gen_manager = self.proxy.gen_manager
+        self.time_slot_editor = self.proxy.time_slot_editor
+        self.meeting_pattern_editor = self.proxy.meeting_pattern_editor
         #--------------------------------------------------------------
 
         #State Management
