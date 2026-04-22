@@ -89,6 +89,9 @@ def _ensure_config_block(main_window: Any) -> Dict[str, Any]:
 
 
 def _write_config_silent(main_window: Any) -> None:
+    # Snapshot before writes so assistant undo/redo works for any tool that persists config.
+    if hasattr(main_window, "assistant_push_config_undo_snapshot"):
+        main_window.assistant_push_config_undo_snapshot()
     path = main_window.config_mgr.filepath
     with open(path, "w", encoding="utf-8") as f:
         json.dump(main_window.config_mgr.data, f, indent=4)
@@ -975,7 +978,6 @@ def _execute_crud_operations(mw, name, args, ok):
     courses = cfg.get("courses", [])
 
     if name == "update_course":
-        mw.assistant_push_config_undo_snapshot()
         cid = str(args["course_id"])
         for c in courses:
             if isinstance(c, dict) and str(c.get("course_id")) == cid:
@@ -986,7 +988,6 @@ def _execute_crud_operations(mw, name, args, ok):
         return json.dumps({"ok": False, "error": f"Course {cid} not found."})
 
     if name == "delete_course":
-        mw.assistant_push_config_undo_snapshot()
         cid = str(args["course_id"])
         for i, c in enumerate(courses):
             if isinstance(c, dict) and str(c.get("course_id")) == cid:
