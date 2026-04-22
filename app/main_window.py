@@ -30,12 +30,9 @@ from PyQt6.QtGui import QAction, QFont, QColor, QBrush, QKeySequence
 from PyQt6.QtWidgets import QInputDialog
 
 from .menu_widgets import ContentPanel
-from .ai_assistant import (
-    AssistantChatWorker, OPENAI_MODEL, SYSTEM_PROMPT,
-    default_api_key, execute_tool,
-)
 from .proxy_manager import ProxyManager
 from .ui_styles import SchedulerStyles
+from .ai_viewer_gui import AIViewerManager
 
 #=================================================================================
 class MainWindow(QMainWindow):
@@ -91,13 +88,8 @@ class MainWindow(QMainWindow):
         self.schedules = []
         self.current_schedule_index = 0
         self.imported_schedule = None
-        self._assistant_config_undo_stack: list = []
-        self._assistant_config_redo_stack: list = []
+        self.ai_viewer_mgr = AIViewerManager(self)
 
-        #AI Chatbot Setup
-        self.assistant_messages: list = [{"role": "system", "content": SYSTEM_PROMPT}]
-        self._assistant_worker: AssistantChatWorker | None = None
-          
         #UI Setup (see functions below)
         self._setup_ui_components()
         self._setup_quick_toolbar()
@@ -881,123 +873,27 @@ class MainWindow(QMainWindow):
     #TODO: Move this function to Viewer class.
     def refresh_config_views_after_mutation(self) -> None:
         """Reload config from disk and refresh read-only views after AI (or other) tools wrote the file."""
-        path = getattr(self.config_mgr, "filepath", None)
-        if path and os.path.isfile(path):
-            self.config_mgr.load(self)
-        self._sync_detail_view()
+        self.ai_viewer_mgr.refresh_config_views_after_mutation()
 
     def assistant_push_config_undo_snapshot(self) -> None:
-        """Remember config state before an assistant tool changes config_mgr.data (same file path)."""
-        path = getattr(self.config_mgr, "filepath", None)
-        if not path:
-            return
-        self._assistant_config_redo_stack.clear()
-        self._assistant_config_undo_stack.append(copy.deepcopy(self.config_mgr.data))
-        if len(self._assistant_config_undo_stack) > 40:
-            self._assistant_config_undo_stack.pop(0)
+        """Remember config state before an assistant tool changes config_mgr.data."""
+        self.ai_viewer_mgr.assistant_push_config_undo_snapshot()
 
     def assistant_undo_config_change(self) -> bool:
-        """Restore configuration to before the last assistant-driven change (writes the active JSON file)."""
-        if not self._assistant_config_undo_stack:
-            return False
-        path = getattr(self.config_mgr, "filepath", None)
-        self._assistant_config_redo_stack.append(copy.deepcopy(self.config_mgr.data))
-        self.config_mgr.data = self._assistant_config_undo_stack.pop()
-        if path:
-            try:
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(self.config_mgr.data, f, indent=4)
-            except OSError:
-                return False
-        self._sync_detail_view()
-        return True
+        """Undo assistant-driven config changes."""
+        return self.ai_viewer_mgr.assistant_undo_config_change()
 
     def assistant_redo_config_change(self) -> bool:
-        """Re-apply configuration after undo (writes the active JSON file)."""
-        if not self._assistant_config_redo_stack:
-            return False
-        path = getattr(self.config_mgr, "filepath", None)
-        self._assistant_config_undo_stack.append(copy.deepcopy(self.config_mgr.data))
-        self.config_mgr.data = self._assistant_config_redo_stack.pop()
-        if path:
-            try:
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(self.config_mgr.data, f, indent=4)
-            except OSError:
-                return False
-        self._sync_detail_view()
-        return True
+        """Redo assistant-driven config changes."""
+        return self.ai_viewer_mgr.assistant_redo_config_change()
 
     #---------------------------------------------------------
     #TODO: Move below ai functions to AI class if possible.
     #TODO: Refactor AI class code.
     #---------------------------------------------------------
 
-    def _append_ai_chat(self, who: str, text: str) -> None:
-        self.ai_chat_log.appendPlainText(f"{who}: {text}\n")
-
     def send_assistant_message(self) -> None:
-        if self._assistant_worker is not None and self._assistant_worker.isRunning():
-            return
-        user_text = self.ai_input.text().strip()
-        if not user_text:
-            return
-        key = default_api_key()
-        if not key:
-            QMessageBox.warning(
-                self,
-                "OpenAI API key",
-                "Set your key in app/ai_assistant.py (OPENAI_API_KEY_IN_CODE), "
-                "or put it in config/openai_key.txt, or set OPENAI_API_KEY in the environment.",
-            )
-            return
-        self.ai_input.clear()
-        self._append_ai_chat("You", user_text)
-        self.assistant_messages.append({"role": "user", "content": user_text})
-        self.ai_send_btn.setEnabled(False)
-        self.ai_input.setEnabled(False)
-
-        msgs = copy.deepcopy(self.assistant_messages)
-        w = AssistantChatWorker(key, OPENAI_MODEL, msgs)
-        self._assistant_worker = w
-        w.need_tools.connect(self._on_assistant_need_tools)
-        w.finished_reply.connect(self._on_assistant_finished)
-        w.failed.connect(self._on_assistant_failed)
-        # finished_reply can run before the native thread has fully stopped; never destroy
-        # the QThread until QThread.finished (or Qt aborts in ~QThread).
-        w.finished.connect(lambda worker=w: self._dispose_assistant_chat_worker(worker))
-        w.start()
-
-    def _on_assistant_need_tools(self, tool_calls: list) -> None:
-        results = []
-        for tc in tool_calls:
-            try:
-                args = json.loads(tc.get("arguments") or "{}")
-            except json.JSONDecodeError:
-                args = {}
-            out = execute_tool(self, tc["name"], args)
-            results.append({"id": tc["id"], "content": out})
-        self.refresh_config_views_after_mutation()
-        w = self._assistant_worker
-        if w is not None:
-            w.deliver_tool_results(results)
-
-    def _dispose_assistant_chat_worker(self, worker: AssistantChatWorker) -> None:
-        if self._assistant_worker is worker:
-            self._assistant_worker = None
-        worker.deleteLater()
-
-    def _on_assistant_finished(self, text: str) -> None:
-        self._append_ai_chat("Assistant", text)
-        if self._assistant_worker is not None:
-            self.assistant_messages = self._assistant_worker.out_messages
-        self.ai_send_btn.setEnabled(True)
-        self.ai_input.setEnabled(True)
-
-    def _on_assistant_failed(self, err: str) -> None:
-        self._append_ai_chat("Assistant", f"(Error) {err}")
-        self.ai_send_btn.setEnabled(True)
-        self.ai_input.setEnabled(True)
+        self.ai_viewer_mgr.send_assistant_message()
 
     #Undo redo methods
 
