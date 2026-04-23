@@ -1,12 +1,11 @@
 '''
-    File: config_mgr.py
+    File: meeting_pattern_editor.py
     Date: 04/03/2026
     Author: Chayse Altland
     Class: CMSC 420
     Description: Implements saving, loading and displaying a class meeting pattern for the scheduler.
 '''
 from __future__ import annotations
-
 from PyQt6.QtWidgets import QInputDialog, QMessageBox
 
 
