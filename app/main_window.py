@@ -6,6 +6,7 @@ The primary entry point for the Scheduler Program GUI.
 The Design-Patterns implemented here are as follows:
     -Command
     -Singleton
+    -Proxy
 
 :date: 04/17/2026
 :authors: Kyle Smith, Tyler Strohl, Chayse Altland, & Shane del Villar
@@ -32,7 +33,6 @@ from PyQt6.QtWidgets import QInputDialog
 from .menu_widgets import ContentPanel
 from .proxy_manager import ProxyManager
 from .ui_styles import SchedulerStyles
-from .ai_viewer_gui import AIViewerManager
 
 #=================================================================================
 class MainWindow(QMainWindow):
@@ -82,13 +82,14 @@ class MainWindow(QMainWindow):
         self.gen_manager = self.proxy.gen_manager
         self.time_slot_editor = self.proxy.time_slot_editor
         self.meeting_pattern_editor = self.proxy.meeting_pattern_editor
+        
+        self.ai_viewer_mgr = self.proxy.ai_viewer_mgr
         #--------------------------------------------------------------
 
         #State Management
         self.schedules = []
         self.current_schedule_index = 0
         self.imported_schedule = None
-        self.ai_viewer_mgr = AIViewerManager(self)
 
         #UI Setup (see functions below)
         self._setup_ui_components()

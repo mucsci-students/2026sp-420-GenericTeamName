@@ -23,7 +23,15 @@ from app.ui_styles import SchedulerStyles
 DAYS = ("MON", "TUE", "WED", "THU", "FRI")
 
 class FacultyFormDialog(QDialog):
-    """Add/edit faculty with pick lists from config."""
+    """
+    Add/edit faculty with pick lists from config.
+    
+    This class implements the following design patterns:
+        -Dependency Injection
+        -Template Logic
+        -Memento
+        -Command
+    """
 
     def __init__(
         self, parent: Optional[QWidget] = None,
