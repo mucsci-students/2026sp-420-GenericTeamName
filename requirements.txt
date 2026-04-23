@@ -7,3 +7,4 @@ qtbot>=0.0.1
 mocker>=1.1.1
 pytest-mock
 pytest-qt
+fpdf2>=2.7.8
