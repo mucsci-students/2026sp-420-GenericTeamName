@@ -35,7 +35,7 @@ class ProxyManager:
         self.gen_manager = GenConfigManager(self.config_mgr)
         self.time_slot_editor = TimeSlotEditor(self.config_mgr)
         self.meeting_pattern_editor = MeetingPatternEditor(self.config_mgr)
-        self.ai_viewer_mgr = AIViewerManager(main_window)
+        self.ai_viewer_mgr = AIViewerManager(self._mw)
 
         # Action registry
         self._registry: Dict[str, Callable] = {
