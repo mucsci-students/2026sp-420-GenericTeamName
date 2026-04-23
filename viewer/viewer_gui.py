@@ -6,12 +6,15 @@
     Description: Holds schedule viewer functions to be used in *main_window.py*.
 '''
 
+import json
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 #TODO: Finish implementing this new class.
 class ViewerManager:
 
     def __init__(self, config_mgr):
+        #TODO: use parent instead of main_window ?
+        #self.mw = main_window
         self.config_mgr = config_mgr
 
     #Utilized by managers.
@@ -45,3 +48,11 @@ class ViewerManager:
             "faculty": sorted(set(faculty), key=str.casefold),
             "course_ids": sorted(set(course_ids), key=str.casefold),
         }
+    
+    def _sync_detail_view(self, parent) -> None:
+        if not hasattr(parent, "detail_view"):
+            return
+        try:
+            parent.detail_view.setPlainText(json.dumps(self.config_mgr.data, indent=2))
+        except (TypeError, ValueError):
+            parent.detail_view.setPlainText("(Unable to display configuration as JSON.)")

@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem, QMessageBox, QScrollArea, QSpinBox,
     QVBoxLayout, QWidget,
 )
-from app.ui_styles import SchedulerStyles
+from gui.ui_styles import SchedulerStyles
 DAYS = ("MON", "TUE", "WED", "THU", "FRI")
 
 class FacultyFormDialog(QDialog):

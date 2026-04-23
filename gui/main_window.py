@@ -96,7 +96,7 @@ class MainWindow(QMainWindow):
         self._setup_quick_toolbar()
         self.init_menus()
         self.apply_theme()
-        self._sync_detail_view()
+        self.viewer_mgr._sync_detail_view(self)
 
         #Bug fix to prevent "No Schedules" warning from popping up at wrong time.
         #See update_schedule_display
@@ -591,14 +591,6 @@ class MainWindow(QMainWindow):
         b = min(255, int(int(hex_color[4:6], 16) + 255 * amount))
         return f"#{r:02x}{g:02x}{b:02x}"
 
-    def _sync_detail_view(self) -> None:
-        if not hasattr(self, "detail_view"):
-            return
-        try:
-            self.detail_view.setPlainText(json.dumps(self.config_mgr.data, indent=2))
-        except (TypeError, ValueError):
-            self.detail_view.setPlainText("(Unable to display configuration as JSON.)")
-
     def _update_path_label_text(self) -> None:
         if not hasattr(self, "path_label"):
             return
@@ -656,7 +648,7 @@ class MainWindow(QMainWindow):
             try:
                 self.config_mgr.load(self)
                 self._update_path_label_text()
-                self._sync_detail_view()
+                self.viewer_mgr._sync_detail_view(self)
                 QMessageBox.information(self, "Success", "Configuration File changed.")
                 
             except Exception as e:
@@ -858,7 +850,7 @@ class MainWindow(QMainWindow):
                 self.calendar_view.setItem(r, c, item)
 
     #---------------------------------------------------------
-    #End of functions that should be moved (see them above)
+    #End of functions that should be moved to viewer (see them above)
     #---------------------------------------------------------
 
     #TODO: Move this function to config_mgr
@@ -869,29 +861,7 @@ class MainWindow(QMainWindow):
             self.config_mgr.filepath = p
             self.config_mgr.save(self)
             self._update_path_label_text()
-            self._sync_detail_view()
-
-    #TODO: Move this function to Viewer class.
-    def refresh_config_views_after_mutation(self) -> None:
-        """Reload config from disk and refresh read-only views after AI (or other) tools wrote the file."""
-        self.ai_viewer_mgr.refresh_config_views_after_mutation()
-
-    def assistant_push_config_undo_snapshot(self) -> None:
-        """Remember config state before an assistant tool changes config_mgr.data."""
-        self.ai_viewer_mgr.assistant_push_config_undo_snapshot()
-
-    def assistant_undo_config_change(self) -> bool:
-        """Undo assistant-driven config changes."""
-        return self.ai_viewer_mgr.assistant_undo_config_change()
-
-    def assistant_redo_config_change(self) -> bool:
-        """Redo assistant-driven config changes."""
-        return self.ai_viewer_mgr.assistant_redo_config_change()
-
-    #---------------------------------------------------------
-    #TODO: Move below ai functions to AI class if possible.
-    #TODO: Refactor AI class code.
-    #---------------------------------------------------------
+            self.viewer_mgr._sync_detail_view(self)
 
     def send_assistant_message(self) -> None:
         self.ai_viewer_mgr.send_assistant_message()
@@ -906,7 +876,7 @@ class MainWindow(QMainWindow):
         if after != before:
             self.undo_stack.append(before)
             self.redo_stack.clear()
-            self._sync_detail_view()
+            self.viewer_mgr._sync_detail_view(self)
             self._update_path_label_text()
 
     def undo(self):
@@ -918,7 +888,7 @@ class MainWindow(QMainWindow):
         self.redo_stack.append(current)
         self.config_mgr.data = self.undo_stack.pop()
         self.config_mgr.save(self)
-        self._sync_detail_view()
+        self.viewer_mgr._sync_detail_view(self)
         self._update_path_label_text()
 
     def redo(self):
@@ -930,5 +900,5 @@ class MainWindow(QMainWindow):
         self.undo_stack.append(current)
         self.config_mgr.data = self.redo_stack.pop()
         self.config_mgr.save(self)
-        self._sync_detail_view()
+        self.viewer_mgr._sync_detail_view(self)
         self._update_path_label_text()
