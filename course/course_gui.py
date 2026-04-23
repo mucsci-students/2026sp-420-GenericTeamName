@@ -22,7 +22,15 @@ from PyQt6.QtWidgets import (
 from app.ui_styles import SchedulerStyles
 
 class CourseFormDialog(QDialog):
-    """Add/edit courses with pick lists from config (mirrors Faculty setup)."""
+    """
+    Add/edit courses with pick lists from config (mirrors Faculty setup).
+    
+    This class implements the following design patterns:
+        -Dependency Injection
+        -Template Logic
+        -Memento
+        -Command
+    """
 
     def __init__(
         self, parent: Optional[QWidget] = None,
