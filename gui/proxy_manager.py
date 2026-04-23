@@ -14,10 +14,10 @@ from course.course_gui import CourseConfigManager
 from room.room_gui import RoomConfigManager
 from lab.lab_gui import LabConfigManager
 from generator.generator_gui import GenConfigManager
-from time_slot_config_editor.time_slot_editor import TimeSlotEditor
-from time_slot_config_editor.meeting_pattern_editor import MeetingPatternEditor
+from timeslot_config.time_slot_editor import TimeSlotEditor
+from timeslot_config.meeting_pattern_editor import MeetingPatternEditor
 from viewer.viewer_gui import ViewerManager
-from .ai_viewer_gui import AIViewerManager
+from ai.ai_viewer_gui import AIViewerManager
 
 class ProxyManager:
     def __init__(self, main_window: Any):

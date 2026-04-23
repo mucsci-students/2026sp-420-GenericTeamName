@@ -6,12 +6,9 @@
     Description: Implements adding, modifying, and deleting time slots for specified days
 '''
 from __future__ import annotations
-
 from datetime import datetime, timedelta
-
 from PyQt6.QtWidgets import QInputDialog, QMessageBox
 
-print("DEBUG: loaded app/time_slot_editor.py from schedule-config-editor")
 class TimeSlotEditor:
     DAY_MAP = {
         "Monday": "MON",
