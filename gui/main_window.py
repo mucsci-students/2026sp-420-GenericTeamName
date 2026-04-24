@@ -98,10 +98,6 @@ class MainWindow(QMainWindow):
         self.apply_theme()
         self.viewer_mgr._sync_detail_view(self)
 
-        #Bug fix to prevent "No Schedules" warning from popping up at wrong time.
-        #See update_schedule_display
-        self.clear_clicked = False
-
         #Undo and redo
         self.undo_stack = []
         self.redo_stack = []
@@ -179,10 +175,10 @@ class MainWindow(QMainWindow):
         self.prev_dashboard_btn.setToolTip("Show the previous generated schedule")
         self.next_dashboard_btn.setToolTip("Show the next generated schedule")
         self.prev_dashboard_btn.clicked.connect(
-            lambda: (self.show_prev_schedule(), self.update_schedule_display())
+            lambda: (self.viewer_mgr.show_prev_schedule(self), self.viewer_mgr.update_schedule_display(self))
         )
         self.next_dashboard_btn.clicked.connect(
-            lambda: (self.show_next_schedule(), self.update_schedule_display())
+            lambda: (self.viewer_mgr.show_next_schedule(self), self.viewer_mgr.update_schedule_display(self))
         )
         nav_layout.addWidget(self.prev_dashboard_btn)
         nav_layout.addWidget(self.next_dashboard_btn)
@@ -289,7 +285,7 @@ class MainWindow(QMainWindow):
         )
         add_action(
             "Refresh grid",
-            lambda: self.update_schedule_display("all"),
+            lambda: self.viewer_mgr.update_schedule_display(self, "all"),
             "Redraw the schedule table (F5)",
             QKeySequence("F5"),
         )
@@ -309,7 +305,7 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
         add_action(
             "Summary",
-            self.handle_view_summary,
+            lambda: self.viewer_mgr.handle_view_summary(self),
             "View configuration summary (F2)",
             QKeySequence("F2"),
         )
@@ -438,7 +434,7 @@ class MainWindow(QMainWindow):
     def _bind_file_commands(self, menu):
         """Binds file-related operations."""
         menu.addAction("Change Config File").triggered.connect(self.handle_change_path)
-        menu.addAction("View Summary").triggered.connect(self.handle_view_summary)
+        menu.addAction("View Summary").triggered.connect(lambda: self.viewer_mgr.handle_view_summary(self))
         menu.addAction("Save configuration").triggered.connect(lambda: self.config_mgr.save(self))
         menu.addAction("Save configuration as…").triggered.connect(self.save_config_to_file)
     
@@ -486,13 +482,13 @@ class MainWindow(QMainWindow):
 
     def _bind_viewer_commands(self, menu):
         """Binds schedule viewing and I/O operations."""
-        menu.addAction("View Schedules").triggered.connect(lambda: self.update_schedule_display("all"))
-        menu.addAction("View by Faculty").triggered.connect(lambda: self.update_schedule_display("faculty"))
-        menu.addAction("View by Room").triggered.connect(lambda: self.update_schedule_display("room"))
-        menu.addAction("View by Lab").triggered.connect(lambda: self.update_schedule_display("lab"))
+        menu.addAction("View Schedules").triggered.connect(lambda: self.viewer_mgr.update_schedule_display(self, "all"))
+        menu.addAction("View by Faculty").triggered.connect(lambda: self.viewer_mgr.update_schedule_display(self, "faculty"))
+        menu.addAction("View by Room").triggered.connect(lambda: self.viewer_mgr.update_schedule_display(self, "room"))
+        menu.addAction("View by Lab").triggered.connect(lambda: self.viewer_mgr.update_schedule_display(self, "lab"))
         menu.addAction("Export Schedules").triggered.connect(self.handle_export_schedule)
         menu.addAction("Import Schedules").triggered.connect(self.handle_import_schedule)
-        menu.addAction("Clear Schedules").triggered.connect(self.handle_clear_schedule)
+        menu.addAction("Clear Schedules").triggered.connect(lambda: self.viewer_mgr.handle_clear_schedule(self))
 
     #=================================================================================
     """
@@ -674,7 +670,7 @@ class MainWindow(QMainWindow):
             self.current_schedule_index = 0
             #Updates filepath displayed for imported schedules
             self.cfg_panel.update_title(self.cfg_panel, self.config_mgr.import_file)
-            self.update_schedule_display()
+            self.viewer_mgr.update_schedule_display(self)
 
             try:
                 QMessageBox.information(
