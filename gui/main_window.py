@@ -799,23 +799,44 @@ class MainWindow(QMainWindow):
 
         filter_val = None
         if group_by != "all":
-            options = []
-            config_section = self.config_mgr.data.get("config", {})
-            if group_by == "faculty":
-                options = [f["name"] for f in config_section.get("faculty", [])]
-            elif group_by == "room":
-                options = [r for r in config_section.get("rooms", [])]
-            elif group_by == "lab":
-                options = [r for r in config_section.get("labs", [])]
+            values = set()
+
+            # Prefer options from the loaded schedules themselves
+            for schedule in self.schedules:
+                for entry in schedule:
+                    entry_val = entry.get(group_by)
+
+                    if isinstance(entry_val, list):
+                        for v in entry_val:
+                            if str(v).strip():
+                                values.add(str(v).strip())
+                    elif entry_val is not None and str(entry_val).strip():
+                        values.add(str(entry_val).strip())
+
+            options = sorted(values)
+
+            # Fallback to config if imported/generated schedule has no metadata
+            if not options:
+                config_section = self.config_mgr.data.get("config", {})
+                if group_by == "faculty":
+                    options = [f["name"] for f in config_section.get("faculty", [])]
+                elif group_by == "room":
+                    options = [r for r in config_section.get("rooms", [])]
+                elif group_by == "lab":
+                    options = [r for r in config_section.get("labs", [])]
 
             if not options:
                 QMessageBox.information(self, "Filter", f"No {group_by} data available to filter by.")
                 group_by = "all"
-            
-            #Prompts user for selection when choosing a view option:
             else:
-                item, ok = QInputDialog.getItem(self, f"Filter by {group_by.capitalize()}", 
-                                              f"Select {group_by}:", options, 0, False)
+                item, ok = QInputDialog.getItem(
+                    self,
+                    f"Filter by {group_by.capitalize()}",
+                    f"Select {group_by}:",
+                    options,
+                    0,
+                    False
+                )
                 if ok and item:
                     filter_val = item
                 else:
