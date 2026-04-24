@@ -98,10 +98,6 @@ class MainWindow(QMainWindow):
         self.apply_theme()
         self.viewer_mgr._sync_detail_view(self)
 
-        #Bug fix to prevent "No Schedules" warning from popping up at wrong time.
-        #See update_schedule_display
-        self.clear_clicked = False
-
         #Undo and redo
         self.undo_stack = []
         self.redo_stack = []
@@ -179,10 +175,10 @@ class MainWindow(QMainWindow):
         self.prev_dashboard_btn.setToolTip("Show the previous generated schedule")
         self.next_dashboard_btn.setToolTip("Show the next generated schedule")
         self.prev_dashboard_btn.clicked.connect(
-            lambda: (self.show_prev_schedule(), self.update_schedule_display())
+            lambda: (self.viewer_mgr.show_prev_schedule(self), self.viewer_mgr.update_schedule_display(self))
         )
         self.next_dashboard_btn.clicked.connect(
-            lambda: (self.show_next_schedule(), self.update_schedule_display())
+            lambda: (self.viewer_mgr.show_next_schedule(self), self.viewer_mgr.update_schedule_display(self))
         )
         nav_layout.addWidget(self.prev_dashboard_btn)
         nav_layout.addWidget(self.next_dashboard_btn)
@@ -289,7 +285,7 @@ class MainWindow(QMainWindow):
         )
         add_action(
             "Refresh grid",
-            lambda: self.update_schedule_display("all"),
+            lambda: self.viewer_mgr.update_schedule_display(self, "all"),
             "Redraw the schedule table (F5)",
             QKeySequence("F5"),
         )
@@ -309,7 +305,7 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
         add_action(
             "Summary",
-            self.handle_view_summary,
+            lambda: self.viewer_mgr.handle_view_summary(self),
             "View configuration summary (F2)",
             QKeySequence("F2"),
         )
@@ -438,7 +434,7 @@ class MainWindow(QMainWindow):
     def _bind_file_commands(self, menu):
         """Binds file-related operations."""
         menu.addAction("Change Config File").triggered.connect(self.handle_change_path)
-        menu.addAction("View Summary").triggered.connect(self.handle_view_summary)
+        menu.addAction("View Summary").triggered.connect(lambda: self.viewer_mgr.handle_view_summary(self))
         menu.addAction("Save configuration").triggered.connect(lambda: self.config_mgr.save(self))
         menu.addAction("Save configuration as…").triggered.connect(self.save_config_to_file)
     
@@ -486,13 +482,13 @@ class MainWindow(QMainWindow):
 
     def _bind_viewer_commands(self, menu):
         """Binds schedule viewing and I/O operations."""
-        menu.addAction("View Schedules").triggered.connect(lambda: self.update_schedule_display("all"))
-        menu.addAction("View by Faculty").triggered.connect(lambda: self.update_schedule_display("faculty"))
-        menu.addAction("View by Room").triggered.connect(lambda: self.update_schedule_display("room"))
-        menu.addAction("View by Lab").triggered.connect(lambda: self.update_schedule_display("lab"))
+        menu.addAction("View Schedules").triggered.connect(lambda: self.viewer_mgr.update_schedule_display(self, "all"))
+        menu.addAction("View by Faculty").triggered.connect(lambda: self.viewer_mgr.update_schedule_display(self, "faculty"))
+        menu.addAction("View by Room").triggered.connect(lambda: self.viewer_mgr.update_schedule_display(self, "room"))
+        menu.addAction("View by Lab").triggered.connect(lambda: self.viewer_mgr.update_schedule_display(self, "lab"))
         menu.addAction("Export Schedules").triggered.connect(self.handle_export_schedule)
         menu.addAction("Import Schedules").triggered.connect(self.handle_import_schedule)
-        menu.addAction("Clear Schedules").triggered.connect(self.handle_clear_schedule)
+        menu.addAction("Clear Schedules").triggered.connect(lambda: self.viewer_mgr.handle_clear_schedule(self))
 
     #=================================================================================
     """
@@ -674,7 +670,7 @@ class MainWindow(QMainWindow):
             self.current_schedule_index = 0
             #Updates filepath displayed for imported schedules
             self.cfg_panel.update_title(self.cfg_panel, self.config_mgr.import_file)
-            self.update_schedule_display()
+            self.viewer_mgr.update_schedule_display(self)
 
             try:
                 QMessageBox.information(
@@ -723,131 +719,6 @@ class MainWindow(QMainWindow):
             self.config_mgr.export_grouped_printable(self.schedules, self, "room_lab")
         else:
             self.config_mgr.export_grouped_printable(self.schedules, self, "faculty")
-
-    def handle_clear_schedule(self) -> None:
-
-        """
-        Removes all the currently generated schedules.
-        """
-        if not self.schedules or not (0 <= self.current_schedule_index < len(self.schedules)):
-            QMessageBox.warning(self, "No Data", "No schedules to clear.")
-            return
-        else:
-            try:
-                self.clear_clicked = True
-                self.schedules.clear()
-                #Updates imported schedules label
-                self.cfg_panel.update_title(self.cfg_panel)
-                self.import_file = ""
-                self.update_schedule_display()
-                QMessageBox.information(self, "Success", "Schedule/s have been cleared.")
-            except:
-                QMessageBox.critical(self, "Error", "Clear failed.")
-
-    def handle_view_summary(self):
-        """Displays a summary of the current configuration in a monospaced dialog."""
-        summary = self.config_mgr.get_summary_text()
-        msg = QMessageBox(self)
-        msg.setWindowTitle(f"Summary: {self.config_mgr.filepath}")
-        msg.setText(summary)
-        msg.setFont(QFont("Courier New", 10))
-        msg.exec()
-
-    def _setup_viewer_navigation(self, layout):
-        """Adds navigation buttons for cycling through multiple schedules."""
-        nav_layout = QHBoxLayout()
-        prev_btn, next_btn = QPushButton("Previous"), QPushButton("Next")
-        prev_btn.clicked.connect(lambda: (self.show_prev_schedule(), self._refresh_schedule_display()))
-        next_btn.clicked.connect(lambda: (self.show_next_schedule(), self._refresh_schedule_display()))
-        nav_layout.addWidget(prev_btn)
-        nav_layout.addWidget(next_btn)
-        layout.addLayout(nav_layout)
-
-    def _refresh_schedule_display(self):
-        """Updates the viewer text based on the current schedule index."""
-        if not self.schedules: return
-        schedule = self.schedules[self.current_schedule_index]
-        text = self.config_mgr.get_schedule_spreadsheet(schedule) if isinstance(schedule, list) else str(schedule)
-        self.schedule_display.setPlainText(text)
-        self.viewer.setWindowTitle(f"Schedule Viewer ({self.current_schedule_index + 1}/{len(self.schedules)})")
-
-    def show_next_schedule(self):
-        """Increments schedule index with wrap-around."""
-        if self.schedules:
-            self.current_schedule_index = (self.current_schedule_index + 1) % len(self.schedules)
-
-    def show_prev_schedule(self):
-        """Decrements schedule index with wrap-around."""
-        if self.schedules:
-            self.current_schedule_index = (self.current_schedule_index - 1) % len(self.schedules)
-
-    def update_schedule_display(self, group_by: str = "all"):
-        """
-        Refreshes the grid based on the current schedule index and optional filters.
-        Also refreshes the grid when new schedules are generated.
-        """
-        if not self.schedules:
-            self.calendar_view.setRowCount(0)
-            self.counter_label.setText(
-                "No schedules yet — use Generate on the toolbar, or Import (Ctrl+Shift+I)"
-            )
-            #this is a little buggy because of when the function is called.
-            #ex: when clearing schedules.
-            if self.clear_clicked == False:
-                QMessageBox.warning(self, "No Schedules", "Generate or import schedule/s first.")
-            return
-
-        filter_val = None
-        if group_by != "all":
-            options = []
-            config_section = self.config_mgr.data.get("config", {})
-            if group_by == "faculty":
-                options = [f["name"] for f in config_section.get("faculty", [])]
-            elif group_by == "room":
-                options = [r for r in config_section.get("rooms", [])]
-            elif group_by == "lab":
-                options = [r for r in config_section.get("labs", [])]
-
-            if not options:
-                QMessageBox.information(self, "Filter", f"No {group_by} data available to filter by.")
-                group_by = "all"
-            
-            #Prompts user for selection when choosing a view option:
-            else:
-                item, ok = QInputDialog.getItem(self, f"Filter by {group_by.capitalize()}", 
-                                              f"Select {group_by}:", options, 0, False)
-                if ok and item:
-                    filter_val = item
-                else:
-                    return
-
-        self._update_path_label_text()
-        filter_suffix = f" · Filter: {filter_val}" if filter_val else ""
-        self.counter_label.setText(
-            f"Schedule {self.current_schedule_index + 1} of {len(self.schedules)}{filter_suffix}"
-        )
-
-        days, times, grid = self.config_mgr.get_schedule_grid_data(
-            self.schedules[self.current_schedule_index],
-            filter_type=group_by,
-            filter_value=filter_val
-        )
-
-        self.calendar_view.setRowCount(len(times))
-        self.calendar_view.setColumnCount(len(days))
-        self.calendar_view.setHorizontalHeaderLabels(days)
-        self.calendar_view.setVerticalHeaderLabels(times)
-
-        item_font = QFont("Segoe UI", 9)
-        for r, row_data in enumerate(grid):
-            for c, cell_value in enumerate(row_data):
-                item = QTableWidgetItem(cell_value)
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                item.setFont(item_font)
-                if cell_value:
-                    item.setBackground(QBrush(QColor(37, 99, 235)))
-                    item.setForeground(QBrush(QColor(255, 255, 255)))
-                self.calendar_view.setItem(r, c, item)
 
     #---------------------------------------------------------
     #End of functions that should be moved to viewer (see them above)

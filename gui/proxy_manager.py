@@ -32,7 +32,7 @@ class ProxyManager:
         self.course_manager = CourseConfigManager(self.config_mgr, self.viewer_mgr)
         self.room_manager = RoomConfigManager(self.config_mgr)
         self.lab_manager = LabConfigManager(self.config_mgr)
-        self.gen_manager = GenConfigManager(self.config_mgr)
+        self.gen_manager = GenConfigManager(self.config_mgr, self.viewer_mgr)
         self.time_slot_editor = TimeSlotEditor(self.config_mgr)
         self.meeting_pattern_editor = MeetingPatternEditor(self.config_mgr)
         self.ai_viewer_mgr = AIViewerManager(self._mw)
