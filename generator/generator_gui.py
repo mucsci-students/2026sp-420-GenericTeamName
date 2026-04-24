@@ -73,8 +73,9 @@ class GenConfigManager:
         -Adapter
         -Observer
     """
-    def __init__(self, config_mgr) -> None:
+    def __init__(self, config_mgr, viewer_mgr) -> None:
         self.config_mgr = config_mgr
+        self.viewer_mgr = viewer_mgr
         self.limit = self.config_mgr.data["limit"]
         self.optimizer_flags = self.config_mgr.data["optimizer_flags"]
 
@@ -337,7 +338,7 @@ class GenConfigManager:
 
                 parent.schedules = parent.schedules + viewer_schedules
                 parent.current_schedule_index = len(parent.schedules) - len(viewer_schedules)
-                parent.update_schedule_display()
+                self.viewer_mgr.update_schedule_display(parent)
 
                 QMessageBox.information(
                     parent,
