@@ -1,6 +1,6 @@
 """
 File: test_meeting_pattern_editor.py
-Date: 04/05/2026
+Date: 04/25/2026
 Author: Chayse Altland
 Description: Tests for MeetingPatternEditor logic optimized for CI/CD workflows.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
-from time_slot_config_editor.meeting_pattern_editor import MeetingPatternEditor
+from timeslot_config.meeting_pattern_editor import MeetingPatternEditor
 
 
 class DummyConfigManager:
@@ -190,7 +190,7 @@ def test_sync_preserves_times(editor):
 
 def test_prompt_yes_no_true(monkeypatch, editor, parent):
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QInputDialog.getItem",
+        "timeslot_config.meeting_pattern_editor.QInputDialog.getItem",
         lambda *args, **kwargs: ("True", True),
     )
 
@@ -201,7 +201,7 @@ def test_prompt_yes_no_true(monkeypatch, editor, parent):
 
 def test_prompt_yes_no_false(monkeypatch, editor, parent):
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QInputDialog.getItem",
+        "timeslot_config.meeting_pattern_editor.QInputDialog.getItem",
         lambda *args, **kwargs: ("False", True),
     )
 
@@ -224,11 +224,11 @@ def test_prompt_for_meetings(monkeypatch, editor, parent):
     ])
 
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QInputDialog.getInt",
+        "timeslot_config.meeting_pattern_editor.QInputDialog.getInt",
         lambda *args, **kwargs: next(int_responses),
     )
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QInputDialog.getItem",
+        "timeslot_config.meeting_pattern_editor.QInputDialog.getItem",
         lambda *args, **kwargs: next(item_responses),
     )
 
@@ -259,15 +259,15 @@ def test_prompt_for_pattern(monkeypatch, editor, parent):
     ])
 
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QInputDialog.getInt",
+        "timeslot_config.meeting_pattern_editor.QInputDialog.getInt",
         lambda *args, **kwargs: next(int_responses),
     )
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QInputDialog.getItem",
+        "timeslot_config.meeting_pattern_editor.QInputDialog.getItem",
         lambda *args, **kwargs: next(item_responses),
     )
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QInputDialog.getText",
+        "timeslot_config.meeting_pattern_editor.QInputDialog.getText",
         lambda *args, **kwargs: next(text_responses),
     )
 
@@ -321,7 +321,7 @@ def test_add_meeting_pattern_success(monkeypatch, editor, parent):
         },
     )
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QMessageBox.information",
+        "timeslot_config.meeting_pattern_editor.QMessageBox.information",
         lambda *args, **kwargs: None,
     )
 
@@ -361,7 +361,7 @@ def test_modify_meeting_pattern_updates_selected(monkeypatch, parent):
     first_label = editor._pattern_label(cfg.data["config"]["meeting_patterns"][0], 0)
 
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QInputDialog.getItem",
+        "timeslot_config.meeting_pattern_editor.QInputDialog.getItem",
         lambda *args, **kwargs: (first_label, True),
     )
     monkeypatch.setattr(
@@ -378,7 +378,7 @@ def test_modify_meeting_pattern_updates_selected(monkeypatch, parent):
         },
     )
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QMessageBox.information",
+        "timeslot_config.meeting_pattern_editor.QMessageBox.information",
         lambda *args, **kwargs: None,
     )
 
@@ -417,15 +417,15 @@ def test_delete_meeting_pattern_removes_selected(monkeypatch, parent):
     first_label = editor._pattern_label(cfg.data["config"]["meeting_patterns"][0], 0)
 
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QInputDialog.getItem",
+        "timeslot_config.meeting_pattern_editor.QInputDialog.getItem",
         lambda *args, **kwargs: (first_label, True),
     )
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QMessageBox.question",
+        "timeslot_config.meeting_pattern_editor.QMessageBox.question",
         lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
     )
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QMessageBox.information",
+        "timeslot_config.meeting_pattern_editor.QMessageBox.information",
         lambda *args, **kwargs: None,
     )
 
@@ -438,7 +438,7 @@ def test_delete_meeting_pattern_removes_selected(monkeypatch, parent):
 def test_modify_meeting_pattern_when_none_exist(monkeypatch, editor, parent):
     warning_calls = []
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QMessageBox.warning",
+        "timeslot_config.meeting_pattern_editor.QMessageBox.warning",
         lambda *args, **kwargs: warning_calls.append((args, kwargs)),
     )
 
@@ -450,7 +450,7 @@ def test_modify_meeting_pattern_when_none_exist(monkeypatch, editor, parent):
 def test_delete_meeting_pattern_when_none_exist(monkeypatch, editor, parent):
     warning_calls = []
     monkeypatch.setattr(
-        "app.meeting_pattern_editor.QMessageBox.warning",
+        "timeslot_config.meeting_pattern_editor.QMessageBox.warning",
         lambda *args, **kwargs: warning_calls.append((args, kwargs)),
     )
 

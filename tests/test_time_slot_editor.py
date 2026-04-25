@@ -1,6 +1,6 @@
 """
 File: test_time_slot_editor.py
-Date: 04/05/2026
+Date: 04/25/2026
 Author: Chayse Altland
 Description: Tests for TimeSlotEditor logic
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
-from time_slot_config_editor.time_slot_editor import TimeSlotEditor
+from timeslot_config.time_slot_editor import TimeSlotEditor
 
 
 class DummyConfigManager:
@@ -224,17 +224,17 @@ def test_prompt_for_block_rejects_invalid_range(monkeypatch, editor, parent):
     ])
 
     monkeypatch.setattr(
-        "app.time_slot_editor.QInputDialog.getText",
+        "timeslot_config.time_slot_editor.QInputDialog.getText",
         lambda *args, **kwargs: next(text_responses),
     )
     monkeypatch.setattr(
-        "app.time_slot_editor.QInputDialog.getInt",
+        "timeslot_config.time_slot_editor.QInputDialog.getInt",
         lambda *args, **kwargs: (60, True),
     )
 
     warning_calls = []
     monkeypatch.setattr(
-        "app.time_slot_editor.QMessageBox.warning",
+        "timeslot_config.time_slot_editor.QMessageBox.warning",
         lambda *args, **kwargs: warning_calls.append((args, kwargs)),
     )
 
@@ -246,7 +246,7 @@ def test_prompt_for_block_rejects_invalid_range(monkeypatch, editor, parent):
 
 def test_add_time_slot_success(monkeypatch, editor, parent):
     monkeypatch.setattr(
-        "app.time_slot_editor.QInputDialog.getItem",
+        "timeslot_config.time_slot_editor.QInputDialog.getItem",
         lambda *args, **kwargs: ("Monday", True),
     )
 
@@ -255,17 +255,17 @@ def test_add_time_slot_success(monkeypatch, editor, parent):
         ("12:00", True),
     ])
     monkeypatch.setattr(
-        "app.time_slot_editor.QInputDialog.getText",
+        "timeslot_config.time_slot_editor.QInputDialog.getText",
         lambda *args, **kwargs: next(text_responses),
     )
     monkeypatch.setattr(
-        "app.time_slot_editor.QInputDialog.getInt",
+        "timeslot_config.time_slot_editor.QInputDialog.getInt",
         lambda *args, **kwargs: (60, True),
     )
 
     info_calls = []
     monkeypatch.setattr(
-        "app.time_slot_editor.QMessageBox.information",
+        "timeslot_config.time_slot_editor.QMessageBox.information",
         lambda *args, **kwargs: info_calls.append((args, kwargs)),
     )
 
@@ -305,7 +305,7 @@ def test_add_time_slot_appends_second_block_same_day(monkeypatch, parent):
     editor = TimeSlotEditor(cfg)
 
     monkeypatch.setattr(
-        "app.time_slot_editor.QInputDialog.getItem",
+        "timeslot_config.time_slot_editor.QInputDialog.getItem",
         lambda *args, **kwargs: ("Monday", True),
     )
 
@@ -314,15 +314,15 @@ def test_add_time_slot_appends_second_block_same_day(monkeypatch, parent):
         ("17:10", True),
     ])
     monkeypatch.setattr(
-        "app.time_slot_editor.QInputDialog.getText",
+        "timeslot_config.time_slot_editor.QInputDialog.getText",
         lambda *args, **kwargs: next(text_responses),
     )
     monkeypatch.setattr(
-        "app.time_slot_editor.QInputDialog.getInt",
+        "timeslot_config.time_slot_editor.QInputDialog.getInt",
         lambda *args, **kwargs: (60, True),
     )
     monkeypatch.setattr(
-        "app.time_slot_editor.QMessageBox.information",
+        "timeslot_config.time_slot_editor.QMessageBox.information",
         lambda *args, **kwargs: None,
     )
 
@@ -361,15 +361,15 @@ def test_delete_last_block_removes_day(monkeypatch, parent):
         ("Block 1: 08:00 - 12:00 every 60 min", True),
     ])
     monkeypatch.setattr(
-        "app.time_slot_editor.QInputDialog.getItem",
+        "timeslot_config.time_slot_editor.QInputDialog.getItem",
         lambda *args, **kwargs: next(item_responses),
     )
     monkeypatch.setattr(
-        "app.time_slot_editor.QMessageBox.question",
+        "timeslot_config.time_slot_editor.QMessageBox.question",
         lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
     )
     monkeypatch.setattr(
-        "app.time_slot_editor.QMessageBox.information",
+        "timeslot_config.time_slot_editor.QMessageBox.information",
         lambda *args, **kwargs: None,
     )
 
@@ -407,7 +407,7 @@ def test_modify_time_slot_updates_selected_block(monkeypatch, parent):
         ("Block 1: 08:00 - 12:00 every 60 min", True),
     ])
     monkeypatch.setattr(
-        "app.time_slot_editor.QInputDialog.getItem",
+        "timeslot_config.time_slot_editor.QInputDialog.getItem",
         lambda *args, **kwargs: next(item_responses),
     )
 
@@ -416,15 +416,15 @@ def test_modify_time_slot_updates_selected_block(monkeypatch, parent):
         ("13:00", True),
     ])
     monkeypatch.setattr(
-        "app.time_slot_editor.QInputDialog.getText",
+        "timeslot_config.time_slot_editor.QInputDialog.getText",
         lambda *args, **kwargs: next(text_responses),
     )
     monkeypatch.setattr(
-        "app.time_slot_editor.QInputDialog.getInt",
+        "timeslot_config.time_slot_editor.QInputDialog.getInt",
         lambda *args, **kwargs: (30, True),
     )
     monkeypatch.setattr(
-        "app.time_slot_editor.QMessageBox.information",
+        "timeslot_config.time_slot_editor.QMessageBox.information",
         lambda *args, **kwargs: None,
     )
 
