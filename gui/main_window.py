@@ -8,8 +8,8 @@ The Design-Patterns implemented here are as follows:
     -Singleton
     -Proxy
 
-:date: 04/17/2026
-:authors: Kyle Smith, Tyler Strohl, Chayse Altland, & Shane del Villar
+:date: 04/25/2026
+:authors: Kyle Smith, Tyler Strohl, Chayse Altland, Shane del Villar, & Mohamed Mussa
 :class: CMSC 420
 """
 #Note: The """ comment blocks are important for the documentation (see docs folder).
@@ -156,7 +156,7 @@ class MainWindow(QMainWindow):
         self.path_label.setFont(QFont("Segoe UI", 9))
         self.path_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.path_label.setWordWrap(True)
-        self._update_path_label_text()
+        self.viewer_mgr._update_path_label_text(self)
 
         header_layout.addWidget(self.counter_label)
         header_layout.addWidget(self.path_label)
@@ -200,7 +200,7 @@ class MainWindow(QMainWindow):
         self.ai_chat_log = QPlainTextEdit()
         self.ai_chat_log.setReadOnly(True)
         self.ai_chat_log.setPlaceholderText(
-            "Example: “Add room Roddy 201”, “List faculty”, “Set schedule limit to 5”…"
+            "Example: “Add room Roddy 210”, “List faculty”, “Set schedule limit to 5”…"
         )
         self.ai_input = QLineEdit()
         self.ai_input.setPlaceholderText("Message… (Enter to send)")
@@ -236,7 +236,10 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(shell)
 
     def _setup_quick_toolbar(self) -> None:
-        """One-click access to common actions + shortcuts (fewer menu dives)."""
+        """
+        One-click access to common actions + shortcuts (fewer menu dives).
+        Also created due to menubar differences for Mac OS users.
+        """
         tb = QToolBar("Actions")
         tb.setObjectName("quickToolBar")
         tb.setMovable(False)
@@ -245,9 +248,7 @@ class MainWindow(QMainWindow):
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, tb)
 
         def add_action(
-            text: str,
-            slot,
-            tip: str,
+            text: str, slot, tip: str,
             shortcut: QKeySequence | None = None,
         ) -> QAction:
             act = QAction(text, self)
@@ -260,68 +261,46 @@ class MainWindow(QMainWindow):
             return act
 
         add_action(
-            "Open…",
-            self.handle_change_path,
+            "Open…", lambda: self.viewer_mgr.handle_change_path(self),
             "Choose a different JSON configuration file (Ctrl+O)",
             QKeySequence.StandardKey.Open,
         )
         add_action(
-            "Save",
-            lambda: self.config_mgr.save(self),
-            "Save configuration to disk (Ctrl+S)",
-            QKeySequence.StandardKey.Save,
+            "Save", lambda: self.config_mgr.save(self),
+            "Save configuration to disk (Ctrl+S)", QKeySequence.StandardKey.Save,
         )
         tb.addSeparator()
         add_action(
-            "Generate",
-            lambda: self.gen_manager.run_scheduler(self),
-            "Run schedule generation (Ctrl+G)",
-            QKeySequence("Ctrl+G"),
+            "Generate", lambda: self.gen_manager.run_scheduler(self),
+            "Run schedule generation (Ctrl+G)", QKeySequence("Ctrl+G"),
         )
         add_action(
-            "Refresh grid",
-            lambda: self.viewer_mgr.update_schedule_display(self, "all"),
-            "Redraw the schedule table (F5)",
-            QKeySequence("F5"),
+            "Refresh grid", lambda: self.viewer_mgr.update_schedule_display(self, "all"),
+            "Redraw the schedule table (F5)", QKeySequence("F5"),
         )
         tb.addSeparator()
         add_action(
-            "Import",
-            self.handle_import_schedule,
-            "Import schedule JSON (Ctrl+Shift+I)",
-            QKeySequence("Ctrl+Shift+I"),
+            "Import", lambda: self.viewer_mgr.handle_import_schedule(self),
+            "Import schedule JSON (Ctrl+Shift+I)", QKeySequence("Ctrl+Shift+I"),
         )
         add_action(
-            "Export",
-            self.handle_export_schedule,
-            "Export schedules (Ctrl+Shift+E)",
-            QKeySequence("Ctrl+Shift+E"),
+            "Export", lambda: self.viewer_mgr.handle_export_schedule(self),
+            "Export schedules (Ctrl+Shift+E)", QKeySequence("Ctrl+Shift+E"),
         )
         tb.addSeparator()
         add_action(
-            "Summary",
-            lambda: self.viewer_mgr.handle_view_summary(self),
-            "View configuration summary (F2)",
-            QKeySequence("F2"),
+            "Summary", lambda: self.viewer_mgr.handle_view_summary(self),
+            "View configuration summary (F2)", QKeySequence("F2"),
         )
-        add_action(
-            "Undo",
-            self.undo,
-            "Undo last config change (Ctrl+Z)",
-            QKeySequence("Ctrl+Z"),
+        add_action("Undo", self.undo, "Undo last config change (Ctrl+Z)", QKeySequence("Ctrl+Z"),
         )
-        add_action(
-            "Redo",
-            self.redo,
-            "Redo last undone config change (Ctrl+Y)",
-            QKeySequence("Ctrl+Y"),
+        add_action("Redo", self.redo, "Redo last undone config change (Ctrl+Y)", QKeySequence("Ctrl+Y"),
         )
 
         send_act = QAction("Send assistant message", self)
         send_act.setShortcut(QKeySequence("Ctrl+Return"))
         send_act.triggered.connect(self.send_assistant_message)
         self.addAction(send_act)
-
         tb.addSeparator()
 
         def _menu_btn(text: str, tip: str, entries: list[tuple[str, Callable[[], None]]]) -> QToolButton:
@@ -390,7 +369,7 @@ class MainWindow(QMainWindow):
         gen_menu = menubar.addMenu("Generator")
         viewer_menu = menubar.addMenu("Viewer")
         help_menu = menubar.addMenu("Help")
-        help_menu.addAction("Keyboard shortcuts…", self._show_shortcuts_cheat_sheet)
+        help_menu.addAction("Keyboard shortcuts…", lambda: self.viewer_mgr._show_shortcuts_cheat_sheet(self))
 
         # Command Bindings
         self._bind_file_commands(file_menu)
@@ -428,10 +407,10 @@ class MainWindow(QMainWindow):
 
     def _bind_file_commands(self, menu):
         """Binds file-related operations."""
-        menu.addAction("Change Config File").triggered.connect(self.handle_change_path)
+        menu.addAction("Change Config File").triggered.connect(lambda: self.viewer_mgr.handle_change_path(self))
         menu.addAction("View Summary").triggered.connect(lambda: self.viewer_mgr.handle_view_summary(self))
-        menu.addAction("Save configuration").triggered.connect(lambda: self.config_mgr.save(self))
-        menu.addAction("Save configuration as…").triggered.connect(self.save_config_to_file)
+        menu.addAction("Save Config").triggered.connect(lambda: self.config_mgr.save(self))
+        menu.addAction("Save Config As").triggered.connect(lambda: self.viewer_mgr.save_as(self))
     
     def _bind_faculty_commands(self, menu):
         """Binds faculty management operations."""
@@ -481,8 +460,8 @@ class MainWindow(QMainWindow):
         menu.addAction("View by Faculty").triggered.connect(lambda: self.viewer_mgr.update_schedule_display(self, "faculty"))
         menu.addAction("View by Room").triggered.connect(lambda: self.viewer_mgr.update_schedule_display(self, "room"))
         menu.addAction("View by Lab").triggered.connect(lambda: self.viewer_mgr.update_schedule_display(self, "lab"))
-        menu.addAction("Export Schedules").triggered.connect(self.handle_export_schedule)
-        menu.addAction("Import Schedules").triggered.connect(self.handle_import_schedule)
+        menu.addAction("Export Schedules").triggered.connect(lambda: self.viewer_mgr.handle_export_schedule(self))
+        menu.addAction("Import Schedules").triggered.connect(lambda: self.viewer_mgr.handle_import_schedule(self))
         menu.addAction("Clear Schedules").triggered.connect(lambda: self.viewer_mgr.handle_clear_schedule(self))
 
     #=================================================================================
@@ -493,17 +472,6 @@ class MainWindow(QMainWindow):
 
     def apply_theme(self) -> None:
         apply_main_window_theme(self)
-
-    def _update_path_label_text(self) -> None:
-        if not hasattr(self, "path_label"):
-            return
-        fp = (getattr(self.config_mgr, "filepath", None) or "").strip()
-        if fp:
-            self.path_label.setText(f"Config: {os.path.basename(fp)}")
-            self.path_label.setToolTip(fp)
-        else:
-            self.path_label.setText("Config: (unsaved or unknown path)")
-            self.path_label.setToolTip("")
 
     def set_theme(self, theme_name: str) -> None:
         if theme_name not in self.theme_colors:
@@ -517,120 +485,6 @@ class MainWindow(QMainWindow):
     Handler Functions:
     """
     #=================================================================================    
-
-    #TODO: Move this function to Viewer class.   
-    def _show_shortcuts_cheat_sheet(self) -> None:
-        mb = QMessageBox(self)
-        mb.setWindowTitle("Keyboard shortcuts")
-        mb.setIcon(QMessageBox.Icon.Information)
-        mb.setTextFormat(Qt.TextFormat.RichText)
-        mb.setText(
-            "<p style='margin-bottom:10px'><b>Toolbar / main window</b></p>"
-            "<table cellspacing='6'>"
-            "<tr><td>Open configuration…</td><td><b>Ctrl+O</b></td></tr>"
-            "<tr><td>Save configuration</td><td><b>Ctrl+S</b></td></tr>"
-            "<tr><td>Generate schedules</td><td><b>Ctrl+G</b></td></tr>"
-            "<tr><td>Refresh schedule grid</td><td><b>F5</b></td></tr>"
-            "<tr><td>Import schedules</td><td><b>Ctrl+Shift+I</b></td></tr>"
-            "<tr><td>Export schedules</td><td><b>Ctrl+Shift+E</b></td></tr>"
-            "<tr><td>Configuration summary</td><td><b>F2</b></td></tr>"
-            "<tr><td>Send assistant message</td><td><b>Ctrl+Enter</b> "
-            "(or Enter in the message field)</td></tr>"
-            "</table>"
-        )
-        mb.exec()
-
-    #TODO: Move this function over to config_mgr
-    def handle_change_path(self):
-        """Opens dialog to update the configuration file path."""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Configuration File", "config/", "JSON Files (*.json);;All Files (*)"
-        )
-        if file_path:
-            self.config_mgr.filepath = file_path
-            try:
-                self.config_mgr.load(self)
-                self._update_path_label_text()
-                self.viewer_mgr._sync_detail_view(self)
-                QMessageBox.information(self, "Success", "Configuration File changed.")
-                
-            except Exception as e:
-                QMessageBox.warning(self, "Load Warning", str(e))
-
-
-
-    #TODO: Move the following functions to a new class:
-    #DO THIS BEFORE MOVING MORE FUNCTIONS TO CONFIG_MGR
-    #---------------------------------------------------------
-    #THESE FUNCTIONS NEED TO BE MOVED TO A NEW VIEWER CLASS
-    #---------------------------------------------------------
-    def handle_import_schedule(self):
-        """
-        Delegates JSON parsing to ConfigManager and updates the UI with the result.
-        """
-
-        imported_data = self.config_mgr.import_schedule_from_json(parent=self)
-
-        if imported_data:
-
-            self.schedules = imported_data
-            self.current_schedule_index = 0
-            #Updates filepath displayed for imported schedules
-            self.cfg_panel.update_title(self.cfg_panel, self.config_mgr.import_file)
-            self.viewer_mgr.update_schedule_display(self)
-
-            try:
-                QMessageBox.information(
-                    self,
-                    "Import Successful",
-                    f"Successfully loaded {len(imported_data)} schedule(s)."
-                )
-            except:
-                QMessageBox.critical(self, "Error", "Import failed.")
-
-    def handle_export_schedule(self):
-        """
-        Delegates schedule export with selectable output mode.
-        """
-        if not (hasattr(self, "schedules") and self.schedules):
-            QMessageBox.warning(
-                self, 
-                "Export Error", 
-                "There are no schedules currently loaded to export. "
-                "Please generate schedules first."
-            )
-            return
-
-        options = [
-            "Full schedules (JSON)",
-            "Full schedules (PDF)",
-            "By room/lab postings (PDF printable)",
-            "By faculty postings (PDF printable)",
-        ]
-        choice, ok = QInputDialog.getItem(
-            self,
-            "Export Schedules",
-            "Export format:",
-            options,
-            0,
-            False,
-        )
-        if not ok:
-            return
-
-        if choice == options[0]:
-            self.config_mgr.export_schedule_to_json(self.schedules, self)
-        elif choice == options[1]:
-            self.config_mgr.export_schedule_to_pdf(self.schedules, self)
-        elif choice == options[2]:
-            self.config_mgr.export_grouped_printable(self.schedules, self, "room_lab")
-        else:
-            self.config_mgr.export_grouped_printable(self.schedules, self, "faculty")
-
-    #---------------------------------------------------------
-    #End of functions that should be moved to viewer (see them above)
-    #---------------------------------------------------------
-
     #IMPORTANT FUNCTIONS FOR COURSE DETAIL POPUP
     #TODO: Please move these to CourseDetailPopup,
     #      & refactor the class to clean up main window,
@@ -724,16 +578,6 @@ class MainWindow(QMainWindow):
         }
     #-------------------------------------------
 
-    #TODO: Move this function to config_mgr
-    def save_config_to_file(self):
-        """'Save As' functionality for exporting the current config state."""
-        p, _ = QFileDialog.getSaveFileName(self, "Save JSON", "", "*.json")
-        if p:
-            self.config_mgr.filepath = p
-            self.config_mgr.save(self)
-            self._update_path_label_text()
-            self.viewer_mgr._sync_detail_view(self)
-
     def send_assistant_message(self) -> None:
         self.ai_viewer_mgr.send_assistant_message()
 
@@ -748,7 +592,7 @@ class MainWindow(QMainWindow):
             self.undo_stack.append(before)
             self.redo_stack.clear()
             self.viewer_mgr._sync_detail_view(self)
-            self._update_path_label_text()
+            self.viewer_mgr._update_path_label_text(self)
 
     def undo(self):
         if not self.undo_stack:
@@ -760,7 +604,7 @@ class MainWindow(QMainWindow):
         self.config_mgr.data = self.undo_stack.pop()
         self.config_mgr.save(self)
         self.viewer_mgr._sync_detail_view(self)
-        self._update_path_label_text()
+        self.viewer_mgr._update_path_label_text(self)
 
     def redo(self):
         if not self.redo_stack:
@@ -772,4 +616,4 @@ class MainWindow(QMainWindow):
         self.config_mgr.data = self.redo_stack.pop()
         self.config_mgr.save(self)
         self.viewer_mgr._sync_detail_view(self)
-        self._update_path_label_text()
+        self.viewer_mgr._update_path_label_text(self)

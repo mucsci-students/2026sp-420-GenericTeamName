@@ -1,12 +1,13 @@
 '''
     File: viewer_gui.py
-    Date: 04/23/2026
+    Date: 04/25/2026
     Author: Tyler Strohl
     Class: CMSC 420
     Description: Holds schedule viewer functions to be used in *main_window.py*.
 '''
 
 import json
+import os
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from PyQt6.QtWidgets import (
@@ -61,7 +62,12 @@ class ViewerManager:
             "course_ids": sorted(set(course_ids), key=str.casefold),
         }
     
+    #=================================================================================
+    """Display Handlers:"""
+    #=================================================================================
+
     def _sync_detail_view(self, parent) -> None:
+        """Updates detail view with latest JSON info."""
         if not hasattr(parent, "detail_view"):
             return
         try:
@@ -69,34 +75,17 @@ class ViewerManager:
         except (TypeError, ValueError):
             parent.detail_view.setPlainText("(Unable to display configuration as JSON.)")
 
-    def handle_clear_schedule(self, parent) -> None:
-
-        """
-        Removes all the currently generated schedules.
-        """
-        if not parent.schedules or not (0 <= parent.current_schedule_index < len(parent.schedules)):
-            QMessageBox.warning(parent, "No Data", "No schedules to clear.")
+    def _update_path_label_text(self, parent) -> None:
+        """Updates filepath text for active config."""
+        if not hasattr(parent, "path_label"):
             return
+        fp = (getattr(self.config_mgr, "filepath", None) or "").strip()
+        if fp:
+            parent.path_label.setText(f"Config: {os.path.basename(fp)}")
+            parent.path_label.setToolTip(fp)
         else:
-            try:
-                self.clear_clicked = True
-                parent.schedules.clear()
-                #Updates imported schedules label
-                parent.cfg_panel.update_title(parent.cfg_panel)
-                self.config_mgr.import_file = ""
-                self.update_schedule_display(parent)
-                QMessageBox.information(parent, "Success", "Schedule/s have been cleared.")
-            except:
-                QMessageBox.critical(parent, "Error", "Clear failed.")
-
-    def handle_view_summary(self, parent):
-        """Displays a summary of the current configuration in a monospaced dialog."""
-        summary = self.config_mgr.get_summary_text()
-        msg = QMessageBox(parent)
-        msg.setWindowTitle(f"Summary: {self.config_mgr.filepath}")
-        msg.setText(summary)
-        msg.setFont(QFont("Courier New", 10))
-        msg.exec()
+            parent.path_label.setText("Config: (unsaved or unknown path)")
+            parent.path_label.setToolTip("")
 
     def show_next_schedule(self, parent):
         """Increments schedule index with wrap-around."""
@@ -173,7 +162,7 @@ class ViewerManager:
                 else:
                     return
 
-        parent._update_path_label_text()
+        self._update_path_label_text(parent)
         filter_suffix = f" · Filter: {filter_val}" if filter_val else ""
         parent.counter_label.setText(
             f"Schedule {parent.current_schedule_index + 1} of {len(parent.schedules)}{filter_suffix}"
@@ -200,3 +189,140 @@ class ViewerManager:
                     item.setBackground(QBrush(QColor(37, 99, 235)))
                     item.setForeground(QBrush(QColor(255, 255, 255)))
                 parent.calendar_view.setItem(r, c, item)
+
+    def _show_shortcuts_cheat_sheet(self, parent) -> None:
+        mb = QMessageBox(parent)
+        mb.setWindowTitle("Keyboard shortcuts")
+        mb.setIcon(QMessageBox.Icon.Information)
+        mb.setTextFormat(Qt.TextFormat.RichText)
+        mb.setText(
+            "<p style='margin-bottom:10px'><b>Toolbar / main window</b></p>"
+            "<table cellspacing='6'>"
+            "<tr><td>Open configuration…</td><td><b>Ctrl+O</b></td></tr>"
+            "<tr><td>Save configuration</td><td><b>Ctrl+S</b></td></tr>"
+            "<tr><td>Generate schedules</td><td><b>Ctrl+G</b></td></tr>"
+            "<tr><td>Refresh schedule grid</td><td><b>F5</b></td></tr>"
+            "<tr><td>Import schedules</td><td><b>Ctrl+Shift+I</b></td></tr>"
+            "<tr><td>Export schedules</td><td><b>Ctrl+Shift+E</b></td></tr>"
+            "<tr><td>Configuration summary</td><td><b>F2</b></td></tr>"
+            "<tr><td>Send assistant message</td><td><b>Ctrl+Enter</b> "
+            "(or Enter in the message field)</td></tr>"
+            "</table>"
+        )
+        mb.exec()
+
+    #=================================================================================
+    """Config Handlers:"""
+    #=================================================================================
+
+    def save_as(self, parent):
+        """'Save As' functionality for exporting the current config state."""
+        p, _ = QFileDialog.getSaveFileName(parent, "Save JSON", "", "*.json")
+        if p:
+            self.config_mgr.filepath = p
+            self.config_mgr.save(parent)
+            self._update_path_label_text(parent)
+            self._sync_detail_view(parent)
+
+    def handle_change_path(self, parent):
+        """Opens dialog to update the configuration file path."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            parent, "Select Configuration File", "config/", "JSON Files (*.json);;All Files (*)"
+        )
+        if file_path:
+            self.config_mgr.filepath = file_path
+            try:
+                self.config_mgr.load(parent)
+                self._update_path_label_text(parent)
+                self._sync_detail_view(parent)
+                QMessageBox.information(parent, "Success", "Configuration File changed.")
+                
+            except Exception as e:
+                QMessageBox.warning(parent, "Load Warning", str(e))
+
+    def handle_import_schedule(self, parent):
+        """
+        Delegates JSON parsing to ConfigManager and updates the UI with the result.
+        """
+
+        imported_data = self.config_mgr.import_schedule_from_json(parent=parent)
+
+        if imported_data:
+
+            parent.schedules = imported_data
+            parent.current_schedule_index = 0
+            #Updates filepath displayed for imported schedules
+            parent.cfg_panel.update_title(parent.cfg_panel, self.config_mgr.import_file)
+            self.update_schedule_display(parent)
+
+            try:
+                QMessageBox.information(
+                    parent,
+                    "Import Successful",
+                    f"Successfully loaded {len(imported_data)} schedule(s)."
+                )
+            except:
+                QMessageBox.critical(parent, "Error", "Import failed.")
+
+    def handle_export_schedule(self, parent):
+        """Delegates schedule export with selectable output mode."""
+        if not (hasattr(parent, "schedules") and parent.schedules):
+            QMessageBox.warning(
+                parent, 
+                "Export Error", 
+                "There are no schedules currently loaded to export. "
+                "Please generate schedules first."
+            )
+            return
+
+        options = [
+            "Full schedules (JSON)",
+            "Full schedules (PDF)",
+            "By room/lab postings (PDF printable)",
+            "By faculty postings (PDF printable)",
+        ]
+        choice, ok = QInputDialog.getItem(
+            parent,
+            "Export Schedules",
+            "Export format:",
+            options,
+            0,
+            False,
+        )
+        if not ok:
+            return
+
+        if choice == options[0]:
+            self.config_mgr.export_schedule_to_json(parent.schedules, parent)
+        elif choice == options[1]:
+            self.config_mgr.export_schedule_to_pdf(parent.schedules, parent)
+        elif choice == options[2]:
+            self.config_mgr.export_grouped_printable(parent.schedules, parent, "room_lab")
+        else:
+            self.config_mgr.export_grouped_printable(parent.schedules, parent, "faculty")
+
+    def handle_clear_schedule(self, parent) -> None:
+        """Removes all the currently generated schedules."""
+        if not parent.schedules or not (0 <= parent.current_schedule_index < len(parent.schedules)):
+            QMessageBox.warning(parent, "No Data", "No schedules to clear.")
+            return
+        else:
+            try:
+                self.clear_clicked = True
+                parent.schedules.clear()
+                #Updates imported schedules label
+                parent.cfg_panel.update_title(parent.cfg_panel)
+                self.config_mgr.import_file = ""
+                self.update_schedule_display(parent)
+                QMessageBox.information(parent, "Success", "Schedule/s have been cleared.")
+            except:
+                QMessageBox.critical(parent, "Error", "Clear failed.")
+
+    def handle_view_summary(self, parent):
+        """Displays a summary of the current configuration in a monospaced dialog."""
+        summary = self.config_mgr.get_summary_text()
+        msg = QMessageBox(parent)
+        msg.setWindowTitle(f"Summary: {self.config_mgr.filepath}")
+        msg.setText(summary)
+        msg.setFont(QFont("Courier New", 10))
+        msg.exec()
