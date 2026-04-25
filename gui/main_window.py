@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import QInputDialog
 
 from .menu_widgets import ContentPanel
 from .proxy_manager import ProxyManager
+from .course_detail_popup import CourseDetailPopup
 from themes.themes import THEME_PRESETS, apply_main_window_theme
 
 #=================================================================================
@@ -183,6 +184,7 @@ class MainWindow(QMainWindow):
         self.calendar_view.verticalHeader().setDefaultSectionSize(28)
         self.calendar_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.calendar_view.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.calendar_view.cellClicked.connect(self._on_schedule_cell_clicked)
 
         inner_layout.addWidget(header_widget, 0)
         inner_layout.addWidget(nav_widget, 0)
@@ -628,6 +630,99 @@ class MainWindow(QMainWindow):
     #---------------------------------------------------------
     #End of functions that should be moved to viewer (see them above)
     #---------------------------------------------------------
+
+    #IMPORTANT FUNCTIONS FOR COURSE DETAIL POPUP
+    #TODO: Please move these to CourseDetailPopup,
+    #      & refactor the class to clean up main window,
+    #      & so an entirely new object doesnt have to be made
+    #      for every cell click.
+
+    #TODO: Fix the same filters issue here that was prev resolved,
+    #      cells are going purely off of active config.
+    #-------------------------------------------
+    def _on_schedule_cell_clicked(self, row: int, col: int) -> None:
+        """
+        Slot: when the user clicks a cell in the schedule grid, find the
+        matching course and show the CourseDetailPopup near the cursor.
+        """
+        item = self.calendar_view.item(row, col)
+        if item is None or not item.text().strip():
+            return
+
+        course = self._find_course_for_cell(item.text())
+        if not course:
+            return
+
+        from PyQt6.QtGui import QCursor
+        popup = CourseDetailPopup(course, self)
+        popup.show_near(QCursor.pos())
+
+    def _find_course_for_cell(self, cell_text: str) -> dict | None:
+        """
+        Build a rich course dict for the popup by combining the schedule's
+        time assignments with the course definition from the config.
+        """
+        if not self.schedules:
+            return None
+        if not (0 <= self.current_schedule_index < len(self.schedules)):
+            return None
+
+        schedule = self.schedules[self.current_schedule_index]
+        if not isinstance(schedule, list):
+            return None
+
+        # The cell usually displays something like "CMSC 161.01" — grab the
+        # first token and use that as the matching id.
+        first_line = cell_text.splitlines()[0].strip() if cell_text else ""
+        target_id = first_line.split()[0:2]  # e.g. ["CMSC", "161.01"]
+        target_id = " ".join(target_id) if target_id else ""
+
+        # Gather every meeting in the schedule for this section.
+        meetings = [
+            e for e in schedule
+            if isinstance(e, dict)
+            and str(e.get("course_id", "")).strip() == target_id
+        ]
+        if not meetings:
+            return None
+
+        # Build a "days & time" string like "Mon Wed Fri  10:00"
+        days = [m.get("day", "") for m in meetings if m.get("day")]
+        times = sorted({m.get("time", "") for m in meetings if m.get("time")})
+        time_str = " ".join(days) + ("  " + ", ".join(times) if times else "")
+
+        # Try to look up the underlying course definition in the config so
+        # we can show room / lab / credits / faculty.
+        base_id = target_id.split(".")[0].strip()  # "CMSC 161.01" -> "CMSC 161"
+        config_courses = (
+            self.config_mgr.data.get("config", {}).get("courses", [])
+            if hasattr(self, "config_mgr") else []
+        )
+        base_course = next(
+            (c for c in config_courses
+             if isinstance(c, dict) and str(c.get("course_id", "")).strip() == base_id),
+            {},
+        )
+
+        # Split target_id into course_id + section for nicer display
+        section = ""
+        course_id_display = target_id
+        if "." in target_id:
+            course_id_display, section = target_id.split(".", 1)
+            course_id_display = course_id_display.strip()
+            section = section.strip()
+
+        return {
+            "course_id": course_id_display or target_id,
+            "section": section,
+            "faculty": base_course.get("faculty", []),
+            "room": base_course.get("room", []),
+            "lab": base_course.get("lab", []),
+            "credits": base_course.get("credits"),
+            "days": days,
+            "time_slot": ", ".join(times) if times else "",
+        }
+    #-------------------------------------------
 
     #TODO: Move this function to config_mgr
     def save_config_to_file(self):

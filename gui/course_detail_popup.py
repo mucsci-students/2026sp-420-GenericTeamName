@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, QPoint
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtGui import QFont, QColor, QCursor
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QFrame, QPushButton, QWidget,
