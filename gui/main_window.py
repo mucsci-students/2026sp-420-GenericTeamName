@@ -32,7 +32,7 @@ from PyQt6.QtWidgets import QInputDialog
 
 from .menu_widgets import ContentPanel
 from .proxy_manager import ProxyManager
-from .ui_styles import SchedulerStyles
+from themes.themes import THEME_PRESETS, apply_main_window_theme
 
 #=================================================================================
 class MainWindow(QMainWindow):
@@ -55,14 +55,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(960, 520)
 
         #Theme Configuration (window chrome; panels use slightly elevated surfaces)
-        self.theme_colors = {
-            "Light": "#eef1f6", "Dark": "#18181b",
-            "Autumn": "#8a5a44", "Crimson": "#8b2e3c",
-            "Marathon": "#c2fe0b", "Summer": "#f4c95d",
-            "Spring": "#98c379", "Winter": "#cfddeb",
-            "Ocean": "#1f6f8b", "Land": "#6b8f71",
-            "Sky": "#7fb7e6",
-        }
+        self.theme_colors = THEME_PRESETS
         #Default theme on startup
         self.current_theme = "Light"
         self.theme_color = self.theme_colors[self.current_theme]
@@ -448,7 +441,7 @@ class MainWindow(QMainWindow):
         """Binds class meeting pattern operations."""
         menu.addAction("Add Meeting Pattern").triggered.connect(lambda: self.run_with_undo(lambda: self.meeting_pattern_editor.add_meeting_pattern(self)))
         menu.addAction("Modify Meeting Pattern").triggered.connect(lambda: self.run_with_undo(lambda: self.meeting_pattern_editor.modify_meeting_pattern(self)))
-        menu.addAction("Delete Meeting Pattern").triggered.connect(lambda: self.run_with_und(lambda: self.meeting_pattern_editor.delete_meeting_pattern(self)))
+        menu.addAction("Delete Meeting Pattern").triggered.connect(lambda: self.run_with_undo(lambda: self.meeting_pattern_editor.delete_meeting_pattern(self)))
 
     def _bind_timeslot_commands(self, menu):
         """Binds dummy timeslot operations."""
@@ -492,100 +485,12 @@ class MainWindow(QMainWindow):
 
     #=================================================================================
     """
-    Theme Functions:
+    Theme: palette and QSS are applied in ``themes.themes.apply_main_window_theme``.
     """
-
-    #TODO: Move all these to a Theme class.
-
     #=================================================================================
-        
-    def _is_dark(self, hex_color: str) -> bool:
-        """Return True if color is dark (use light text)."""
-        hex_color = hex_color.lstrip("#")
-        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
-        luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-        return luminance < 0.5
 
     def apply_theme(self) -> None:
-        dark = self._is_dark(self.theme_color)
-        text_color = "#f4f4f5" if dark else "#1e293b"
-        muted = "#a1a1aa" if dark else "#64748b"
-        btn_bg = self._darken(self.theme_color, 0.12) if dark else self._lighten(self.theme_color, 0.12)
-        btn_hover = self._darken(self.theme_color, 0.06) if dark else self._lighten(self.theme_color, 0.06)
-        btn_disabled = self._darken(self.theme_color, 0.22) if dark else self._lighten(self.theme_color, 0.18)
-        btn_border = self._lighten(self.theme_color, 0.2) if dark else self._darken(self.theme_color, 0.14)
-        panel_border = self._lighten(self.theme_color, 0.14) if dark else self._darken(self.theme_color, 0.1)
-        splitter_handle = "#3f3f46" if dark else "#d4d4d8"
-        table_bg = "#27272a" if dark else "#ffffff"
-        table_alt = "#2e2e33" if dark else "#f8fafc"
-        header_bg = "#3f3f46" if dark else "#f1f5f9"
-        grid = "#52525b" if dark else "#e2e8f0"
-        primary = "#2563eb" if not dark else "#3b82f6"
-        primary_hover = "#1d4ed8" if not dark else "#2563eb"
-
-        self.setStyleSheet(
-            SchedulerStyles.main_window(
-                theme_color=self.theme_color,
-                text_color=text_color,
-                btn_bg=btn_bg,
-                btn_hover=btn_hover,
-                btn_disabled=btn_disabled,
-                btn_border=btn_border,
-                panel_border=panel_border,
-                splitter_handle=splitter_handle,
-                table_bg=table_bg,
-                table_alt=table_alt,
-                header_bg=header_bg,
-                grid=grid,
-                primary=primary,
-                primary_hover=primary_hover,
-            )
-        )
-        self.theme_btn.setStyleSheet(
-            SchedulerStyles.theme_corner_button(
-                btn_bg=btn_bg, text_color=text_color, btn_border=btn_border
-            )
-        )
-        self.theme_btn.setText(self.current_theme)
-        for panel in (self.inspect_panel, self.cfg_panel, self.assistant_panel):
-            panel.set_color(self.theme_color, panel_border)
-        self._apply_editor_panels_theme(table_bg, text_color, btn_border, muted)
-        self._update_path_label_text()
-
-    def _apply_editor_panels_theme(
-        self,
-        surface: str,
-        fg: str,
-        border: str,
-        muted: str,
-    ) -> None:
-        if not hasattr(self, "ai_chat_log"):
-            return
-        sheet, line_sheet, detail_sheet = SchedulerStyles.editor_panels(
-            surface=surface, fg=fg, border=border
-        )
-        self.ai_chat_log.setStyleSheet(sheet)
-        self.ai_input.setStyleSheet(line_sheet)
-        self.detail_view.setStyleSheet(detail_sheet)
-        cap = f"color: {muted}; padding: 0 2px;"
-        self.inspect_caption.setStyleSheet(cap)
-        self.ai_caption.setStyleSheet(cap)
-        self.path_label.setStyleSheet(f"color: {muted};")
-        self.counter_label.setStyleSheet(f"color: {fg};")
-
-    def _darken(self, hex_color: str, amount: float) -> str:
-        hex_color = hex_color.lstrip("#")
-        r = max(0, int(int(hex_color[0:2], 16) * (1 - amount)))
-        g = max(0, int(int(hex_color[2:4], 16) * (1 - amount)))
-        b = max(0, int(int(hex_color[4:6], 16) * (1 - amount)))
-        return f"#{r:02x}{g:02x}{b:02x}"
-
-    def _lighten(self, hex_color: str, amount: float) -> str:
-        hex_color = hex_color.lstrip("#")
-        r = min(255, int(int(hex_color[0:2], 16) + 255 * amount))
-        g = min(255, int(int(hex_color[2:4], 16) + 255 * amount))
-        b = min(255, int(int(hex_color[4:6], 16) + 255 * amount))
-        return f"#{r:02x}{g:02x}{b:02x}"
+        apply_main_window_theme(self)
 
     def _update_path_label_text(self) -> None:
         if not hasattr(self, "path_label"):
