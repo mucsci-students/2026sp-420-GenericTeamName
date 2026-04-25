@@ -3,6 +3,7 @@ test_course_gui.py
 ================
 Pytests for ``course.course_gui``
 Uses a module-scoped Qt application.
+
 :date: 04/24/2026
 :author: Shane del Villar
 :class: CMSC 420
