@@ -410,7 +410,7 @@ class ConfigManager:
         if not lower.endswith(".pdf"):
             file_path += ".pdf"
 
-        data_to_export = all_schedules if isinstance(all_schedules, list) else [all_schedules]
+        data_to_export = self._enrich_schedules(all_schedules)
         try:
             self._write_grouped_printable_pdf(file_path, data_to_export, group_mode)
             QMessageBox.information(parent, "Success", f"Exported to:\n{file_path}")
@@ -421,7 +421,7 @@ class ConfigManager:
 
     def export_schedule_to_json(self, all_schedules, parent: QWidget):
         """
-        Save As dialog for JSON only: writes all schedule options to one JSON file.
+        Export schedules in a self-contained format so imported filters work.
         """
         if not all_schedules:
             QMessageBox.warning(parent, "Export Error", "No schedule data available.")
@@ -429,23 +429,23 @@ class ConfigManager:
 
         file_path, _ = QFileDialog.getSaveFileName(
             parent,
-            "Export Schedules (JSON)",
+            "Save All Generated Schedules",
             "generated_schedules.json",
-            "JSON (*.json);;All Files (*)",
+            "JSON Files (*.json);;All Files (*)"
         )
 
         if not file_path:
             return False
 
-        if not file_path.lower().endswith(".json"):
-            file_path = file_path + ".json"
-
-        data_to_export = (
-            all_schedules if isinstance(all_schedules, list) else [all_schedules]
-        )
-
         try:
-            self.write_schedules_json_file(file_path, data_to_export)
+            payload = {
+                 "format": "entry_schedules_v2",
+                 "schedules": self._enrich_schedules(all_schedules),
+             }
+ 
+            with open(file_path, mode="w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=4)
+ 
             QMessageBox.information(parent, "Success", f"Exported to:\n{file_path}")
             return True
 
@@ -474,9 +474,7 @@ class ConfigManager:
         if not file_path.lower().endswith(".pdf"):
             file_path = file_path + ".pdf"
 
-        data_to_export = (
-            all_schedules if isinstance(all_schedules, list) else [all_schedules]
-        )
+        data_to_export = self._enrich_schedules(all_schedules)
 
         try:
             self._write_schedules_pdf(file_path, data_to_export)
@@ -551,7 +549,9 @@ class ConfigManager:
 
     def import_schedule_from_json(self, filename=None, parent: QWidget = None):
         """
-        Imports a JSON file of schedules to view.
+        Import schedules from either:
+        - new entry_schedules_v2 format
+        - old grid format
         """
         if not filename:
             filename, _ = QFileDialog.getOpenFileName(
@@ -561,15 +561,37 @@ class ConfigManager:
         if not filename:
             return None
 
-        #Store the imported JSON filepath
         self.import_file = filename
-
         days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+
         try:
-            with open(filename, mode='r', encoding='utf-8') as f:
+            with open(filename, mode="r", encoding="utf-8") as f:
                 imported_data = json.load(f)
 
+            # New format
+            if isinstance(imported_data, dict) and imported_data.get("format") == "entry_schedules_v2":
+                schedules = imported_data.get("schedules", [])
+                return [
+                    [
+                        {
+                            "course_id": str(entry.get("course_id", "")).strip(),
+                            "day": str(entry.get("day", "")).strip(),
+                            "time": str(entry.get("time", "")).strip(),
+                            "faculty": list(entry.get("faculty", []) or []),
+                            "room": list(entry.get("room", []) or []),
+                            "lab": list(entry.get("lab", []) or []),
+                        }
+                        for entry in schedule
+                        if isinstance(entry, dict)
+                    ]
+                    for schedule in schedules
+                    if isinstance(schedule, list)
+                ]
+
+            # Old grid format fallback
+            master_courses = self.data.get("config", {}).get("courses", [])
             all_schedules = []
+
             for grid in imported_data:
                 current_schedule = []
                 day_cols = {}
@@ -579,17 +601,45 @@ class ConfigManager:
                         continue
 
                     if str(row[0]).strip().upper() == "TIME":
-                        day_cols = {i: cell.strip() for i, cell in enumerate(row) if cell.strip() in days}
+                        day_cols = {
+                            i: cell.strip()
+                            for i, cell in enumerate(row)
+                            if isinstance(cell, str) and cell.strip() in days
+                        }
                         continue
 
                     if day_cols:
                         time_slot = str(row[0]).strip()
+
                         for col_idx, day_name in day_cols.items():
                             if col_idx < len(row) and str(row[col_idx]).strip():
+                                full_course_id = str(row[col_idx]).strip()
+                                base_id = full_course_id.split(".")[0].strip()
+
+                                course_info = next(
+                                    (
+                                        c for c in master_courses
+                                        if str(c.get("course_id", "")).strip() == full_course_id
+                                    ),
+                                    None
+                                )
+
+                                if course_info is None:
+                                    course_info = next(
+                                        (
+                                            c for c in master_courses
+                                            if str(c.get("course_id", "")).strip() == base_id
+                                        ),
+                                        {}
+                                    )
+
                                 current_schedule.append({
-                                    "course_id": str(row[col_idx]).strip(),
+                                    "course_id": full_course_id,
                                     "day": day_name,
                                     "time": time_slot,
+                                    "faculty": list(course_info.get("faculty", []) or []),
+                                    "room": list(course_info.get("room", []) or []),
+                                    "lab": list(course_info.get("lab", []) or []),
                                 })
 
                 if current_schedule:
@@ -649,3 +699,38 @@ class ConfigManager:
                     grid[row][col] = course
                 
         return days, times, grid
+
+    # Enrich schedules so exported file includes metadata for filtering
+    def _enrich_schedule_entry(self, entry: dict) -> dict:
+        full_course_id = str(entry.get("course_id", "")).strip()
+        base_id = full_course_id.split(".")[0].strip()
+
+        master_courses = self.data.get("config", {}).get("courses", [])
+
+        course_info = next(
+            (c for c in master_courses if str(c.get("course_id", "")).strip() == full_course_id),
+            None
+        )
+
+        if course_info is None:
+            course_info = next(
+                (c for c in master_courses if str(c.get("course_id", "")).strip() == base_id),
+                {}
+            )
+
+        enriched = dict(entry)
+        enriched["faculty"] = list(entry.get("faculty") or course_info.get("faculty", []) or [])
+        enriched["room"] = list(entry.get("room") or course_info.get("room", []) or [])
+        enriched["lab"] = list(entry.get("lab") or course_info.get("lab", []) or [])
+        return enriched
+
+    """
+    Apply enrichment to every entry in all schedules.
+    Ensures exported schedules contain full metadata needed for filtering.
+    """
+    def _enrich_schedules(self, all_schedules) -> list:
+        data_to_export = all_schedules if isinstance(all_schedules, list) else [all_schedules]
+        return [
+            [self._enrich_schedule_entry(entry) for entry in schedule]
+            for schedule in data_to_export
+        ]
