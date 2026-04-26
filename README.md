@@ -41,6 +41,7 @@ When schedules are generated, they will appear in the main panel. These can be c
     - **Pydantic** – config validation
     - Other runtime deps (e.g. bidict, click) as specified by the scheduler package
 - **For running tests:** **pytest** (install with `pip install pytest` or add as a dev dependency)
+- **AI assistant** **OpenAPI Key** (place the OpenAPI key in ai/ai_assistant.py to use the AI Assistant)
 
 ---
 
@@ -188,7 +189,7 @@ E.) Assistant [Right]:
 From the project root, with pytest installed:
 
 ```bash
-uv run pytest tests/[name_of_test_file.py]
+uv run pytest
 ```
 
 Or, if the venv is activated:
