@@ -1,6 +1,6 @@
-# Scheduler Application - GenericTeamName - Spring 2026
+# Scheduler Application - GenericTeamName - Spring 2026 - CMSC 420
 
-Project Version: 3 (April 5, 2026)
+Project Version: 4 (April 26, 2026)
 --------------
 Project Authors:
 
@@ -10,20 +10,20 @@ Kyle Smith
 
 Chayse Altland
 
-Damion Crawford
+Shane del Villar
 
 Mohamed Mussa
 
 Ibrahim Ntege
 
-Shane del Villar
+Damion Crawford
 
 --------------
 # Description:
 
 A **graphical-user interface (GUI)** for managing scheduler configuration files used by the [course-constraint-scheduler](https://pypi.org/project/course-constraint-scheduler/).
 
-The user may edit faculty, courses, rooms, labs, timeslots, & meeting patterns. Schedules can be generated & exported to a JSON file, and these schedules may also be imported back into the program. The user can specify the maximum # of schedules they'd like generated as well as any optimizations.
+The user may edit faculty, courses, rooms, labs, timeslots, & meeting patterns. Schedules can be generated & exported to a JSON or PDF file, and [JSON] schedules may be imported back into the program. The user can specify the maximum # of schedules they'd like generated as well as any optimizations.
 All changes are saved to a JSON config file. These files may be saved as or loaded.
 
 Config files follow the schema expected by the scheduler (see the [scheduler configuration docs](https://pypi.org/project/course-constraint-scheduler/) for the full format).
@@ -76,13 +76,15 @@ If you run with `python` alone (without `uv run`), the **course-constraint-sched
 
 After startup you’ll see the following:
 
-- Menu-Bar **[Top]** with a theme toggle, 'File', 'Edit', 'Generator', & 'Viewer'.
-- Main Config Panel **[Middle]**. This is where schedules will be displayed.
-- Inspector & Assistant **[Right]**. This panel shows the user new config file changes. It also contains an AI Chatbot; another way to interact with the program.
+- Menu-Bar **[Top-Left]** with a theme toggle, 'File', 'Edit', 'Generator', 'Viewer', & 'Help'.
+- Quick-Access Bar **[Top-Middle]** for quick-access to commonly used features (open, save, import, export, undo, redo, etc).
+- Configuration **[Left]** to see the active config file details.
+- Schedule **[Middle]**. This is where schedules will be displayed.
+- Assistant **[Right]**. This panel contains an AI Chatbot; another way to interact with the program.
 
 Below are more details on these:
 
-A.) Menu-Bar [Top]:
+A.) Menu-Bar [Top-Left]:
 -------------
 
 **Theme Toggle**
@@ -122,21 +124,48 @@ NOTE: If generation fails, use "uv sync" to ensure the scheduler dependency has 
 6. **Import Schedules** - Import pre-existing schedules to view or modify.
 7. **Clear Schedules** - Clears the currently generated or imported schedules.
 
-B.) Main Config Panel [Middle]:
+**Help**
+Provides a list of Keyboard Shortcuts to use in the program.
+These shortcuts are:
+- Open configuration…     => Ctrl+O
+- Save configuration      => Ctrl+S
+- Generate schedules      => Ctrl+G
+- Refresh schedule grid   => F5
+- Import schedules        => Ctrl+Shift+I
+- Export schedules        => Ctrl+Shift+E
+- Configuration summary   => F2
+- Send assistant message  => Ctrl+Enter (or Enter in the message field)
+
+
+B.) Quick-Access Bar [Top-Middle]:
 -------------
 
-The main panel displays the following to the user:
+This panel is used for quick-access to commonly used features (open, save, import, export, etc).
+
+This was made to make the UI experience smoother, & to improve usage for Mac OS users.
+
+C.) Configuration [Left]:
+-------------
+
+This panel shows the active config details.
+
+D.) Schedule [Middle]:
+-------------
+
+This main panel displays the following to the user:
 - The imported schedules JSON filename (if schedules were imported).
 - Which schedule is currently being viewed (if there are any schedules).
 - Active Config JSON filename.
 - Previous & Next buttons which allow the user to navigate between schedules.
 - Table displaying the current schedule. This contains times & course names for each day (Mon - Fri).
+  - The user may click on a specific course in the schedule to view more info, such as the faculty teaching the course & in which room.
 
-C.) Inspector & Assistant [Right]:
+E.) Assistant [Right]:
 -------------
 
-1. **Empty box will display chatbot output as well as new changes to the current config JSON.**
-2. **AI Assistant** - The chatbot can be used as another way to interact with the program. The user describes what they would like to do (ex: add a new room called '210 A'). Then, the chatbot will execute the appropriate command & reflect the changes in the config JSON.
+**AI Assistant** - The chatbot can be used as another way to interact with the program. The user describes what they would like to do (ex: add a new room called '210 A'). Then, the chatbot will execute the appropriate command & reflect the changes in the config JSON.
+
+- NOTE: To use the chatbot, the OpenAI key must be entered. This can be placed in the file: **ai/ai_assistant.py**. Replace the empty string with the key.
 
 
 ### 3. Saving
@@ -173,7 +202,12 @@ pytest tests/[name_of_test_file.py]
 ## Project layout (summary)
 
 - **`main.py`** – Entry point: `python main.py.
-- **`app`** – Contains GUI files such as 'main_window.py' & logic files such as 'course_gui.py' & 'room_gui.py'.
-- **`tests`** – Location of written pytests.
+- **`gui/`** – Contains GUI files, such as 'main_window.py', 'menu_widgets.py', 'ui_styles.py', etc.
+- **`gui/main_window.py** - Acts as the main view of the program.
+- **`tests/`** – Location of written pytests.
 - **`config/example.json`** – Sample scheduler config.
 - **`config/config.json`** - An empty, default config file.
+- **`config/config_mgr.py** - The model that handles configuration changes.
+- **`faculty, course, room, lab, timeslot_config, & generator folders** all contain their respective features. These managers all act as controllers.
+- **`viewer/** - Contains the 'ViewerManager' to act as a controller for various schedule viewer functions, such as updating view (main_window), and handling import/export with the config manager.
+- **`ai/** - Contains ai logic & a controller to handle changes to the main_window view.
