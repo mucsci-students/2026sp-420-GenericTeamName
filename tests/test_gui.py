@@ -10,7 +10,7 @@ import pytest
 import os
 import json
 from PyQt6.QtWidgets import QApplication
-from app.main_window import MainWindow
+from gui.main_window import MainWindow
 
 # A single QApplication instance is required for any QWidget to exist.
 # We create it once for the entire test session.
