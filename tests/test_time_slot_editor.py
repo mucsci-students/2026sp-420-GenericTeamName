@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
-from time_slot_config_editor.time_slot_editor import TimeSlotEditor
+from timeslot_config.time_slot_editor import TimeSlotEditor
 
 
 class DummyConfigManager:

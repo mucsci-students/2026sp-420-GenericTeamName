@@ -9,7 +9,7 @@ import json
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from app.generator_gui import GenConfigManager
+from generator.generator_gui import GenConfigManager
 
 #test command:  python -m pytest tests/test_generator.py
 

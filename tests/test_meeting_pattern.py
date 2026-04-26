@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
-from time_slot_config_editor.meeting_pattern_editor import MeetingPatternEditor
+from timeslot_config.meeting_pattern_editor import MeetingPatternEditor
 
 
 class DummyConfigManager:
