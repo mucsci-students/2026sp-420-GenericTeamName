@@ -1,7 +1,7 @@
 '''
     test_gui_faculty.py
     Author: Damion Crawford
-    Date: 25 April 2026
+    Date: 26 April 2026
     Class: CMSC 420
     Description: Pytests for faculty management
 '''
