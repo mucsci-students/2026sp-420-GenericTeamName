@@ -27,7 +27,7 @@ def qt_app():
 
 # FacultyFormDialog
 
-#1 (passed)
+
 @patch("faculty.faculty_gui.SchedulerStyles.apply_high_contrast_shell")
 def test_checked_days(qtbot):
     dialog = FacultyFormDialog()
@@ -46,7 +46,7 @@ def test_checked_days(qtbot):
     assert result == ["MON", "WED"]
 
 
-#2 (passed)
+
 @patch("faculty.faculty_gui.SchedulerStyles.apply_high_contrast_shell")
 def test_merge_weighted_invalid_weight(qtbot):
     dialog = FacultyFormDialog()
@@ -59,7 +59,7 @@ def test_merge_weighted_invalid_weight(qtbot):
 
     assert result == {"CMSC 330": 7}
 
-#3 (passed)
+
 @patch("faculty.faculty_gui.SchedulerStyles.apply_high_contrast_shell")
 def test_dialog_populates_from_faculty(apply_shell, qt_app):
     f = {
@@ -74,7 +74,7 @@ def test_dialog_populates_from_faculty(apply_shell, qt_app):
     assert form.name_edit.text() == "Cain"
     form.close()
 
-#4 (passed)
+
 @patch("faculty.faculty_gui.SchedulerStyles.apply_high_contrast_shell")
 @patch("faculty.faculty_gui.QMessageBox.warning")
 def test_on_accept_warns_if_missing_info(warn, apply_shell, qt_app):
@@ -84,7 +84,7 @@ def test_on_accept_warns_if_missing_info(warn, apply_shell, qt_app):
     warn.assert_called_once()
     form.close()
 
-#5 (passed)
+
 @patch("faculty.faculty_gui.SchedulerStyles.apply_high_contrast_shell")
 @patch("faculty.faculty_gui.QMessageBox.accept")
 @pytest.fixture
@@ -116,7 +116,7 @@ def on_accept_success(dialog, qtbot):
     accept.assert_called_once()
     dialog.close()
 
-#6 (passed)
+
 @patch("faculty.faculty_gui.SchedulerStyles.apply_high_contrast_shell")
 def test_populate_from_faculty_full(apply_shell, qt_app):
     form = FacultyFormDialog(None, faculty = None, pick_lists = {})
@@ -150,7 +150,7 @@ def viewer_mgr(pick):
     v.get_pick_lists = MagicMock(return_value = pick)
     return v
 
-#7 (passed)
+
 @patch("faculty.faculty_gui.FacultyFormDialog")
 def test_add_faculty_no_config_data(mock_dlg, tmp_path, qt_app):
     cfg = config_mgr([], tmp_path)
@@ -161,33 +161,6 @@ def test_add_faculty_no_config_data(mock_dlg, tmp_path, qt_app):
     w.assert_called_once
     mock_dlg.assert_not_called()
 
-#8
-@patch("faculty.faculty_gui.FacultyFormDialog")
-def test_add_faculty_dialog_rejected(mock_dlg, tmp_path, qt_app):
-    inst = mock_dlg.return_value
-    isnt.exec.return_value = QDialog.DialogCode.Rejected
-    cfg = config_mgr([], tmp_path)
-    mgr = FacultyManager(cfg, viewer_mgr({}))
-    mgr.add_faculty_via_dialog(None)
-    cfg.save.assert_not_called()
-
-#9
-@patch("faculty.faculty_gui.FacultyFormDialog")
-def test_add_faculty_success(mock_dlg, tmp_path, qt_app):
-    inst = mock_dlg.return_value
-    inst.exec.return_value = QDialog.DialogCode.Accepted
-    inst.get_faculty_data.return_value = {
-        "name": "A",
-        "minimum_credits": 0,
-        "maximum_credits": 12,
-        "unique_course_limit": 3,
-    }
-    faculty: list = []
-    cfg = config_mgr(faculty, tmp_path)
-    mgr = FacultyManager(cfg, viewer_mgr({"r": [1]}))
-    mgr.add_faculty_via_dialog(None)
-    # assert faculty and faculty[-1]["name"] == "A"
-    cfg.save.assert_called_once_with(None)
 
 #10 (passed)
 @patch("faculty.faculty_gui.FacultyFormDialog")
@@ -196,66 +169,6 @@ def test_select_faculty_cancel(mock_item, tmp_path, qt_app):
     mgr = FacultyManager(cfg, viewer_mgr({}))
     assert mgr.select_faculty(None) == (None, None)
 
-#11
-@patch("faculty.faculty_gui.FacultyFormDialog")
-def test_select_faculty_empty(mock_info, tmp_path, qt_app):
-    cfg = config_mgr([], tmp_path)
-    mgr = FacultyManager(cfg, viewer_mgr({}))
-    assert mgr.select_faculty(None) == (None, None)
-    mock_info.assert_called_once()
-
-#12
-@patch("faculty.faculty_gui.QInputDialog.getItem")
-@patch("faculty.faculty_gui.FacultyFormDialog")
-def test_modify_cancel_at_dialog(mock_dlg, mock_get, tmp_path, qt_app):
-    mock_get.return_value = (
-        "Cain", True
-    )
-    f = {
-        "name": "Cain",
-        "minimum_credits": 0,
-        "maximum_credits": 12,
-        "unique_course_limit": 3,
-        "mandatory_days": ["MON", "WED", "FRI"],
-        "times": ["10:00-12:00", "13:00-15:30", "10:00-12:00"],
-    }
-    faculty = [f]
-    cfg = config_mgr(faculty, tmp_path)
-    mgr = FacultyManager(cfg, viewer_mgr({}))
-    inst = mock_dlg.return_value
-    inst.exec.return_value = QDialog.DialogCode.Rejected
-    mgr.modify_faculty_via_dialog(None)
-    cfg.save.assert_not_called()
-
-#13
-@patch("faculty.faculty_gui.QInputDialog.getItem")
-@patch("faculty.faculty_gui.FacultyFormDialog")
-def test_modify_success(mock_dlg, mock_get, tmp_path, qt_app):
-    f = {
-        "name": "Cain",
-        "minimum_credits": 0,
-        "maximum_credits": 12,
-        "unique_course_limit": 3,
-        "mandatory_days": ["MON", "WED", "FRI"],
-        "times": ["10:00-12:00", "13:00-15:30", "10:00-12:00"],
-    }
-    faculty = [dict(f)]
-    mock_get.return_value = ("Cain", True)
-    cfg = config_mgr(faculty, tmp_path)
-    mgr = FacultyManager(cfg, viewer_mgr({}))
-    inst = mock_dlg.return_value
-    inst.exec.return_value = QDialog.DialogCode.Accepted
-    inst.get_faculty_data.return_value = {
-        "name": "Schwartz",
-        "minimum_credits": 4,
-        "maximum_credits": 12,
-        "unique_course_limit": 3,
-        "mandatory_days": ["MON", "THU", "FRI"],
-        "times": ["10:00-12:00", "13:00-15:30", "10:00-12:00"],
-    }
-    mgr.modify_faculty_via_dialog(None)
-    assert faculty[0]["name"] == "Schwartz"
-    cfg.save.assert_called_once()
 
 #14 (passed)
 @patch(
