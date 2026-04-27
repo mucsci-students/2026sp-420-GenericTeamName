@@ -1,122 +1,115 @@
 '''
     File: test_generator.py
-    Date: 03/06/2026
-    Author: Tyler Strohl
+    Date: 4/26/2026
+    Author: Tyler Strohl & Chayse Altland
     Class: CMSC 420
     Description: Pytests for Schedule Generator tasks.
 '''
-import json
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+from PyQt6.QtWidgets import QDialog
+
 from generator.generator_gui import GenConfigManager
 
-#test command:  python -m pytest tests/test_generator.py
 
-def test_set_limit(tmp_path, mocker):
+def _config_mgr(data=None):
+    cfg = MagicMock()
+    cfg.data = data or {
+        "limit": 2,
+        "optimizer_flags": [],
+        "config": {},
+        "time_slot_config": {},
+    }
+    return cfg
 
-    manager = GenConfigManager()
-    parent = MagicMock()
-    config_file = tmp_path / "config.json"
-    config_file.write_text('{"limit": 2}', encoding="utf-8")
-    
-    manager.config_path = config_file
-    manager._config_data = {"limit": 2}
 
-    mocker.patch("PyQt6.QtWidgets.QInputDialog.getText", return_value=("10", True))
-    mocker.patch("PyQt6.QtWidgets.QMessageBox.information")
+def _manager(data=None):
+    cfg = _config_mgr(data)
+    viewer = MagicMock()
+    return GenConfigManager(cfg, viewer), cfg, viewer
 
-    manager.set_limit(parent)
 
-    assert manager._config_data["limit"] == 10
-    assert '"limit": 10' in config_file.read_text()
+@patch("generator.generator_gui.QMessageBox.warning")
+def test_set_limit_no_config(mock_warning):
+    mgr, cfg, _ = _manager()
+    cfg.data = None
 
-def test_set_optimize_true(tmp_path, mocker):
+    mgr.set_limit(None)
 
-    manager = GenConfigManager()
-    parent = MagicMock()
-    manager.config_path = tmp_path / "config.json"
-    manager._config_data = {"optimizer_flags": []}
-    
-    mocker.patch("PyQt6.QtWidgets.QInputDialog.getItem", return_value=("True", True))
-    mocker.patch("PyQt6.QtWidgets.QMessageBox.information")
+    mock_warning.assert_called_once()
+    cfg.save.assert_not_called()
 
-    manager.set_optimize(parent)
 
-    assert len(manager._config_data["optimizer_flags"]) == 6
-    assert "faculty_course" in manager._config_data["optimizer_flags"]
+@patch("generator.generator_gui.QInputDialog.getText", return_value=("10", True))
+def test_set_limit_success(mock_get_text):
+    mgr, cfg, _ = _manager()
 
-def test_set_optimize_false(tmp_path, mocker):
-    
-    manager = GenConfigManager()
-    parent = MagicMock()
-    manager.config_path = tmp_path / "config.json"
-    manager._config_data = {"optimizer_flags": ["faculty_course"]}
-    
-    mocker.patch("PyQt6.QtWidgets.QInputDialog.getItem", return_value=("False", True))
-    mocker.patch("PyQt6.QtWidgets.QMessageBox.information")
-    mocker.patch.object(manager, "_ensure_config_loaded", return_value=True)
+    mgr.set_limit(None)
 
-    manager.set_optimize(parent)
+    assert mgr.limit == 10
+    assert cfg.data["limit"] == 10
+    cfg.save.assert_called_once_with(None)
 
-    assert len(manager._config_data["optimizer_flags"]) == 0
 
-def test_save_writes_file(tmp_path, mocker):
+@patch("generator.generator_gui.QMessageBox.warning")
+@patch("generator.generator_gui.QInputDialog.getText", return_value=("bad", True))
+def test_set_limit_invalid_number(mock_get_text, mock_warning):
+    mgr, cfg, _ = _manager()
 
-    manager = GenConfigManager()
-    parent = MagicMock()
-    test_path = tmp_path / "test_save.json"
-    manager.config_path = test_path
-    manager._config_data = {"key": "value"}
-    
-    mock_info = mocker.patch("PyQt6.QtWidgets.QMessageBox.information")
+    mgr.set_limit(None)
 
-    manager._save(parent)
+    mock_warning.assert_called_once()
+    cfg.save.assert_not_called()
 
-    assert test_path.exists()
-    assert json.loads(test_path.read_text())["key"] == "value"
-    mock_info.assert_called_once()
 
-def test_save_handles_os_error(tmp_path, mocker):
-    
-    manager = GenConfigManager()
-    parent = MagicMock()
-    config_file = tmp_path / "config.json"
-    manager.config_path = config_file
-    manager._config_data = {"limit": 2}
+@patch("generator.generator_gui.QInputDialog.getText", return_value=("", True))
+def test_set_limit_empty_input(mock_get_text):
+    mgr, cfg, _ = _manager()
 
-    mock_critical = mocker.patch("PyQt6.QtWidgets.QMessageBox.critical")
-    mocker.patch.object(Path, "write_text", side_effect=OSError("Disk full"))
+    mgr.set_limit(None)
 
-    manager._save(parent)
+    assert cfg.data["limit"] == 2
+    cfg.save.assert_not_called()
+
+
+@patch("generator.generator_gui.QDialog.exec", return_value=QDialog.DialogCode.Accepted)
+@patch("generator.generator_gui.QCheckBox.isChecked", return_value=True)
+def test_set_optimize_all_true(mock_checked, mock_exec, qapp):
+    mgr, cfg, _ = _manager()
+
+    mgr.set_optimize(None)
+
+    assert cfg.data["optimizer_flags"] == [
+        "faculty_course",
+        "faculty_room",
+        "faculty_lab",
+        "same_room",
+        "same_lab",
+        "pack_rooms",
+    ]
+    cfg.save.assert_called_once_with(None)
+
+
+@patch("generator.generator_gui.QDialog.exec", return_value=QDialog.DialogCode.Rejected)
+def test_set_optimize_cancelled(mock_exec, qapp):
+    mgr, cfg, _ = _manager({
+        "limit": 2,
+        "optimizer_flags": ["faculty_course"],
+        "config": {},
+        "time_slot_config": {},
+    })
+
+    mgr.set_optimize(None)
+
+    assert cfg.data["optimizer_flags"] == ["faculty_course"]
+    cfg.save.assert_not_called()
+
+
+@patch("generator.generator_gui.QMessageBox.critical")
+def test_run_scheduler_import_error(mock_critical):
+    mgr, cfg, _ = _manager()
+
+    with patch.dict("sys.modules", {"scheduler": None}):
+        mgr.run_scheduler(None)
 
     mock_critical.assert_called_once()
-    assert mock_critical.call_args[0][1] == "Save failed"
-
-def test_gen_new_file(tmp_path, mocker):
-    
-    temp_config = {"limit": 1}
-    config_file = tmp_path / "test_config.json"
-    config_file.write_text(json.dumps(temp_config), encoding="utf-8")
-
-    manager = GenConfigManager()
-    manager.config_path = config_file
-    manager._config_data = temp_config
-    parent = MagicMock()
-
-    mock_sched_instance = MagicMock()
-    mock_sched_instance.get_models.return_value = [[{"course_id": "CMSC 140"}]]
-
-    mocker.patch("scheduler.Scheduler", return_value=mock_sched_instance)
-    mocker.patch("scheduler.load_config_from_file")
-    mocker.patch.object(manager, "_ensure_config_loaded", return_value=True)
-
-    save_path = str(tmp_path / "test_results.json")
-    mocker.patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName", return_value=(save_path, ""))
-    mocker.patch("PyQt6.QtWidgets.QMessageBox.information")
-
-    manager.run_scheduler(parent)
-
-    assert Path(save_path).exists()
-    output_data = json.loads(Path(save_path).read_text())
-    assert "CMSC 140" in output_data[0][0]
