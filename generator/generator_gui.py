@@ -1,6 +1,6 @@
 '''
     File: generator_gui.py
-    Date: 04/03/2026
+    Date: 04/22/2026
     Author: Tyler Strohl, Kyle Smith, & Chayse Altland
     Class: CMSC 420
     Description: Schedule Generator dialogs and helpers for the GUI.
@@ -21,9 +21,15 @@ from PyQt6.QtWidgets import (
 )
 
 class ScheduleWorker(QThread):
-    """Work-around for scheduler function blocking main GUI thread."""
+    """
+    Work-around for scheduler function blocking main GUI thread.
     
-    #communicate with the main GUI thread
+    This class implements the following design patterns:
+        -Command
+        -Observer
+    """
+    
+    #observe / communicate with the main GUI thread
     progress = pyqtSignal(int)
     finished_schedules = pyqtSignal(list)
     error = pyqtSignal(str)
@@ -55,114 +61,73 @@ class ScheduleWorker(QThread):
 
 
 class GenConfigManager:
-    """Manager object to interact with main_window.py."""
-    def __init__(self) -> None:
-        self.config_path: Optional[Path] = None
-        self._config_data: Dict[str, Any] = {}
-        self.limit: int = 2
-        self.output_format: str = "json"
-        self.output_path: Optional[Path] = None
-        self.optimize: bool = True
-
-    def _ensure_config_loaded(self, parent: QWidget) -> bool:
-        """Use the config file selected via the Change Config File button."""
-        
-        config_mgr = getattr(parent, "config_mgr", None)
-        if config_mgr is None or not getattr(config_mgr, "filepath", None):
-            QMessageBox.warning(
-                parent,
-                "No Config",
-                "Please select a config file first using the Change Config File button."
-            )
-            return False
-
-        try:
-            config_mgr.load()
-        except Exception as e:
-            QMessageBox.critical(parent, "Config Error", f"Could not load config:\n{e}")
-            return False
-
-        self.config_path = Path(config_mgr.filepath)
-        self._config_data = config_mgr.data
-        return True
-
-    def _save(self, parent: QWidget) -> None:
-        if self.config_path is None:
-            return
-
-        try:
-            self.config_path.write_text(
-                json.dumps(self._config_data, indent=2),
-                encoding="utf-8"
-            )
-        except OSError as e:
-            QMessageBox.critical(parent, "Save failed", f"Failed to save config:\n{e}")
-            return
-
-        QMessageBox.information(
-            parent,
-            "Config saved",
-            f"Configuration saved to:\n{self.config_path}",
-        )
+    """
+    Generator Manager object to interact with main_window.py.
+    
+    This class implements the following design patterns:
+        -Dependency Injection
+        -Delegation
+        -Model-View-Controller (controller)
+        -Facade
+        -Strategy
+        -Adapter
+        -Observer
+    """
+    def __init__(self, config_mgr, viewer_mgr) -> None:
+        self.config_mgr = config_mgr
+        self.viewer_mgr = viewer_mgr
+        self.limit = self.config_mgr.data["limit"]
+        self.optimizer_flags = self.config_mgr.data["optimizer_flags"]
 
     def set_limit(self, parent: QWidget) -> None:
         """Modifies the limit variable in the config file."""
-        
-        if not self._ensure_config_loaded(parent):
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
-
-        def_limit = self._config_data.get("limit", 2)
 
         text, ok = QInputDialog.getText(
             parent,
             "Specify Limit",
             "# of Schedules:",
-            text=str(def_limit)
+            text=str(self.limit)
         )
 
         if not ok or not text.strip():
             return
 
         try:
-            self._config_data["limit"] = int(text.strip())
-            config_mgr = getattr(parent, "config_mgr", None)
-            if config_mgr:
-                config_mgr.data = self._config_data
-                config_mgr.save(parent)
-            else:
-                self._save(parent)
+            self.limit = int(text.strip())
+            self.config_mgr.data["limit"] = self.limit
+            self.config_mgr.save(parent)
         except ValueError:
             QMessageBox.warning(parent, "Invalid Input", "Please enter a valid number.")
 
     def set_optimize(self, parent: QWidget) -> None:
         """Opens a checklist dialog to toggle specific optimizer flags."""
-        if not self._ensure_config_loaded(parent):
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
 
         full_flags = [
             "faculty_course", "faculty_room", "faculty_lab",
             "same_room", "same_lab", "pack_rooms"
         ]
-
-        current_flags = self._config_data.get("optimizer_flags", [])
-
         # --- Build Custom Dialog ---
         dialog = QDialog(parent)
         dialog.setWindowTitle("Optimizer Configuration")
         dialog.setMinimumWidth(300)
-        
         layout = QVBoxLayout(dialog)
         
-        # Create a checkbox for each flag
+        #Create a checkbox for each flag
         checkbox_widgets = []
         for flag in full_flags:
             cb = QCheckBox(flag.replace("_", " ").title()) # e.g. "faculty_course" -> "Faculty Course"
-            if flag in current_flags:
+            if flag in self.optimizer_flags:
                 cb.setChecked(True)
             layout.addWidget(cb)
             checkbox_widgets.append((flag, cb))
 
-        # Add Standard OK/Cancel Buttons
+        #Add Standard OK/Cancel Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
@@ -170,22 +135,21 @@ class GenConfigManager:
 
         # --- Execute and Save ---
         if dialog.exec():
-            # Rebuild the list based on what is checked
+            #Rebuild the list based on what is checked
+            #Encapsulate each flag, which can be interchanged based on user input
             new_flags = [flag for flag, cb in checkbox_widgets if cb.isChecked()]
-            self._config_data["optimizer_flags"] = new_flags
-
-            # Save logic
-            config_mgr = getattr(parent, "config_mgr", None)
-            if config_mgr:
-                config_mgr.data = self._config_data
-                config_mgr.save(parent)
-                QMessageBox.information(parent, "Updated", f"Active optimizations:\n{', '.join(new_flags) if new_flags else 'None'}")
-            else:
-                self._save(parent)
+            self.optimizer_flags = new_flags
+            self.config_mgr.data["optimizer_flags"] = self.optimizer_flags
+            self.config_mgr.save(parent)
 
     def run_scheduler(self, parent: QWidget) -> None:
-        """Schedule Generation function. Interacts with Scheduler."""
-        if not self._ensure_config_loaded(parent):
+        """
+        Schedule Generation function. Interacts with Scheduler.
+        
+        Requires some adaptation to work with scheduler class.
+        """
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
 
         try:
@@ -292,7 +256,7 @@ class GenConfigManager:
 
                 return classes
 
-            clean_data = json.loads(json.dumps(self._config_data))
+            clean_data = self.config_mgr.data
             
             optimizer_flags = clean_data.get("optimizer_flags", [])
             clean_data["optimizer_flags"] = optimizer_flags
@@ -333,10 +297,8 @@ class GenConfigManager:
             config = load_config_from_file(CombinedConfig, tmp_path)
             scheduler = Scheduler(config)
 
-            limit = self._config_data.get("limit", 2)
-
             #Progress bar setup:
-            self.gen_progress = QProgressDialog("Generating Schedules:", "Cancel", 0, limit, parent)
+            self.gen_progress = QProgressDialog("Generating Schedules:", "Cancel", 0, self.limit, parent)
             #progress bar prevents user from interacting with other windows in program.
             self.gen_progress.setWindowModality(Qt.WindowModality.WindowModal)
             self.gen_progress.setMinimumDuration(0)
@@ -347,7 +309,8 @@ class GenConfigManager:
             if bar:
                 bar.setFormat("%v / %m")
 
-            self.worker = ScheduleWorker(scheduler, limit)
+            #Proxy with worker thread
+            self.worker = ScheduleWorker(scheduler, self.limit)
 
             self.worker.progress.connect(self.gen_progress.setValue)
             self.gen_progress.canceled.connect(self.worker.cancel)
@@ -356,11 +319,6 @@ class GenConfigManager:
                 self.gen_progress.close()
                 if not raw_schedules:
                     QMessageBox.warning(parent, "No Results", "No schedules were generated.")
-                    return
-
-                config_mgr = getattr(parent, "config_mgr", None)
-                if config_mgr is None:
-                    QMessageBox.critical(parent, "Config Error", "Config manager not available.")
                     return
 
                 def course_to_dict(c: Any) -> Any:
@@ -375,12 +333,12 @@ class GenConfigManager:
                 viewer_schedules = []
                 for sched in raw_schedules:
                     sched_dicts = [course_to_dict(c) for c in sched]
-                    viewer_format = config_mgr.scheduler_output_to_viewer_format(sched_dicts)
+                    viewer_format = self.config_mgr.scheduler_output_to_viewer_format(sched_dicts)
                     viewer_schedules.append(viewer_format)
 
                 parent.schedules = parent.schedules + viewer_schedules
                 parent.current_schedule_index = len(parent.schedules) - len(viewer_schedules)
-                parent.update_schedule_display()
+                self.viewer_mgr.update_schedule_display(parent)
 
                 QMessageBox.information(
                     parent,

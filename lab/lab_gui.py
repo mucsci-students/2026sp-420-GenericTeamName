@@ -1,7 +1,7 @@
 '''
     File: lab_gui.py
-    Date: 3/3/2026
-    Author: Mohamed Mussa
+    Date: 04/16/2026
+    Author: Mohamed Mussa & Tyler Strohl
     Class: CMSC 420
     Description: Lab management dialogs and helpers for the GUI.
 '''
@@ -23,77 +23,29 @@ class LabConfigManager:
     """
     Helper to load, modify, and save lab entries in a scheduler config JSON file.
     Labs are stored as a list of strings:
-        "labs": ["Roddy Lab A", "Roddy Lab B", ...]
+        "labs": ["Linux", "Mac", ...]
+
+    This class implements the following design patterns:
+        -Dependency Injection
+        -Delegation
+        -Model-View-Controller (controller)
+        -Facade
+        -Template Logic
     """
 
-    def __init__(self) -> None:
-        self.config_path: Optional[Path] = None
-        self._config_data: Dict[str, Any] = {}
+    def __init__(self, config_mgr):
+        self.config_mgr = config_mgr
 
     # -----------------------------
     # Internal Helpers
     # -----------------------------
 
-    def _ensure_config_loaded(self, parent: QWidget) -> bool:
-        """
-        Use the config file selected via the Change Config File button.
-        """
-        config_mgr = getattr(parent, "config_mgr", None)
-        if config_mgr is None or not getattr(config_mgr, "filepath", None):
-            QMessageBox.warning(
-                parent,
-                "No Config",
-                "Please select a config file first using the Change Config File button."
-            )
-            return False
-        try:
-            config_mgr.load()
-        except Exception as e:
-            QMessageBox.critical(
-                parent,
-                "Config Error",
-                f"Could not load config:\n{e}",
-            )
-            return False
-        self.config_path = Path(config_mgr.filepath)
-        self._config_data = config_mgr.data
-        return True
-
     def _get_labs_list(self) -> List[str]:
-        cfg = self._config_data.setdefault("config", {})
-        labs = cfg.setdefault("labs", [])
-        if not isinstance(labs, list):
-            cfg["labs"] = []
-        return cfg["labs"]
-
-    def _save(self, parent: QWidget) -> None:
-        config_mgr = getattr(parent, "config_mgr", None)
-        if config_mgr:
-            config_mgr.data = self._config_data
-            config_mgr.save(parent)
-        else:
-            if self.config_path is None:
-                return
-            try:
-                self.config_path.write_text(
-                    json.dumps(self._config_data, indent=2),
-                    encoding="utf-8"
-                )
-            except OSError as e:
-                QMessageBox.critical(
-                    parent,
-                    "Save failed",
-                    f"Failed to save config:\n{e}",
-                )
-                return
-
-        QMessageBox.information(
-            parent,
-            "Config saved",
-            "Configuration saved.",
-        )
+        """Retrieve the list of labs from the config file."""
+        return self.config_mgr.data["config"]["labs"]
 
     def _select_lab(self, parent: QWidget) -> Tuple[Optional[int], Optional[str]]:
+        """Retrieves a specific lab from list of labs."""
         labs = self._get_labs_list()
 
         if not labs:
@@ -112,15 +64,16 @@ class LabConfigManager:
         if not ok or not item:
             return None, None
 
-        index = labs.index(item)
-        return index, item
+        return labs.index(item), item
 
     # -----------------------------
     # Public CRUD Methods
     # -----------------------------
 
     def add_lab_via_dialog(self, parent: QWidget) -> None:
-        if not self._ensure_config_loaded(parent):
+        """Add a new lab to config file."""
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
 
         text, ok = QInputDialog.getText(
@@ -134,10 +87,12 @@ class LabConfigManager:
 
         labs = self._get_labs_list()
         labs.append(text.strip())
-        self._save(parent)
+        self.config_mgr.save(parent)
 
     def modify_lab_via_dialog(self, parent: QWidget) -> None:
-        if not self._ensure_config_loaded(parent):
+        """Modify a lab in the config file."""
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
 
         index, existing = self._select_lab(parent)
@@ -156,10 +111,12 @@ class LabConfigManager:
 
         labs = self._get_labs_list()
         labs[index] = text.strip()
-        self._save(parent)
+        self.config_mgr.save(parent)
 
     def delete_lab_via_dialog(self, parent: QWidget) -> None:
-        if not self._ensure_config_loaded(parent):
+        """Remove a lab from the config file."""
+        if not self.config_mgr.data:
+            QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
 
         index, existing = self._select_lab(parent)
@@ -179,4 +136,4 @@ class LabConfigManager:
 
         labs = self._get_labs_list()
         del labs[index]
-        self._save(parent)
+        self.config_mgr.save(parent)

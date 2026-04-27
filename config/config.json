@@ -1,8 +1,6 @@
 {
     "config": {
-        "rooms": [
-            "Roddy 136"
-        ],
+        "rooms": [],
         "labs": [],
         "courses": [],
         "faculty": [],
@@ -28,7 +26,7 @@
             }
         }
     },
-    "limit": 5,
+    "limit": 1,
     "optimizer_flags": [
         "faculty_course",
         "faculty_room",

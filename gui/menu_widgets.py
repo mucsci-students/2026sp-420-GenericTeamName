@@ -16,6 +16,11 @@ import os
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel
 from PyQt6.QtCore import Qt
 
+
+def _panel_border_for_luminance(dark: bool) -> str:
+    return "#3f3f46" if dark else "#e2e8f0"
+
+
 class ContentPanel(QFrame):
     """
     A stylized QFrame used for the main panels in the MainWindow.
@@ -24,20 +29,26 @@ class ContentPanel(QFrame):
     theme adjustments based on luminance.
     """
 
-    def __init__(self, title, color, parent=None, stretch_middle: bool = True):
+    def __init__(self, title, color, parent=None, stretch_middle: bool = True, add_bottom_stretch: bool = True):
         """
         Initializes the panel with a title and a base color.
+        If add_bottom_stretch is False, the next widget added should use stretch so the panel fills.
         """
         super().__init__(parent)
         self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(12, 12, 12, 12)
+        self.layout.setSpacing(8)
 
         self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.label = QLabel(title)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setWordWrap(True)
         self.layout.addWidget(self.label)
-        self.layout.addStretch()
+        if add_bottom_stretch:
+            self.layout.addStretch()
 
         self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setFrameShadow(QFrame.Shadow.Plain)
         self._base_color = color
         self.update_theme_styles("Init", color)
 
@@ -61,23 +72,23 @@ class ContentPanel(QFrame):
         :param hex_color: The hex color string to apply/adjust.
         """
         dark = self._is_dark(hex_color)
-        text_color = "#e0e0e0" if dark else "#333333"
-        border = "#ffffff" if dark else "#000000"
-        
-        # Logic to adjust specific panels (like the Mid Panel) slightly 
-        # differently than the theme background if the base was black.
-        panel_color = (self._adjust(hex_color, 0.03, dark) 
-                       if self._base_color == "#000000" 
-                       else hex_color)
-        
+        text_color = "#f4f4f5" if dark else "#1e293b"
+        border = _panel_border_for_luminance(dark)
+
+        # Slightly lift schedule/inspector panels above the window when base was pure black.
+        panel_color = (
+            self._adjust(hex_color, 0.04, not dark)
+            if self._base_color == "#000000"
+            else hex_color
+        )
+
         self.setStyleSheet(
-            f"background-color: {panel_color}; "
-            f"border: 1px solid {border}; "
-            f"color: {text_color};"
+            f"background-color: {panel_color}; border: 1px solid {border}; "
+            f"border-radius: 10px; color: {text_color};"
         )
         self.label.setStyleSheet(
-            f"font-weight: bold; font-size: 14px; "
-            f"border: none; color: {text_color};"
+            f"font-weight: 600; font-size: 13px; letter-spacing: 0.02em; "
+            f"border: none; color: {text_color}; padding: 2px 4px;"
         )
 
     def update_title(self, label, file_path = None):
@@ -86,9 +97,8 @@ class ContentPanel(QFrame):
 
         :param file_path: The full path to the active configuration file.
         """
-        #Fall into here when clearing imported schedules
-        if file_path == None:
-            self.label.setText("NO FILE IMPORTED")
+        if file_path is None:
+            self.label.setText("Schedule")
             return
 
         display_text = os.path.basename(file_path)

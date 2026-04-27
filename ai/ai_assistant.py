@@ -1,7 +1,7 @@
 '''
     File: ai_assistant.py
-    Date: 4/4/26
-    Author: Shane del Villar
+    Date: 4/17/26
+    Author: Shane del Villar & Kyle Smith
     Description: OpenAI tool-calling assistant that mutates the active scheduler config
     and triggers GUI actions (e.g. add rooms, courses, run generation).
 '''
@@ -35,7 +35,9 @@ Generator: start schedule generation (progress dialog).
 Schedules in memory: use get_schedule_session_info; set_current_schedule_index to choose which generated/imported schedule is "current";
 get_current_schedule_display_text to read the tabular view as text; open_schedule_viewer opens the same Schedule Viewer window as the menu
 (mode: all, faculty, room, lab); export_current_schedule_to_csv writes the current schedule to a path (no file picker);
+export_all_schedules_to_pdf and export_all_schedules_to_json write every loaded schedule option to a path (no dialogs).
 import_schedule_from_file loads CSV or JSON into the schedule list.
+undo_configuration_change / redo_configuration_change step through a small stack of configuration snapshots from assistant-driven edits (reload from disk, course updates/deletes, etc.); they do not undo manual GUI edits outside the assistant.
 Summary: get_config_summary_text returns the table summary as text; show_config_summary_dialog opens the menu's summary message box.
 Timeslots: config.time_slots (per weekday blocks: start_time, end_time, spacing_minutes, generated slots). list_timeslots; add_timeslot_block; update_timeslot_block; remove_timeslot_block; set_timeslot_day_enabled. Syncs to time_slot_config.times for the scheduler.
 Class meeting patterns: config.meeting_patterns (credits, meetings with day/duration/lab, optional start_time, disabled). list_meeting_patterns; add_meeting_pattern; update_meeting_pattern; delete_meeting_pattern. Syncs to time_slot_config.classes.
@@ -55,9 +57,13 @@ _SKIP_ACTIVE_CONFIG_PATH = frozenset(
         "open_schedule_viewer",
         "open_native_gui",
         "export_current_schedule_to_csv",
+        "export_all_schedules_to_pdf",
+        "export_all_schedules_to_json",
         "import_schedule_from_file",
         "get_config_summary_text",
         "show_config_summary_dialog",
+        "undo_configuration_change",
+        "redo_configuration_change",
     }
 )
 
@@ -83,6 +89,9 @@ def _ensure_config_block(main_window: Any) -> Dict[str, Any]:
 
 
 def _write_config_silent(main_window: Any) -> None:
+    # Snapshot before writes so assistant undo/redo works for any tool that persists config.
+    if hasattr(main_window, "assistant_push_config_undo_snapshot"):
+        main_window.assistant_push_config_undo_snapshot()
     path = main_window.config_mgr.filepath
     with open(path, "w", encoding="utf-8") as f:
         json.dump(main_window.config_mgr.data, f, indent=4)
@@ -724,6 +733,65 @@ def get_tool_schemas() -> List[Dict[str, Any]]:
         {
             "type": "function",
             "function": {
+                "name": "export_all_schedules_to_pdf",
+                "description": (
+                    "Export all loaded schedule options (same as Viewer Export Schedules PDF) to an absolute path; "
+                    "no file dialog."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pdf_path": {
+                            "type": "string",
+                            "description": "Destination .pdf path (e.g. /tmp/schedules.pdf)",
+                        }
+                    },
+                    "required": ["pdf_path"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "export_all_schedules_to_json",
+                "description": (
+                    "Export all loaded schedule options to one JSON file (same grid format as the menu export); "
+                    "no file dialog."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "json_path": {
+                            "type": "string",
+                            "description": "Destination .json path",
+                        }
+                    },
+                    "required": ["json_path"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "undo_configuration_change",
+                "description": (
+                    "Undo the last assistant-driven configuration change (reload, silent course save, etc.). "
+                    "Does not affect schedule memory (generated/imported schedules)."
+                ),
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "redo_configuration_change",
+                "description": "Redo after undo_configuration_change.",
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "open_native_gui",
                 "description": (
                     "Open the same interactive dialogs as the menu bar (file pickers, add/modify forms, generator limit/optimize prompts, "
@@ -784,576 +852,153 @@ def execute_tool(main_window: Any, name: str, arguments: Dict[str, Any]) -> str:
     except Exception as exc:
         return json.dumps({"ok": False, "error": str(exc)})
 
-
 def _execute_tool_impl(main_window: Any, name: str, arguments: Dict[str, Any]) -> str:
     cm = main_window.config_mgr
+    
     if name not in _SKIP_ACTIVE_CONFIG_PATH and not getattr(cm, "filepath", None):
         return json.dumps({"ok": False, "error": "No active config file path."})
 
     def ok(msg: str, **extra: Any) -> str:
-        payload = {"ok": True, "message": msg}
-        payload.update(extra)
-        return json.dumps(payload)
+        return json.dumps({"ok": True, "message": msg, **extra})
 
-    if name == "get_active_config_path":
-        p = getattr(cm, "filepath", None) if cm is not None else None
-        return ok("Active config path (may be unset).", path=p or None)
+    handlers = {
+        "get_active_config_path": lambda: ok("Active config path.", path=getattr(cm, "filepath", None)),
+        "get_config_summary_text": lambda: ok("Summary text.", summary=cm.get_summary_text() if cm else "No data."),
+        "show_config_summary_dialog": lambda: (main_window.handle_view_summary(), ok("Opened View Summary dialog."))[1],
+        "get_schedule_session_info": lambda: _handle_session_info(main_window, ok),
+        "run_schedule_generation": lambda: (main_window.gen_manager.run_scheduler(main_window), ok("Started generation."))[1],
+        "get_config_json": lambda: _handle_get_json(cm, ok),
+        "reload_config_from_disk": lambda: _handle_reload(main_window, cm, ok),
+        "save_config_to_disk": lambda: (_write_config_silent(main_window), ok(f"Saved to {cm.filepath}."))[1],
+        "open_native_gui": lambda: _handle_native_gui(main_window, arguments, ok),
+        "export_all_schedules_to_pdf": lambda: _export_all_schedules_pdf(main_window, arguments, ok),
+        "export_all_schedules_to_json": lambda: _export_all_schedules_json(main_window, arguments, ok),
+        "undo_configuration_change": lambda: _assistant_undo(main_window, ok),
+        "redo_configuration_change": lambda: _assistant_redo(main_window, ok),
+    }
 
-    if name == "get_config_summary_text":
-        text = cm.get_summary_text() if cm else "No data."
-        return ok("Summary text.", summary=text)
+    if name in handlers:
+        return handlers[name]()
 
-    if name == "show_config_summary_dialog":
-        main_window.handle_view_summary()
-        return ok("Opened View Summary dialog.")
+    return _execute_crud_operations(main_window, name, arguments, ok)
 
-    if name == "save_config_copy_as":
-        path = os.path.expanduser(str(arguments["path"]))
-        try:
-            parent = os.path.dirname(path) or "."
-            os.makedirs(parent, exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(cm.data, f, indent=4)
-        except OSError as e:
-            return json.dumps({"ok": False, "error": str(e)})
-        return ok(f"Wrote config copy to {path}.")
+def _handle_session_info(mw, ok_fn):
+    schedules = getattr(mw, "schedules", []) or []
+    return ok_fn("Schedule session state.", 
+                 schedule_count=len(schedules),
+                 current_index=int(getattr(mw, "current_schedule_index", 0)),
+                 has_schedules=len(schedules) > 0)
 
-    if name == "get_schedule_session_info":
-        schedules = getattr(main_window, "schedules", []) or []
-        idx = int(getattr(main_window, "current_schedule_index", 0))
-        return ok(
-            "Schedule session state.",
-            schedule_count=len(schedules),
-            current_index=idx,
-            has_schedules=len(schedules) > 0,
+def _handle_get_json(cm, ok_fn):
+    raw = json.dumps(cm.data, indent=2)
+    return ok_fn("JSON.", json=raw if len(raw) <= 80000 else raw[:80000] + "... [truncated]")
+
+def _handle_reload(mw, cm, ok_fn):
+    mw.assistant_push_config_undo_snapshot()
+    loaded = cm.load(mw)
+    if loaded is None:
+        return json.dumps(
+            {"ok": False, "error": "Failed to reload config (missing file or invalid JSON)."}
         )
+    if hasattr(mw, "mid_panel"):
+        mw.mid_panel.update_title(cm.filepath)
+    mw._sync_detail_view()
+    return ok_fn("Reloaded from disk.")
 
-    if name == "set_current_schedule_index":
-        schedules = getattr(main_window, "schedules", []) or []
-        idx = int(arguments["index"])
-        if not schedules:
-            return json.dumps({"ok": False, "error": "No schedules loaded."})
-        if idx < 0 or idx >= len(schedules):
-            return json.dumps(
-                {"ok": False, "error": f"Index out of range (0..{len(schedules) - 1})."}
-            )
-        main_window.current_schedule_index = idx
-        return ok(f"Current schedule index set to {idx}.")
 
-    if name == "get_current_schedule_display_text":
-        schedules = getattr(main_window, "schedules", []) or []
-        idx = int(getattr(main_window, "current_schedule_index", 0))
-        if not schedules or not (0 <= idx < len(schedules)):
-            return json.dumps({"ok": False, "error": "No current schedule to display."})
-        schedule = schedules[idx]
-        schedule_data = schedule if isinstance(schedule, list) and schedule else []
-        if schedule_data and isinstance(schedule_data[0], dict):
-            text = cm.get_schedule_spreadsheet(schedule_data)
-        else:
-            text = str(schedule)
-        return ok("Current schedule as tabular text.", text=text, index=idx)
+def _export_all_schedules_pdf(mw, args: Dict[str, Any], ok_fn):
+    path = str(args.get("pdf_path", "")).strip()
+    if not path:
+        return json.dumps({"ok": False, "error": "pdf_path is required."})
+    path = os.path.abspath(os.path.expanduser(path))
+    if not path.lower().endswith(".pdf"):
+        path = path + ".pdf"
+    schedules = getattr(mw, "schedules", []) or []
+    if not schedules:
+        return json.dumps({"ok": False, "error": "No schedules loaded."})
+    try:
+        mw.config_mgr._write_schedules_pdf(path, schedules)
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)})
+    return ok_fn(f"Exported {len(schedules)} schedule option(s) to PDF.", path=path)
 
-    if name == "open_schedule_viewer":
-        mode = str(arguments.get("mode", "all")).lower()
-        if mode not in ("all", "faculty", "room", "lab"):
-            return json.dumps({"ok": False, "error": f"Invalid mode: {mode!r}"})
-        main_window.open_schedule_viewer(mode)
-        return ok(f"Opened schedule viewer ({mode}).")
 
-    if name == "export_current_schedule_to_csv":
-        schedules = getattr(main_window, "schedules", []) or []
-        idx = int(getattr(main_window, "current_schedule_index", 0))
-        if not schedules or not (0 <= idx < len(schedules)):
-            return json.dumps({"ok": False, "error": "No schedule to export."})
-        schedule = schedules[idx]
-        if not schedule or not isinstance(schedule, list):
-            return json.dumps({"ok": False, "error": "Current schedule is empty or invalid."})
-        path = os.path.expanduser(str(arguments["csv_path"]))
-        if not path.lower().endswith(".csv"):
-            path += ".csv"
-        success = cm.export_schedule_to_csv(schedule, path)
-        if success:
-            return ok(f"Exported schedule #{idx} to {path}.", path=path)
-        return json.dumps({"ok": False, "error": f"Failed to write {path}."})
+def _export_all_schedules_json(mw, args: Dict[str, Any], ok_fn):
+    path = str(args.get("json_path", "")).strip()
+    if not path:
+        return json.dumps({"ok": False, "error": "json_path is required."})
+    path = os.path.abspath(os.path.expanduser(path))
+    if not path.lower().endswith(".json"):
+        path = path + ".json"
+    schedules = getattr(mw, "schedules", []) or []
+    if not schedules:
+        return json.dumps({"ok": False, "error": "No schedules loaded."})
+    try:
+        mw.config_mgr.write_schedules_json_file(path, schedules)
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)})
+    return ok_fn(f"Exported {len(schedules)} schedule option(s) to JSON.", path=path)
 
-    if name == "import_schedule_from_file":
-        path = os.path.expanduser(str(arguments["file_path"]))
-        if not os.path.isfile(path):
-            return json.dumps({"ok": False, "error": f"File not found: {path}"})
-        if path.lower().endswith(".json"):
-            schedule_data = cm.import_schedule_from_json(path)
-        else:
-            schedule_data = cm.import_schedule_from_csv(path)
-        if schedule_data is None:
-            return json.dumps({"ok": False, "error": "Could not read a valid schedule from file."})
-        main_window.imported_schedule = schedule_data
-        main_window.schedules.append(schedule_data)
-        main_window.current_schedule_index = len(main_window.schedules) - 1
-        return ok(
-            f"Imported {len(schedule_data)} assignment(s) from {path}.",
-            assignments=len(schedule_data),
-            current_index=main_window.current_schedule_index,
-        )
 
-    if name == "open_native_gui":
-        action = str(arguments["action"])
-        dispatch = {
-            "file_change_config": lambda: main_window.handle_change_path(),
-            "file_save_config": lambda: main_window.config_mgr.save(main_window),
-            "file_save_config_as": lambda: main_window.save_config_to_file(),
-            "faculty_add": lambda: main_window.faculty_manager.add_faculty_via_dialog(main_window),
-            "faculty_modify": lambda: main_window.faculty_manager.modify_faculty_via_dialog(main_window),
-            "faculty_delete": lambda: main_window.faculty_manager.delete_faculty_via_dialog(main_window),
-            "faculty_edit_times": lambda: main_window.faculty_manager.faculty_time_via_dialog(main_window),
-            "faculty_edit_preferences": lambda: main_window.faculty_manager.faculty_preference(main_window),
-            "course_add": lambda: main_window.course_manager.add_course_via_dialog(main_window),
-            "course_modify": lambda: main_window.course_manager.modify_course_via_dialog(main_window),
-            "course_delete": lambda: main_window.course_manager.delete_course_via_dialog(main_window),
-            "room_add": lambda: main_window.room_manager.add_room_via_dialog(main_window),
-            "room_modify": lambda: main_window.room_manager.modify_room_via_dialog(main_window),
-            "room_delete": lambda: main_window.room_manager.delete_room_via_dialog(main_window),
-            "lab_add": lambda: main_window.lab_manager.add_lab_via_dialog(main_window),
-            "lab_modify": lambda: main_window.lab_manager.modify_lab_via_dialog(main_window),
-            "lab_delete": lambda: main_window.lab_manager.delete_lab_via_dialog(main_window),
-            "generator_set_limit": lambda: main_window.gen_manager.set_limit(main_window),
-            "generator_set_optimize": lambda: main_window.gen_manager.set_optimize(main_window),
-            "viewer_open_all": lambda: main_window.open_schedule_viewer("all"),
-            "viewer_open_faculty": lambda: main_window.open_schedule_viewer("faculty"),
-            "viewer_open_room": lambda: main_window.open_schedule_viewer("room"),
-            "viewer_open_lab": lambda: main_window.open_schedule_viewer("lab"),
-            "viewer_export": lambda: main_window.handle_export_schedule(),
-            "viewer_import": lambda: main_window.handle_import_schedule(),
-            "viewer_clear_schedules": lambda: main_window.handle_clear_schedule(),
-            "meeting_pattern_add": lambda: main_window.meeting_pattern_editor.add_meeting_pattern(
-                main_window
-            ),
-            "meeting_pattern_modify": lambda: main_window.meeting_pattern_editor.modify_meeting_pattern(
-                main_window
-            ),
-            "meeting_pattern_delete": lambda: main_window.meeting_pattern_editor.delete_meeting_pattern(
-                main_window
-            ),
-            "timeslot_add": lambda: main_window.time_slot_editor.add_time_slot(main_window),
-            "timeslot_modify": lambda: main_window.time_slot_editor.modify_time_slot(main_window),
-            "timeslot_delete": lambda: main_window.time_slot_editor.delete_time_slot(main_window),
-        }
-        fn = dispatch.get(action)
-        if fn is None:
-            return json.dumps({"ok": False, "error": f"Unknown action: {action!r}"})
-        fn()
-        return ok(f"Launched native GUI: {action}.")
-
-    if name == "get_config_json":
-        raw = json.dumps(cm.data, indent=2)
-        max_len = 80000
-        if len(raw) > max_len:
-            return ok(
-                f"Truncated to {max_len} characters.",
-                json_preview=raw[:max_len] + "\n... [truncated]",
-            )
-        return ok("Full config JSON.", json=raw)
-
-    if name == "reload_config_from_disk":
-        cm.load()
-        if hasattr(main_window, "mid_panel"):
-            main_window.mid_panel.update_title(cm.filepath)
-        return ok("Reloaded from disk.")
-
-    if name == "save_config_to_disk":
-        _write_config_silent(main_window)
-        return ok(f"Saved to {cm.filepath}.")
-
-    if name == "set_active_config_file":
-        path = os.path.expanduser(str(arguments["path"]))
-        if not os.path.isfile(path):
-            return json.dumps({"ok": False, "error": f"File not found: {path}"})
-        cm.filepath = path
-        cm.load()
-        if hasattr(main_window, "mid_panel"):
-            main_window.mid_panel.update_title(path)
-        return ok(f"Active config is now {path}.")
-
-    if name == "list_timeslots":
-        tse = main_window.time_slot_editor
-        slots = tse._get_timeslots()
-        sched_times = main_window.config_mgr.data.get("time_slot_config", {}).get("times", {})
-        return ok(
-            "Time slots (normalized GUI shape + scheduler times).",
-            time_slots=slots,
-            scheduler_times=sched_times,
-        )
-
-    if name == "list_meeting_patterns":
-        mpe = main_window.meeting_pattern_editor
-        patterns = mpe._get_patterns()
-        enriched = [{"index": i, **copy.deepcopy(p)} for i, p in enumerate(patterns)]
-        sched_classes = main_window.config_mgr.data.get("time_slot_config", {}).get("classes", [])
-        return ok(
-            "Class meeting patterns (GUI + scheduler classes).",
-            patterns=enriched,
-            scheduler_classes=copy.deepcopy(sched_classes),
-        )
-
-    if name in (
-        "add_timeslot_block",
-        "update_timeslot_block",
-        "remove_timeslot_block",
-        "set_timeslot_day_enabled",
-    ):
-        tse = main_window.time_slot_editor
-        day_raw = str(arguments.get("day", ""))
-        day_long = _normalize_weekday_for_editor(day_raw, tse.DAY_MAP, tse.REVERSE_DAY_MAP)
-        if not day_long:
-            return json.dumps({"ok": False, "error": f"Invalid weekday: {day_raw!r}"})
-
-        if name == "add_timeslot_block":
-            st = str(arguments["start_time"]).strip()
-            et = str(arguments["end_time"]).strip()
-            sp = int(arguments["spacing_minutes"])
-            if not _parse_hhmm(st) or not _parse_hhmm(et):
-                return json.dumps({"ok": False, "error": "start_time and end_time must be HH:MM."})
-            if st >= et:
-                return json.dumps({"ok": False, "error": "start_time must be before end_time."})
-            if sp < 1:
-                return json.dumps({"ok": False, "error": "spacing_minutes must be >= 1."})
-            time_slots = tse._get_timeslots()
-            day_entry = tse._normalize_day_entry(time_slots.get(day_long, {"enabled": True, "blocks": []}))
-            block = {
-                "start_time": st,
-                "end_time": et,
-                "spacing_minutes": sp,
-                "slots": tse._generate_slots(st, et, sp),
+def _assistant_undo(mw, ok_fn):
+    if not mw.assistant_undo_config_change():
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "Nothing to undo (stack holds assistant-driven config changes only).",
             }
-            day_entry.setdefault("blocks", []).append(block)
-            day_entry["enabled"] = True
-            time_slots[day_long] = day_entry
-            tse._sync_time_slot_config()
-            _write_config_silent(main_window)
-            return ok(f"Added timeslot block for {day_long}.", day=day_long, blocks=day_entry["blocks"])
+        )
+    return ok_fn("Undid the last assistant configuration change.")
 
-        if name == "update_timeslot_block":
-            bi = int(arguments["block_index"])
-            time_slots = tse._get_timeslots()
-            day_entry = tse._normalize_day_entry(time_slots.get(day_long, {"enabled": True, "blocks": []}))
-            blocks = day_entry.get("blocks", [])
-            if bi < 0 or bi >= len(blocks):
-                return json.dumps(
-                    {"ok": False, "error": f"block_index out of range (0..{max(len(blocks) - 1, 0)})."}
-                )
-            cur = dict(blocks[bi])
-            if "start_time" in arguments and arguments["start_time"] is not None:
-                st = str(arguments["start_time"]).strip()
-            else:
-                st = str(cur["start_time"]).strip()
-            if "end_time" in arguments and arguments["end_time"] is not None:
-                et = str(arguments["end_time"]).strip()
-            else:
-                et = str(cur["end_time"]).strip()
-            if "spacing_minutes" in arguments and arguments["spacing_minutes"] is not None:
-                sp = int(arguments["spacing_minutes"])
-            else:
-                sp = int(cur["spacing_minutes"])
-            if not _parse_hhmm(st) or not _parse_hhmm(et):
-                return json.dumps({"ok": False, "error": "start_time and end_time must be HH:MM."})
-            if st >= et:
-                return json.dumps({"ok": False, "error": "start_time must be before end_time."})
-            if sp < 1:
-                return json.dumps({"ok": False, "error": "spacing_minutes must be >= 1."})
-            blocks[bi] = {
-                "start_time": st,
-                "end_time": et,
-                "spacing_minutes": sp,
-                "slots": tse._generate_slots(st, et, sp),
-            }
-            time_slots[day_long] = day_entry
-            tse._sync_time_slot_config()
-            _write_config_silent(main_window)
-            return ok(f"Updated timeslot block {bi} for {day_long}.", day=day_long, block=blocks[bi])
 
-        if name == "remove_timeslot_block":
-            bi = int(arguments["block_index"])
-            time_slots = tse._get_timeslots()
-            if day_long not in time_slots:
-                return json.dumps({"ok": False, "error": f"No timeslots for {day_long}."})
-            day_entry = tse._normalize_day_entry(time_slots[day_long])
-            blocks = day_entry.get("blocks", [])
-            if bi < 0 or bi >= len(blocks):
-                return json.dumps(
-                    {"ok": False, "error": f"block_index out of range (0..{max(len(blocks) - 1, 0)})."}
-                )
-            del blocks[bi]
-            if not blocks:
-                del time_slots[day_long]
-            else:
-                time_slots[day_long] = day_entry
-            tse._sync_time_slot_config()
-            _write_config_silent(main_window)
-            return ok(f"Removed timeslot block {bi} for {day_long}.")
+def _assistant_redo(mw, ok_fn):
+    if not mw.assistant_redo_config_change():
+        return json.dumps({"ok": False, "error": "Nothing to redo."})
+    return ok_fn("Redid the last undone configuration change.")
 
-        if name == "set_timeslot_day_enabled":
-            en = bool(arguments["enabled"])
-            time_slots = tse._get_timeslots()
-            day_entry = tse._normalize_day_entry(time_slots.get(day_long, {"enabled": True, "blocks": []}))
-            day_entry["enabled"] = en
-            time_slots[day_long] = day_entry
-            tse._sync_time_slot_config()
-            _write_config_silent(main_window)
-            return ok(f"Set {day_long} enabled={en}.")
+def _handle_native_gui(mw, args, ok_fn):
+    action = str(args["action"])
+    dispatch = {
+        "faculty_add": mw.faculty_manager.add_faculty_via_dialog,
+        "faculty_modify": mw.faculty_manager.modify_faculty_via_dialog,
+        "course_add": mw.course_manager.add_course_via_dialog,
+        "course_modify": mw.course_manager.modify_course_via_dialog,
+        "course_delete": mw.course_manager.delete_course_via_dialog,
+        "room_add": mw.room_manager.add_room_via_dialog,
+        "file_save_config": lambda: mw.config_mgr.save(mw),
+        "viewer_open_all": lambda: mw.open_schedule_viewer("all"),
+    }
+    fn = dispatch.get(action)
+    if not fn: return json.dumps({"ok": False, "error": f"Action {action} not mapped."})
+    fn(mw) if callable(fn) else None
+    return ok_fn(f"Launched {action}.")
 
-    if name in ("add_meeting_pattern", "update_meeting_pattern", "delete_meeting_pattern"):
-        mpe = main_window.meeting_pattern_editor
-        dm, rv = mpe.DAY_MAP, mpe.REVERSE_DAY_MAP
-
-        if name == "add_meeting_pattern":
-            meetings_arg = arguments.get("meetings") or []
-            if not isinstance(meetings_arg, list):
-                return json.dumps({"ok": False, "error": "meetings must be an array."})
-            norm, err = _normalize_meeting_entries(meetings_arg, dm, rv)
-            if err:
-                return json.dumps({"ok": False, "error": err})
-            credits = int(arguments["credits"])
-            start_time = str(arguments.get("start_time", "")).strip()
-            disabled = bool(arguments.get("disabled", False))
-            pattern: Dict[str, Any] = {
-                "credits": credits,
-                "meetings": norm,
-                "start_time": start_time,
-                "disabled": disabled,
-            }
-            patterns = mpe._get_patterns()
-            patterns.append(pattern)
-            mpe._sync_time_slot_config_classes()
-            _write_config_silent(main_window)
-            return ok("Added meeting pattern.", pattern=pattern, index=len(patterns) - 1)
-
-        if name == "update_meeting_pattern":
-            idx = int(arguments["pattern_index"])
-            patterns = mpe._get_patterns()
-            if idx < 0 or idx >= len(patterns):
-                return json.dumps(
-                    {"ok": False, "error": f"pattern_index out of range (0..{len(patterns) - 1})."}
-                )
-            cur = copy.deepcopy(patterns[idx])
-            if not isinstance(cur, dict):
-                return json.dumps({"ok": False, "error": "Invalid pattern entry."})
-            if "credits" in arguments and arguments["credits"] is not None:
-                cur["credits"] = int(arguments["credits"])
-            if "meetings" in arguments and arguments["meetings"] is not None:
-                if not isinstance(arguments["meetings"], list):
-                    return json.dumps({"ok": False, "error": "meetings must be an array."})
-                norm, err = _normalize_meeting_entries(arguments["meetings"], dm, rv)
-                if err:
-                    return json.dumps({"ok": False, "error": err})
-                cur["meetings"] = norm
-            if "start_time" in arguments and arguments["start_time"] is not None:
-                cur["start_time"] = str(arguments["start_time"]).strip()
-            if "disabled" in arguments and arguments["disabled"] is not None:
-                cur["disabled"] = bool(arguments["disabled"])
-            if not cur.get("meetings"):
-                return json.dumps({"ok": False, "error": "Pattern must have at least one meeting."})
-            patterns[idx] = cur
-            mpe._sync_time_slot_config_classes()
-            _write_config_silent(main_window)
-            return ok(f"Updated meeting pattern at index {idx}.", pattern=cur)
-
-        if name == "delete_meeting_pattern":
-            idx = int(arguments["pattern_index"])
-            patterns = mpe._get_patterns()
-            if idx < 0 or idx >= len(patterns):
-                return json.dumps(
-                    {"ok": False, "error": f"pattern_index out of range (0..{len(patterns) - 1})."}
-                )
-            del patterns[idx]
-            mpe._sync_time_slot_config_classes()
-            _write_config_silent(main_window)
-            return ok(f"Deleted meeting pattern at index {idx}.")
-
-    cfg = _ensure_config_block(main_window)
-    rooms: List[str] = cfg["rooms"]
-    labs: List[str] = cfg["labs"]
-    courses: List[Dict[str, Any]] = cfg["courses"]
-    faculty: List[Any] = cfg["faculty"]
-
-    if name == "list_rooms":
-        return ok("Rooms.", rooms=list(rooms))
-
-    if name == "list_labs":
-        return ok("Labs.", labs=list(labs))
-
-    if name == "list_faculty":
-        names = [_faculty_display_name(f) for f in faculty]
-        return ok("Faculty display names.", faculty=names)
-
-    if name == "list_course_ids":
-        ids = [str(c.get("course_id", "")) for c in courses if isinstance(c, dict)]
-        return ok("Course IDs (may include duplicates).", course_ids=ids)
-
-    if name == "add_room":
-        rn = str(arguments["room_name"]).strip()
-        if not rn:
-            return json.dumps({"ok": False, "error": "Empty room name."})
-        if rn not in rooms:
-            rooms.append(rn)
-            _write_config_silent(main_window)
-            return ok(f"Added room {rn!r}.", rooms=rooms)
-        return ok(f"Room {rn!r} already present (no change).", rooms=rooms)
-
-    if name == "remove_room":
-        rn = str(arguments["room_name"])
-        if rn in rooms:
-            rooms.remove(rn)
-            _write_config_silent(main_window)
-            return ok(f"Removed room {rn!r}.", rooms=rooms)
-        return json.dumps({"ok": False, "error": f"Room not found: {rn!r}"})
-
-    if name == "rename_room":
-        old, new = str(arguments["old_name"]), str(arguments["new_name"]).strip()
-        if old not in rooms:
-            return json.dumps({"ok": False, "error": f"Room not found: {old!r}"})
-        idx = rooms.index(old)
-        rooms[idx] = new
-        _write_config_silent(main_window)
-        return ok(f"Renamed {old!r} -> {new!r}.", rooms=rooms)
-
-    if name == "add_lab":
-        lab = str(arguments["lab_name"]).strip()
-        if not lab:
-            return json.dumps({"ok": False, "error": "Empty lab name."})
-        if lab not in labs:
-            labs.append(lab)
-        _write_config_silent(main_window)
-        return ok("Labs updated.", labs=labs)
-
-    if name == "remove_lab":
-        lab = str(arguments["lab_name"])
-        if lab in labs:
-            labs.remove(lab)
-            _write_config_silent(main_window)
-            return ok(f"Removed lab {lab!r}.", labs=labs)
-        return json.dumps({"ok": False, "error": f"Lab not found: {lab!r}"})
-
-    if name == "rename_lab":
-        old, new = str(arguments["old_name"]), str(arguments["new_name"]).strip()
-        if old not in labs:
-            return json.dumps({"ok": False, "error": f"Lab not found: {old!r}"})
-        labs[labs.index(old)] = new
-        _write_config_silent(main_window)
-        return ok(f"Renamed lab {old!r} -> {new!r}.", labs=labs)
-
-    if name == "add_faculty":
-        fn = str(arguments["name"]).strip()
-        if not fn:
-            return json.dumps({"ok": False, "error": "Empty name."})
-        faculty.append(fn)
-        _write_config_silent(main_window)
-        return ok(f"Added faculty {fn!r}.")
-
-    if name == "remove_faculty":
-        target = str(arguments["name"])
-        idx = _faculty_match_index(faculty, target)
-        if idx is None:
-            return json.dumps({"ok": False, "error": f"Faculty not found or ambiguous: {target!r}"})
-        removed = _faculty_display_name(faculty[idx])
-        del faculty[idx]
-        _write_config_silent(main_window)
-        return ok(f"Removed faculty {removed!r}.")
-
-    if name == "rename_faculty":
-        old_n, new_n = str(arguments["old_name"]), str(arguments["new_name"]).strip()
-        idx = _faculty_match_index(faculty, old_n)
-        if idx is None:
-            return json.dumps({"ok": False, "error": f"Faculty not found or ambiguous: {old_n!r}"})
-        f = faculty[idx]
-        if isinstance(f, dict):
-            faculty[idx] = {**f, "name": new_n}
-        else:
-            faculty[idx] = new_n
-        _write_config_silent(main_window)
-        return ok(f"Renamed faculty {_faculty_display_name(f)!r} -> {new_n!r}.")
-
-    if name == "merge_faculty_object":
-        fname = str(arguments["faculty_name"])
-        merge_obj = json.loads(str(arguments["merge_json"]))
-        if not isinstance(merge_obj, dict):
-            return json.dumps({"ok": False, "error": "merge_json must be a JSON object."})
-        idx = _faculty_match_index(faculty, fname)
-        if idx is None:
-            return json.dumps({"ok": False, "error": f"Faculty not found or ambiguous: {fname!r}"})
-        f = faculty[idx]
-        base = f if isinstance(f, dict) else {"name": str(f)}
-        faculty[idx] = {**base, **merge_obj}
-        _write_config_silent(main_window)
-        return ok(f"Merged fields into faculty {_faculty_display_name(f)!r}.", entry=faculty[idx])
-
-    if name == "add_course":
-        cid = str(arguments["course_id"]).strip()
-        creds = int(arguments["credits"])
-        new_c = {
-            "course_id": cid,
-            "credits": creds,
-            "room": list(arguments.get("rooms") or []),
-            "lab": list(arguments.get("labs") or []),
-            "conflicts": list(arguments.get("conflicts") or []),
-            "faculty": list(arguments.get("faculty") or []),
-        }
-        courses.append(new_c)
-        _write_config_silent(main_window)
-        return ok(f"Added course {cid!r}.", course=new_c)
+def _execute_crud_operations(mw, name, args, ok):
+    cfg = _ensure_config_block(mw)
+    courses = cfg.get("courses", [])
 
     if name == "update_course":
-        cid = str(arguments["course_id"])
+        cid = str(args["course_id"])
         for c in courses:
-            if not isinstance(c, dict) or str(c.get("course_id")) != cid:
-                continue
-            if "credits" in arguments:
-                c["credits"] = int(arguments["credits"])
-            if "rooms" in arguments:
-                c["room"] = list(arguments["rooms"])
-            if "labs" in arguments:
-                c["lab"] = list(arguments["labs"])
-            if "conflicts" in arguments:
-                c["conflicts"] = list(arguments["conflicts"])
-            if "faculty" in arguments:
-                c["faculty"] = list(arguments["faculty"])
-            _write_config_silent(main_window)
-            return ok(f"Updated first course {cid!r}.", course=c)
-        return json.dumps({"ok": False, "error": f"Course not found: {cid!r}"})
+            if isinstance(c, dict) and str(c.get("course_id")) == cid:
+                if "rooms" in args: c["room"] = list(args["rooms"])
+                if "credits" in args: c["credits"] = int(args["credits"])
+                _write_config_silent(mw)
+                return ok(f"Updated course {cid}.", course=c)
+        return json.dumps({"ok": False, "error": f"Course {cid} not found."})
 
     if name == "delete_course":
-        cid = str(arguments["course_id"])
+        cid = str(args["course_id"])
         for i, c in enumerate(courses):
             if isinstance(c, dict) and str(c.get("course_id")) == cid:
                 del courses[i]
-                _write_config_silent(main_window)
-                return ok(f"Deleted first course {cid!r}.")
-        return json.dumps({"ok": False, "error": f"Course not found: {cid!r}"})
+                _write_config_silent(mw)
+                return ok(f"Deleted course {cid}.")
+        return json.dumps({"ok": False, "error": f"Course {cid} not found."})
 
-    if name == "set_schedule_limit":
-        lim = int(arguments["limit"])
-        main_window.config_mgr.data["limit"] = lim
-        _write_config_silent(main_window)
-        return ok(f"Set limit to {lim}.")
-
-    if name == "set_optimizer_enabled":
-        enabled = bool(arguments["enabled"])
-        full_flags = [
-            "faculty_course",
-            "faculty_room",
-            "faculty_lab",
-            "same_room",
-            "same_lab",
-            "pack_rooms",
-        ]
-        main_window.config_mgr.data["optimizer_flags"] = full_flags if enabled else []
-        _write_config_silent(main_window)
-        return ok(f"Optimizer {'enabled' if enabled else 'disabled'}.")
-
-    if name == "run_schedule_generation":
-        main_window.gen_manager.run_scheduler(main_window)
-        return ok("Started schedule generation (progress dialog).")
-
+    if name == "list_rooms": return ok("Rooms.", rooms=list(cfg.get("rooms", [])))
+    
     return json.dumps({"ok": False, "error": f"Unknown tool: {name}"})
-
 
 def default_api_key() -> str:
     """API key: OPENAI_API_KEY_IN_CODE, then config/openai_key.txt, then OPENAI_API_KEY env."""

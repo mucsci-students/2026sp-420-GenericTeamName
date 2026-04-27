@@ -44,14 +44,16 @@ def test_init_defaults():
     assert mgr.data["config"]["rooms"] == []
 
 def test_load_success(config_mgr):
-    data = config_mgr.load()
+    parent = MagicMock()
+    data = config_mgr.load(parent)
     assert len(data["config"]["courses"]) == 2
     assert data["config"]["courses"][0]["course_id"] == "CMSC101"
 
 def test_load_file_not_found():
     mgr = ConfigManager(filepath="non_existent.json")
-    with pytest.raises(FileNotFoundError):
-        mgr.load()
+    parent = MagicMock()
+    with patch("PyQt6.QtWidgets.QMessageBox.critical"):
+        assert mgr.load(parent) is None
 
 def test_save_success(config_mgr, tmp_path):
     parent = MagicMock()
@@ -75,7 +77,7 @@ def test_get_summary_text_empty():
     assert mgr.get_summary_text() == "No data loaded."
 
 def test_get_summary_text_with_courses(config_mgr):
-    config_mgr.load()
+    config_mgr.load(MagicMock())
     summary = config_mgr.get_summary_text()
     assert "COURSE ID" in summary
     assert "CMSC101" in summary
@@ -124,16 +126,77 @@ def test_export_schedule_to_json_cancel(config_mgr):
         result = config_mgr.export_schedule_to_json([{"test": "data"}], parent)
         assert result is False
 
+
+def test_export_schedule_to_pdf_cancel(config_mgr):
+    parent = MagicMock()
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName", return_value=("", "")):
+        result = config_mgr.export_schedule_to_pdf([{"test": "data"}], parent)
+        assert result is False
+
+
 def test_export_schedule_to_json_success(config_mgr, tmp_path):
     parent = MagicMock()
     save_path = str(tmp_path / "export.json")
     schedule_data = [{"course_id": "BIO1", "day": "Mon", "time": "08:00"}]
     
-    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName", return_value=(save_path, "")):
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName", return_value=(save_path, "JSON (*.json)")):
         with patch("PyQt6.QtWidgets.QMessageBox.information"):
             result = config_mgr.export_schedule_to_json([schedule_data], parent)
             assert result is True
             assert os.path.exists(save_path)
+
+
+def test_export_schedule_to_pdf_success(config_mgr, tmp_path):
+    parent = MagicMock()
+    save_path = str(tmp_path / "export.pdf")
+    schedule_data = [{"course_id": "BIO1", "day": "Mon", "time": "08:00"}]
+
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName", return_value=(save_path, "PDF (*.pdf)")):
+        with patch("PyQt6.QtWidgets.QMessageBox.information"):
+            result = config_mgr.export_schedule_to_pdf([schedule_data], parent)
+            assert result is True
+            assert os.path.exists(save_path)
+            with open(save_path, "rb") as f:
+                assert f.read(5).startswith(b"%PDF-")
+
+
+def test_export_grouped_room_lab_pdf_success(config_mgr, tmp_path):
+    parent = MagicMock()
+    save_path = str(tmp_path / "room_lab.pdf")
+    schedule_data = [{"course_id": "CMSC101", "day": "Mon", "time": "08:00"}]
+
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName", return_value=(save_path, "PDF (*.pdf)")):
+        with patch("PyQt6.QtWidgets.QMessageBox.information"):
+            result = config_mgr.export_grouped_printable([schedule_data], parent, "room_lab")
+            assert result is True
+            assert os.path.exists(save_path)
+            with open(save_path, "rb") as f:
+                assert f.read(5).startswith(b"%PDF-")
+
+
+def test_export_grouped_faculty_pdf_success(config_mgr, tmp_path):
+    parent = MagicMock()
+    save_path = str(tmp_path / "faculty.pdf")
+    schedule_data = [{"course_id": "CMSC101", "day": "Mon", "time": "08:00"}]
+
+    with patch("PyQt6.QtWidgets.QFileDialog.getSaveFileName", return_value=(save_path, "PDF (*.pdf)")):
+        with patch("PyQt6.QtWidgets.QMessageBox.information"):
+            result = config_mgr.export_grouped_printable([schedule_data], parent, "faculty")
+            assert result is True
+            assert os.path.exists(save_path)
+            with open(save_path, "rb") as f:
+                assert f.read(5).startswith(b"%PDF-")
+
+
+def test_grouped_faculty_uses_all_matching_course_entries(config_mgr):
+    config_mgr.data["config"]["courses"] = [
+        {"course_id": "CMSC101", "faculty": ["Dr. A"]},
+        {"course_id": "CMSC101", "faculty": []},
+    ]
+    schedule_data = [{"course_id": "CMSC101.01", "day": "Mon", "time": "08:00"}]
+    grouped = config_mgr._build_grouped_schedule_rows(schedule_data, "faculty")
+    assert "Dr. A" in grouped
+    assert "Unassigned" not in grouped
 
 def test_import_schedule_from_json(config_mgr, tmp_path):
     parent = MagicMock()
@@ -154,7 +217,7 @@ def test_import_schedule_from_json(config_mgr, tmp_path):
 ## --- 5. Grid Logic & Filtering Tests ---
 
 def test_get_schedule_grid_data_all(config_mgr):
-    config_mgr.load()
+    config_mgr.load(MagicMock())
     schedule_data = [{"course_id": "CMSC101", "day": "Mon", "time": "08:00"}]
     days, times, grid = config_mgr.get_schedule_grid_data(schedule_data, filter_type="all")
     
@@ -163,7 +226,7 @@ def test_get_schedule_grid_data_all(config_mgr):
     assert grid[8][0] == "CMSC101"
 
 def test_get_schedule_grid_data_filter_success(config_mgr):
-    config_mgr.load()
+    config_mgr.load(MagicMock())
     schedule_data = [
         {"course_id": "CMSC101", "day": "Mon", "time": "08:00"}, # Has 'Smith' in master config
         {"course_id": "CMSC102", "day": "Tue", "time": "09:00"}  # No 'Smith'
@@ -176,7 +239,7 @@ def test_get_schedule_grid_data_filter_success(config_mgr):
     assert grid[9][1] == "" # CMSC102 should be filtered out
 
 def test_get_schedule_grid_data_collision(config_mgr):
-    config_mgr.load()
+    config_mgr.load(MagicMock())
     schedule_data = [
         {"course_id": "C1", "day": "Mon", "time": "10:00"},
         {"course_id": "C2", "day": "Mon", "time": "10:00"}
