@@ -14,20 +14,17 @@ from gui.main_window import MainWindow
 
 # A single QApplication instance is required for any QWidget to exist.
 # We create it once for the entire test session.
-@pytest.fixture(scope="session")
-def qapp():
-    return QApplication([])
 
-@pytest.fixture
-def app(qapp):
-    """
-    Initializes MainWindow without showing it. 
-    This allows logic testing in headless environments.
-    """
-    test_app = MainWindow()
-    return test_app
 
-def test_config_display_handles_int(app):
+@pytest.fixture(scope="module")
+def qt_app():
+    # Single application for tests, avoids qapp.
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+    return app
+
+def test_config_display_handles_int(qt_app):
     """
     Verifies that the detail_view renders non-string JSON data correctly.
     Bypasses disk-load by setting a dummy filepath.
@@ -43,7 +40,7 @@ def test_config_display_handles_int(app):
     content = app.detail_view.toPlainText()
     assert '"limit": 100' in content
 
-def test_theme_switching_logic(app):
+def test_theme_switching_logic(qt_app):
     """
     Verifies the theme engine updates internal state and stylesheets.
     """
@@ -60,7 +57,7 @@ def test_theme_switching_logic(app):
     style = app.styleSheet().lower()
     assert "#1f1f24" in style
 
-def test_navigation_logic_wrap_around(app):
+def test_navigation_logic_wrap_around(qt_app):
     """
     Tests the index increment/decrement logic for schedule viewing.
     """
@@ -79,7 +76,7 @@ def test_navigation_logic_wrap_around(app):
     app.show_prev_schedule()
     assert app.current_schedule_index == 1
 
-def test_clear_schedules_flag(app):
+def test_clear_schedules_flag(qt_app):
     """
     Verifies that clearing schedules sets the internal 'clear_clicked' flag.
     """
