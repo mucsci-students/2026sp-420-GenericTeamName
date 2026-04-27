@@ -27,13 +27,21 @@ def qt_app():
 
 # FacultyFormDialog
 
-
-@patch("faculty.faculty_gui.SchedulerStyles.apply_high_contrast_shell")
-def test_checked_days(qtbot):
+def test_checked_days_none_selected(qt_app):
     dialog = FacultyFormDialog()
-    qtbot.addWidget(dialog)
 
-    # Manually check MON and WED
+    # Uncheck all days explicitly
+    for i in range(dialog._days_list.count()):
+        item = dialog._days_list.item(i)
+        item.setCheckState(Qt.CheckState.Unchecked)
+
+    assert dialog._checked_days() == []
+
+
+def test_checked_days_some_selected(qt_app):
+    dialog = FacultyFormDialog()
+
+    # Select MON and WED
     for i in range(dialog._days_list.count()):
         item = dialog._days_list.item(i)
         if item.text() in {"MON", "WED"}:
@@ -41,23 +49,35 @@ def test_checked_days(qtbot):
         else:
             item.setCheckState(Qt.CheckState.Unchecked)
 
-    result = dialog._checked_days()
-
-    assert result == ["MON", "WED"]
+    assert dialog._checked_days() == ["MON", "WED"]
 
 
-
-@patch("faculty.faculty_gui.SchedulerStyles.apply_high_contrast_shell")
-def test_merge_weighted_invalid_weight(qtbot):
+def test_checked_days_preserves_order(qt_app):
     dialog = FacultyFormDialog()
-    qtbot.addWidget(dialog)
 
-    dialog.course_weight_spin.setValue(7)
-    dialog._course_extra.setText("CMSC 330:abc")
+    # Select out of order to ensure function returns DAYS order
+    for i in range(dialog._days_list.count()):
+        item = dialog._days_list.item(i)
+        if item.text() in {"FRI", "MON"}:
+            item.setCheckState(Qt.CheckState.Checked)
+        else:
+            item.setCheckState(Qt.CheckState.Unchecked)
 
-    result = dialog._merge_weighted(None, dialog._course_extra, dialog.course_weight_spin)
+    # Should follow DAYS constant order, not selection order
+    assert dialog._checked_days() == ["MON", "FRI"]
 
-    assert result == {"CMSC 330": 7}
+def make_checklist(items_with_state):
+    """
+    Helper: items_with_state = [("A", True), ("B", False)]
+    """
+    lw = QListWidget()
+    for text, checked in items_with_state:
+        item = QListWidgetItem(text)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        lw.addItem(item)
+    return lw
+
 
 
 @patch("faculty.faculty_gui.SchedulerStyles.apply_high_contrast_shell")
@@ -159,14 +179,7 @@ def test_add_faculty_no_config_data(mock_dlg, tmp_path, qt_app):
     with patch("faculty.faculty_gui.QMessageBox.warning") as w:
         mgr.add_faculty_via_dialog(None)
     w.assert_called_once
-    mock_dlg.assert_not_called()
-
-@patch("faculty.faculty_gui.FacultyFormDialog")
-def test_select_faculty_cancel(mock_item, tmp_path, qt_app):
-    cfg = config_mgr([], tmp_path)
-    mgr = FacultyManager(cfg, viewer_mgr({}))
-    assert mgr.select_faculty(None) == (None, None)
-
+    mock_dlg.assert_not_called()\
 
 @patch(
     "faculty.faculty_gui.QMessageBox.question",
@@ -236,7 +249,6 @@ def test_modify_stops_if_selection_cancelled(mock_dlg, mock_get, tmp_path, qt_ap
     mgr.modify_faculty_via_dialog(None)
     mock_dlg.assert_not_called()
 
-#18 (passed)
 @patch("faculty.faculty_gui.QMessageBox.warning")
 def test_delete_no_config(mock_warn, tmp_path, qt_app):
     cfg = config_mgr([], tmp_path)

@@ -14,12 +14,16 @@ from gui.main_window import MainWindow
 
 # A single QApplication instance is required for any QWidget to exist.
 # We create it once for the entire test session.
-@pytest.fixture(scope="session")
-def qapp():
-    return QApplication([])
+@pytest.fixture(scope="module")
+def qt_app():
+    # Single application for tests, avoids qapp.
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+    return app
 
 @pytest.fixture
-def app(qapp):
+def app(qt_app):
     """
     Initializes MainWindow without showing it. 
     This allows logic testing in headless environments.
