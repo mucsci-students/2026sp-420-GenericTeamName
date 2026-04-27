@@ -1,5 +1,11 @@
 """
+test_ai_assistant.py
+====================
 Pytests for ``ai.ai_assistant`` with high branch coverage.
+
+:date: 04/25/2026
+:author: Shane del Villar
+:class: CMSC 420
 """
 from __future__ import annotations
 
