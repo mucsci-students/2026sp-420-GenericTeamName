@@ -1,5 +1,11 @@
 """
-Tests for ``ai.ai_assistant`` (tool execution helpers, default API key, chat worker).
+test_ai_assistant.py
+====================
+Pytests for ``ai.ai_assistant`` (tool execution helpers, default API key, chat worker).
+
+:date: 04/25/2026
+:author: Shane del Villar
+:class: CMSC 420
 """
 from __future__ import annotations
 
