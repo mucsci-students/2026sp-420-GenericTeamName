@@ -47,7 +47,7 @@ class ProxyManager:
             "lab_add": self.lab_manager.add_lab_via_dialog,
             "save_config": lambda mw: self.config_mgr.save(mw),
             "generate": self.gen_manager.run_scheduler,
-            "change_path": lambda mw: mw.handle_change_path(), # Handled by UI
+            "change_path": lambda mw: mw.viewer_mgr.handle_change_path(mw),
         }
 
     def execute(self, action_key: str, use_undo: bool = True, *args, **kwargs) -> bool:
@@ -61,8 +61,8 @@ class ProxyManager:
             else:
                 func(self._mw, *args, **kwargs)
 
-            if hasattr(self._mw, "_sync_detail_view"):
-                self._mw._sync_detail_view()
+            if hasattr(self._mw, "viewer_mgr") and hasattr(self._mw.viewer_mgr, "_sync_detail_view"):
+                self._mw.viewer_mgr._sync_detail_view(self._mw)
             return True
         except Exception as e:
             self.logger.error(f"Error executing {action_key}: {e}")

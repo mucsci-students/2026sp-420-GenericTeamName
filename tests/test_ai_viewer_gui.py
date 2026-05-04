@@ -49,7 +49,8 @@ def mw():
     m.config_mgr = MagicMock()
     m.config_mgr.filepath = ""
     m.config_mgr.data = {"config": {"x": 1}}
-    m._sync_detail_view = MagicMock()
+    m.viewer_mgr = MagicMock()
+    m.viewer_mgr._sync_detail_view = MagicMock()
     return m
 
 
@@ -66,22 +67,12 @@ def test_append_ai_chat_formats_line(mw):
     mw.ai_chat_log.appendPlainText.assert_called_once_with("You: Hi\n")
 
 
-@patch("ai.ai_viewer_gui.os.path.isfile", return_value=True)
-def test_refresh_loads_from_disk_when_file_exists(mock_isfile, mw):
-    mgr = AIViewerManager(mw)
-    mw.config_mgr.filepath = "/tmp/cfg.json"
-    mgr.refresh_config_views_after_mutation()
-    mw.config_mgr.load.assert_called_once_with(mw)
-    mw._sync_detail_view.assert_called_once()
-
-
-@patch("ai.ai_viewer_gui.os.path.isfile", return_value=False)
-def test_refresh_skips_load_when_file_missing(mock_isfile, mw):
+def test_refresh_syncs_inspector_via_viewer_mgr(mw):
     mgr = AIViewerManager(mw)
     mw.config_mgr.filepath = "/tmp/cfg.json"
     mgr.refresh_config_views_after_mutation()
     mw.config_mgr.load.assert_not_called()
-    mw._sync_detail_view.assert_called_once()
+    mw.viewer_mgr._sync_detail_view.assert_called_once_with(mw)
 
 
 def test_send_assistant_message_returns_when_worker_running(mw):
@@ -227,7 +218,7 @@ def test_assistant_undo_success_writes_and_syncs(mock_file, mw):
     assert mgr.assistant_undo_config_change() is True
     assert mgr._assistant_config_redo_stack[-1] == {"v": 2}
     assert mw.config_mgr.data == {"v": 1}
-    mw._sync_detail_view.assert_called_once()
+    mw.viewer_mgr._sync_detail_view.assert_called_once_with(mw)
 
 
 @patch("ai.ai_viewer_gui.open", side_effect=OSError)
@@ -252,7 +243,7 @@ def test_assistant_redo_success_writes_and_syncs(mock_file, mw):
     assert mgr.assistant_redo_config_change() is True
     assert mgr._assistant_config_undo_stack[-1] == {"v": 1}
     assert mw.config_mgr.data == {"v": 2}
-    mw._sync_detail_view.assert_called_once()
+    mw.viewer_mgr._sync_detail_view.assert_called_once_with(mw)
 
 
 @patch("ai.ai_viewer_gui.open", side_effect=OSError)

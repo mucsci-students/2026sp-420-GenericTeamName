@@ -3,10 +3,11 @@
     Date: 04/25/2026
     Author: Tyler Strohl
     Class: CMSC 420
-    Description: Holds schedule viewer functions to be used in *main_window.py*.
+    Description: Schedule viewer helpers used by ``gui.main_window.MainWindow``.
 '''
 
 import json
+import logging
 import os
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -21,7 +22,9 @@ from PyQt6.QtCore import Qt, QCoreApplication, QSize
 from PyQt6.QtGui import QAction, QFont, QColor, QBrush, QKeySequence
 from PyQt6.QtWidgets import QInputDialog
 
-#TODO: Finish implementing this new class.
+_logger = logging.getLogger(__name__)
+
+
 class ViewerManager:
 
     def __init__(self, config_mgr):
@@ -168,27 +171,35 @@ class ViewerManager:
             f"Schedule {parent.current_schedule_index + 1} of {len(parent.schedules)}{filter_suffix}"
         )
 
-        days, times, grid = self.config_mgr.get_schedule_grid_data(
+        days, times, grid, spans = self.config_mgr.get_schedule_grid_data(
             parent.schedules[parent.current_schedule_index],
             filter_type=group_by,
             filter_value=filter_val
         )
 
-        parent.calendar_view.setRowCount(len(times))
-        parent.calendar_view.setColumnCount(len(days))
-        parent.calendar_view.setHorizontalHeaderLabels(days)
-        parent.calendar_view.setVerticalHeaderLabels(times)
+        cal = parent.calendar_view
+        cal.clearSpans()
+        cal.setRowCount(len(times))
+        cal.setColumnCount(len(days))
+        cal.setHorizontalHeaderLabels(days)
+        cal.setVerticalHeaderLabels(times)
+        cal.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
 
         item_font = QFont("Segoe UI", 9)
         for r, row_data in enumerate(grid):
             for c, cell_value in enumerate(row_data):
                 item = QTableWidgetItem(cell_value)
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop
+                )
                 item.setFont(item_font)
                 if cell_value:
                     item.setBackground(QBrush(QColor(37, 99, 235)))
                     item.setForeground(QBrush(QColor(255, 255, 255)))
-                parent.calendar_view.setItem(r, c, item)
+                cal.setItem(r, c, item)
+
+        for r, c, rs, cs in spans:
+            cal.setSpan(r, c, rs, cs)
 
     def _show_shortcuts_cheat_sheet(self, parent) -> None:
         mb = QMessageBox(parent)
@@ -259,10 +270,10 @@ class ViewerManager:
                 QMessageBox.information(
                     parent,
                     "Import Successful",
-                    f"Successfully loaded {len(imported_data)} schedule(s)."
+                    f"Successfully loaded {len(imported_data)} schedule(s).",
                 )
-            except:
-                QMessageBox.critical(parent, "Error", "Import failed.")
+            except Exception:
+                _logger.exception("Could not show import success dialog")
 
     def handle_export_schedule(self, parent):
         """Delegates schedule export with selectable output mode."""
@@ -315,8 +326,9 @@ class ViewerManager:
                 self.config_mgr.import_file = ""
                 self.update_schedule_display(parent)
                 QMessageBox.information(parent, "Success", "Schedule/s have been cleared.")
-            except:
-                QMessageBox.critical(parent, "Error", "Clear failed.")
+            except Exception as e:
+                _logger.exception("Clear schedules failed")
+                QMessageBox.critical(parent, "Error", f"Clear failed: {e}")
 
     def handle_view_summary(self, parent):
         """Displays a summary of the current configuration in a monospaced dialog."""

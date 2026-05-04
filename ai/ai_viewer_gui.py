@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import os
 from typing import Any
 
+from PyQt6.QtCore import QObject, pyqtSlot
 from PyQt6.QtWidgets import QMessageBox
 
 from .ai_assistant import (
@@ -25,11 +27,20 @@ from .ai_assistant import (
     execute_tool,
 )
 
+_logger = logging.getLogger(__name__)
 
-class AIViewerManager:
-    """Controller that owns assistant chat flow + assistant-specific undo/redo."""
+
+class AIViewerManager(QObject):
+    """Controller that owns assistant chat flow + assistant-specific undo/redo.
+
+    Inherits ``QObject`` so slots invoked from ``AssistantChatWorker`` signals run on the
+    GUI thread (queued), which is required before opening dialogs or touching widgets.
+    """
 
     def __init__(self, main_window: Any) -> None:
+        # ``super().__init__(None)``: tests pass ``MagicMock`` as ``main_window``; ``isinstance(mock, QObject)``
+        # can be true and breaks QObject parenting. Lifetime is held by ``MainWindow`` / ``ProxyManager``.
+        super().__init__(None)
         self.mw = main_window
         self._assistant_worker: AssistantChatWorker | None = None
         self.assistant_messages: list = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -40,10 +51,12 @@ class AIViewerManager:
         self.mw.ai_chat_log.appendPlainText(f"{who}: {text}\n")
 
     def refresh_config_views_after_mutation(self) -> None:
-        path = getattr(self.mw.config_mgr, "filepath", None)
-        if path and os.path.isfile(path):
-            self.mw.config_mgr.load(self.mw)
-        self.mw._sync_detail_view()
+        """Refresh the JSON inspector from in-memory ``config_mgr.data`` (no redundant disk reload)."""
+        try:
+            if hasattr(self.mw, "viewer_mgr") and hasattr(self.mw.viewer_mgr, "_sync_detail_view"):
+                self.mw.viewer_mgr._sync_detail_view(self.mw)
+        except Exception:
+            _logger.exception("refresh_config_views_after_mutation failed")
 
     def send_assistant_message(self) -> None:
         if self._assistant_worker is not None and self._assistant_worker.isRunning():
@@ -57,7 +70,7 @@ class AIViewerManager:
             QMessageBox.warning(
                 self.mw,
                 "OpenAI API key",
-                "Set your key in app/ai_assistant.py (OPENAI_API_KEY_IN_CODE), "
+                "Set your key in ai/ai_assistant.py (OPENAI_API_KEY_IN_CODE), "
                 "or put it in config/openai_key.txt, or set OPENAI_API_KEY in the environment.",
             )
             return
@@ -77,6 +90,7 @@ class AIViewerManager:
         worker.finished.connect(lambda w=worker: self.dispose_assistant_chat_worker(w))
         worker.start()
 
+    @pyqtSlot(list)
     def on_assistant_need_tools(self, tool_calls: list) -> None:
         results = []
         for tc in tool_calls:
@@ -95,6 +109,7 @@ class AIViewerManager:
             self._assistant_worker = None
         worker.deleteLater()
 
+    @pyqtSlot(str)
     def on_assistant_finished(self, text: str) -> None:
         self.append_ai_chat("Assistant", text)
         if self._assistant_worker is not None:
@@ -102,6 +117,7 @@ class AIViewerManager:
         self.mw.ai_send_btn.setEnabled(True)
         self.mw.ai_input.setEnabled(True)
 
+    @pyqtSlot(str)
     def on_assistant_failed(self, err: str) -> None:
         self.append_ai_chat("Assistant", f"(Error) {err}")
         self.mw.ai_send_btn.setEnabled(True)
@@ -128,7 +144,8 @@ class AIViewerManager:
                     json.dump(self.mw.config_mgr.data, f, indent=4)
             except OSError:
                 return False
-        self.mw._sync_detail_view()
+        if hasattr(self.mw, "viewer_mgr") and hasattr(self.mw.viewer_mgr, "_sync_detail_view"):
+            self.mw.viewer_mgr._sync_detail_view(self.mw)
         return True
 
     def assistant_redo_config_change(self) -> bool:
@@ -143,5 +160,6 @@ class AIViewerManager:
                     json.dump(self.mw.config_mgr.data, f, indent=4)
             except OSError:
                 return False
-        self.mw._sync_detail_view()
+        if hasattr(self.mw, "viewer_mgr") and hasattr(self.mw.viewer_mgr, "_sync_detail_view"):
+            self.mw.viewer_mgr._sync_detail_view(self.mw)
         return True

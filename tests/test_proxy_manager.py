@@ -9,8 +9,9 @@ class TestProxyManager:
         mw = MagicMock()
         # Mock run_with_undo to execute the passed lambda immediately
         mw.run_with_undo = MagicMock(side_effect=lambda x: x())
-        mw._sync_detail_view = MagicMock()
-        mw.handle_change_path = MagicMock()
+        mw.viewer_mgr = MagicMock()
+        mw.viewer_mgr.handle_change_path = MagicMock()
+        mw.viewer_mgr._sync_detail_view = MagicMock()
         return mw
 
     @pytest.fixture
@@ -48,7 +49,7 @@ class TestProxyManager:
         assert result is True
         mock_mw.run_with_undo.assert_called_once()
         mock_action.assert_called_once_with(mock_mw)
-        mock_mw._sync_detail_view.assert_called_once()
+        mock_mw.viewer_mgr._sync_detail_view.assert_called_once_with(mock_mw)
 
     def test_execute_success_no_undo_requested(self, proxy, mock_mw):
         """Path: use_undo is False, should skip run_with_undo."""
@@ -73,8 +74,8 @@ class TestProxyManager:
         mock_action.assert_called_once_with(mock_mw)
 
     def test_execute_no_sync_method_on_mw(self, proxy, mock_mw):
-        """Edge case: MainWindow is missing _sync_detail_view."""
-        del mock_mw._sync_detail_view
+        """Edge case: MainWindow has no viewer_mgr (inspector sync is skipped)."""
+        del mock_mw.viewer_mgr
         mock_action = MagicMock()
         proxy._registry["test_act"] = mock_action
         
@@ -104,7 +105,7 @@ class TestProxyManager:
         """Test the lambda specifically for change_path."""
         result = proxy.execute("change_path", use_undo=False)
         assert result is True
-        mock_mw.handle_change_path.assert_called_once()
+        mock_mw.viewer_mgr.handle_change_path.assert_called_once_with(mock_mw)
 
     def test_execute_with_args_and_kwargs(self, proxy, mock_mw):
         """Verify *args and **kwargs are passed through to the manager."""

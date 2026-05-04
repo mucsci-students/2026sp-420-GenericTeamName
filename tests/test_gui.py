@@ -9,7 +9,10 @@
 import pytest
 import os
 import json
+from unittest.mock import MagicMock
+
 from PyQt6.QtWidgets import QApplication
+
 from gui.main_window import MainWindow
 
 # A single QApplication instance is required for any QWidget to exist.
@@ -32,14 +35,11 @@ def test_config_display_handles_int(app):
     Verifies that the detail_view renders non-string JSON data correctly.
     Bypasses disk-load by setting a dummy filepath.
     """
-    # Force a dummy path so refresh_config_views_after_mutation 
-    # doesn't reload the real config/config.json from disk.
     app.config_mgr.filepath = "non_existent_test_file.json"
     app.config_mgr.data = {"SETTINGS": {"limit": 100}}
-    
-    # Manually trigger the UI update logic
-    app.refresh_config_views_after_mutation()
-    
+
+    app.viewer_mgr._sync_detail_view(app)
+
     content = app.detail_view.toPlainText()
     assert '"limit": 100' in content
 
@@ -54,11 +54,11 @@ def test_theme_switching_logic(app):
     # Switch to Dark
     app.set_theme("Dark")
     assert app.current_theme == "Dark"
-    assert app.theme_color == "#1f1f24"
-    
-    # Verify stylesheet contains the dark background hex
+    assert app.theme_color == "#18181b"
+
+    # Verify stylesheet reflects the preset chrome tint
     style = app.styleSheet().lower()
-    assert "#1f1f24" in style
+    assert "#18181b" in style
 
 def test_navigation_logic_wrap_around(app):
     """
@@ -68,16 +68,42 @@ def test_navigation_logic_wrap_around(app):
     app.current_schedule_index = 0
     
     # Forward
-    app.show_next_schedule()
+    app.viewer_mgr.show_next_schedule(app)
     assert app.current_schedule_index == 1
-    
+
     # Wrap around to start
-    app.show_next_schedule()
+    app.viewer_mgr.show_next_schedule(app)
     assert app.current_schedule_index == 0
-    
+
     # Wrap around to end
-    app.show_prev_schedule()
+    app.viewer_mgr.show_prev_schedule(app)
     assert app.current_schedule_index == 1
+
+def test_overlapping_courses_collect_both_popup_payloads(app):
+    """Same day + start time: both meetings appear in `_all_course_popup_payloads`."""
+    app.schedules = [
+        [
+            {"course_id": "CMSC 101.01", "day": "Mon", "time": "10:00"},
+            {"course_id": "CMSC 202.02", "day": "Mon", "time": "10:00"},
+        ]
+    ]
+    app.current_schedule_index = 0
+
+    hi_mon = MagicMock()
+    hi_mon.text.return_value = "Mon"
+    hi_t10 = MagicMock()
+    hi_t10.text.return_value = "10:00"
+    app.calendar_view.horizontalHeaderItem = MagicMock(return_value=hi_mon)
+    app.calendar_view.verticalHeaderItem = MagicMock(return_value=hi_t10)
+
+    payloads = app._all_course_popup_payloads(0, 0, "")
+    assert len(payloads) == 2
+    keys = {(p["course_id"], str(p.get("section", "")).strip()) for p in payloads}
+    assert keys == {
+        ("CMSC 101", "01"),
+        ("CMSC 202", "02"),
+    }
+
 
 def test_clear_schedules_flag(app):
     """

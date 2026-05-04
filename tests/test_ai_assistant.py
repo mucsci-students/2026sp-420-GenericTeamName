@@ -213,10 +213,33 @@ def test_update_delete_course_not_found(_write, tmp_path, qt_app):
     assert "not found" in json.loads(aa._execute_tool_impl(mw, "delete_course", {"course_id": "Nope"}))["error"]
 
 
-def test_unknown_tool_in_crud(qt_app):
+def test_unknown_tool_in_crud():
     mw = MagicMock()
     mw.config_mgr = MagicMock(filepath="/x.json", data={"config": {"rooms": [], "labs": [], "courses": [], "faculty": []}})
-    assert "Unknown tool" in json.loads(aa._execute_tool_impl(mw, "add_room", {"room_name": "A"}))["error"]
+    assert "Unknown tool" in json.loads(
+        aa._execute_tool_impl(mw, "not_a_registered_tool_xyz", {"room_name": "A"})
+    )["error"]
+
+
+def test_add_room_and_list_tools(tmp_path):
+    cfg_path = tmp_path / "cfg.json"
+    cfg_path.write_text(
+        json.dumps(
+            {
+                "config": {"rooms": [], "labs": [], "courses": [], "faculty": []},
+                "limit": 1,
+                "optimizer_flags": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    mw = MagicMock()
+    mw.config_mgr = MagicMock(filepath=str(cfg_path), data=json.loads(cfg_path.read_text()))
+    out = json.loads(aa._execute_tool_impl(mw, "add_room", {"room_name": "Awesome Freaking Room"}))
+    assert out["ok"] is True
+    assert "Awesome Freaking Room" in out["rooms"]
+    listed = json.loads(aa._execute_tool_impl(mw, "list_rooms", {}))
+    assert listed["rooms"] == ["Awesome Freaking Room"]
 
 
 def test_get_config_json_truncates(qt_app):
@@ -284,7 +307,7 @@ def test_handle_native_gui(qt_app):
     mw = MagicMock()
     m = MagicMock()
     m.add_course_via_dialog = MagicMock()
-    m.add_faculty_via_dialog = 123
+    m.add_faculty_via_dialog = MagicMock()
     mw.course_manager = m
     mw.faculty_manager = m
     out = json.loads(aa._handle_native_gui(mw, {"action": "course_add"}, okify))
@@ -292,13 +315,26 @@ def test_handle_native_gui(qt_app):
     unmapped = json.loads(aa._handle_native_gui(mw, {"action": "not_real"}, okify))
     assert unmapped["ok"] is False
     assert json.loads(aa._handle_native_gui(mw, {"action": "faculty_add"}, okify))["ok"] is True
+    m.add_faculty_via_dialog.assert_called_once_with(mw)
 
 
 def test_run_schedule_generation_and_show_summary(qt_app):
     mw = MagicMock()
     mw.config_mgr = MagicMock(filepath="/c.json", data={})
+    mw.viewer_mgr = MagicMock()
     assert json.loads(aa._execute_tool_impl(mw, "run_schedule_generation", {}))["ok"] is True
     assert json.loads(aa._execute_tool_impl(mw, "show_config_summary_dialog", {}))["ok"] is True
+    mw.viewer_mgr.handle_view_summary.assert_called_once_with(mw)
+
+
+def test_open_schedule_viewer_tool(qt_app):
+    mw = MagicMock()
+    mw.viewer_mgr = MagicMock()
+    out = json.loads(aa._execute_tool_impl(mw, "open_schedule_viewer", {"mode": "faculty"}))
+    assert out["ok"] is True
+    mw.viewer_mgr.update_schedule_display.assert_called_once_with(mw, "faculty")
+    bad = json.loads(aa._execute_tool_impl(mw, "open_schedule_viewer", {"mode": "nope"}))
+    assert bad["ok"] is False
 
 
 # --- AssistantChatWorker.run ---

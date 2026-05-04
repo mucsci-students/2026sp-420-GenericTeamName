@@ -7,7 +7,9 @@
     Implements displaying the schedule in a tabulated format and saving schedules as JSON or PDF (separate export flows).
 '''
 
+import copy
 import json
+import math
 import os
 
 from fpdf import FPDF
@@ -52,12 +54,13 @@ class ConfigManager:
             QMessageBox.critical(parent, "Load Error", f"Failed to parse JSON:\n{str(e)}")
             return None
 
-    def save(self, parent: QWidget):
-        """Save JSON data with 4 space indent."""
+    def save(self, parent: QWidget, *, silent: bool = False):
+        """Save JSON data with 4 space indent. ``silent`` skips the success popup (e.g. auto-save from undo)."""
         try:
             with open(self.filepath, "w") as f:
                 json.dump(self.data, f, indent=4)
-                QMessageBox.information(parent, "Success", f"Saved to: {self.filepath}")
+                if not silent:
+                    QMessageBox.information(parent, "Success", f"Saved to: {self.filepath}")
         except Exception as e:
             QMessageBox.critical(parent, "Save Error", f"Failed to save: {str(e)}")
 
@@ -215,11 +218,13 @@ class ConfigManager:
             pdf.cell(text=f"Schedule option {i + 1}")
             pdf.ln(10)
 
-            days, times_full, grid_full = self.get_schedule_grid_data(
+            days, times_full, grid_full, spans_full = self.get_schedule_grid_data(
                 schedule_data, filter_type="all", filter_value=None
             )
+            pdf_grid = copy.deepcopy(grid_full)
+            self._inflate_spanned_cells_for_export(pdf_grid, spans_full)
             days, times_trim, grid_trim = self._trim_schedule_grid_for_export(
-                days, times_full, grid_full
+                days, times_full, pdf_grid
             )
 
             # Time column slightly narrower than day columns.
@@ -252,6 +257,108 @@ class ConfigManager:
             return (int(hh), int(mm))
         except (ValueError, AttributeError):
             return (99, 99)
+
+    @staticmethod
+    def _parse_time_minutes(raw) -> int | None:
+        try:
+            p = str(raw).strip().split(":")
+            h = int(p[0])
+            m = int(p[1]) if len(p) > 1 else 0
+            return h * 60 + m
+        except (ValueError, TypeError, IndexError):
+            return None
+
+    @staticmethod
+    def _minutes_to_hhmm(total: int) -> str:
+        t = total % (24 * 60)
+        return f"{t // 60:02d}:{t % 60:02d}"
+
+    @staticmethod
+    def _coerce_optional_str_list(attr) -> list | None:
+        """
+        Normalize faculty/room/lab from solver entries (often a single string).
+        Empty / missing values yield None so we fall back to config lists.
+        """
+        if attr is None:
+            return None
+        if isinstance(attr, list):
+            parts = []
+            for x in attr:
+                if x is None:
+                    continue
+                if isinstance(x, dict):
+                    name = str(x.get("name") or x.get("id") or "").strip()
+                    if name:
+                        parts.append(name)
+                    continue
+                s = str(x).strip()
+                if s:
+                    parts.append(s)
+            return parts or None
+        s = str(attr).strip()
+        return [s] if s else None
+
+    @staticmethod
+    def _scheduler_day_index(day_raw) -> int | None:
+        """Normalize Day enums or ints from ``model_dump`` / JSON to 1-based weekday ints."""
+        if day_raw is None:
+            return None
+        try:
+            if hasattr(day_raw, "value"):  # IntEnum etc.
+                return int(day_raw.value)
+        except (TypeError, ValueError):
+            pass
+        try:
+            return int(day_raw)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _scheduler_start_minutes(raw) -> int | None:
+        if raw is None:
+            return None
+        try:
+            if hasattr(raw, "value"):
+                raw = raw.value
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _format_faculty_suffix(faculty_val) -> str:
+        """Return a comma-separated instructor line from list or scalar."""
+        if faculty_val is None:
+            return ""
+        if isinstance(faculty_val, list):
+            names = ", ".join(str(x).strip() for x in faculty_val if str(x).strip())
+        else:
+            s = str(faculty_val).strip()
+            names = s
+        return names
+
+    @staticmethod
+    def _schedule_cell_lines(course_id: str, faculty_suffix: str) -> str:
+        course_id = str(course_id or "").strip() or "(unknown)"
+        faculty_suffix = (faculty_suffix or "").strip()
+        if faculty_suffix:
+            return f"{course_id}\n{faculty_suffix}"
+        return course_id
+
+    @staticmethod
+    def _inflate_spanned_cells_for_export(grid: list, spans: list) -> None:
+        """Duplicate top-of-span cell text across covered rows so trim/PDF stays aligned."""
+        for r, c, rs, _colspan in spans:
+            if rs <= 1:
+                continue
+            text = grid[r][c]
+            if not str(text).strip():
+                continue
+            for dr in range(1, rs):
+                rr = r + dr
+                if rr >= len(grid):
+                    break
+                if not str(grid[rr][c]).strip():
+                    grid[rr][c] = text
 
     def _course_lookup_by_base_id(self) -> dict:
         lookup = {}
@@ -518,33 +625,83 @@ class ConfigManager:
     def scheduler_output_to_viewer_format(self, schedule_list):
         """
         Standardizes raw scheduler dicts into viewer format.
-        Explicitly combines 'course_id' and 'section' (e.g., CMSC 161.01).
+        Understands pydantic ``CourseInstance.model_dump()`` shape: ``course`` or
+        ``course_str``, string ``faculty`` / ``room`` / ``lab``, plus ``times``
+        instances with ints or enums.
         """
         days_map = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri"}
         result = []
         for item in schedule_list:
-            if not isinstance(item, dict): continue
+            if not isinstance(item, dict):
+                continue
 
-            # Get base ID and Section
-            cid = item.get("course_id") or item.get("course_str") or "Unknown"
+            cid = (
+                item.get("course")
+                or item.get("course_str")
+                or item.get("course_id")
+                or ""
+            )
+
             section = item.get("section")
+            cid_s = str(cid).strip() if cid else ""
 
-            # Courses are formatted as: CMSC 161.01
-            if section is not None:
+            full_name_from_parts = ""
+            if section is not None and cid_s and "." not in cid_s:
                 sec_str = str(section)
-                full_name = f"{cid}.{sec_str}" if not sec_str.startswith('.') else f"{cid}{sec_str}"
+                full_name_from_parts = (
+                    f"{cid_s}.{sec_str}" if not sec_str.startswith(".") else f"{cid_s}{sec_str}"
+                )
+
+            if full_name_from_parts and ("." not in cid_s):
+                full_name = full_name_from_parts
+            elif cid_s:
+                full_name = cid_s
             else:
-                full_name = str(cid)
+                full_name = full_name_from_parts or "Unknown"
+
+            solver_faculty = self._coerce_optional_str_list(item.get("faculty"))
+            solver_room = self._coerce_optional_str_list(item.get("room"))
+            solver_lab = self._coerce_optional_str_list(item.get("lab"))
 
             for t in item.get("times", []):
-                day_num = t.get("day")
-                start_mins = t.get("start", 0)
-                if day_num:
-                    result.append({
-                        "course_id": full_name,
-                        "day": days_map.get(day_num, "Mon"),
-                        "time": f"{start_mins // 60:02d}:{start_mins % 60:02d}"
-                    })
+                if not isinstance(t, dict):
+                    continue
+                day_num = self._scheduler_day_index(t.get("day"))
+
+                start_mins = self._scheduler_start_minutes(t.get("start"))
+                if start_mins is None:
+                    start_mins = 0
+
+                if day_num is None:
+                    continue
+
+                hhmm = self._minutes_to_hhmm(start_mins)
+                entry = {
+                    "course_id": full_name,
+                    "day": days_map.get(day_num, "Mon"),
+                    "time": hhmm,
+                }
+                raw_dur = t.get("duration")
+                if raw_dur is None:
+                    raw_dur = t.get("duration_minutes")
+                if raw_dur is None:
+                    raw_dur = t.get("length")
+                try:
+                    if hasattr(raw_dur, "value"):
+                        raw_dur = raw_dur.value
+                    if raw_dur is not None:
+                        entry["duration_minutes"] = max(1, int(raw_dur))
+                except (TypeError, ValueError):
+                    pass
+
+                if solver_faculty is not None:
+                    entry["faculty"] = solver_faculty
+                if solver_room is not None:
+                    entry["room"] = solver_room
+                if solver_lab is not None:
+                    entry["lab"] = solver_lab
+
+                result.append(self._enrich_schedule_entry(entry))
         return result
 
     def import_schedule_from_json(self, filename=None, parent: QWidget = None):
@@ -653,52 +810,170 @@ class ConfigManager:
                 QMessageBox.critical(parent, "Import Error", f"Failed to load JSON: {str(e)}")
             return None
 
-    #NEW SCHEDULE VIEWER GRID [As seen in cfg panel]:
+    # NEW SCHEDULE VIEWER GRID (Outlook-style granularity + faculty rows)
     def get_schedule_grid_data(self, schedule_data, filter_type="all", filter_value=None):
-        days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
-        times = [f"{h:02d}:00" for h in range(24)]
-        grid = [["" for _ in range(len(days))] for _ in range(len(times))]
-        
-        # Access the master course list from config to look up missing attributes
-        master_courses = self.data.get("config", {}).get("courses", [])
+        """
+        Builds a weekday grid using 15-minute rows between the first and last meetings
+        (+ padding). Cells show course plus faculty underneath; vertical spans mimic
+        block length when there is no collision in that column.
+        Returns spans as (row, column, rowspan, colspan) tuples for Qt setSpan().
+        """
+        slot_minutes = 15
+        default_duration = 55
 
-        for entry in schedule_data:
-  
+        days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+        spans: list[tuple[int, int, int, int]] = []
+        master_courses = self.data.get("config", {}).get("courses", [])
+        enriched: list[dict] = []
+        if schedule_data:
+            for raw in schedule_data:
+                if isinstance(raw, dict):
+                    enriched.append(self._enrich_schedule_entry(dict(raw)))
+
+        visible: list[dict] = []
+        for entry in enriched:
             if filter_type != "all" and filter_value:
-                # Get value from entry (CSV import style) or from master config (JSON style)
                 entry_val = entry.get(filter_type)
-                
-                # If the attribute (like 'room') isn't in the schedule entry, 
-                # find the course in the master config and check its attributes there.
+
                 if entry_val is None:
-                    # Strip section numbers (e.g., 'CMSC 161.01' -> 'CMSC 161') to match master list
-                    base_id = entry.get('course_id', '').split('.')[0]
-                    course_info = next((c for c in master_courses if c.get('course_id') == base_id), {})
+                    base_id = entry.get("course_id", "").split(".")[0]
+                    course_info = next(
+                        (c for c in master_courses if c.get("course_id") == base_id),
+                        {},
+                    )
                     entry_val = course_info.get(filter_type, [])
 
-                # JSON stores rooms/faculty as lists
-                # Check if the filter_value (string) is in the entry_val (list or string)
                 if isinstance(entry_val, list):
                     if str(filter_value) not in [str(v) for v in entry_val]:
                         continue
-                else:
-                    if str(entry_val) != str(filter_value):
-                        continue
+                elif str(entry_val) != str(filter_value):
+                    continue
 
-            # 2. Placement Logic
-            day = entry.get('day')
-            time = entry.get('time')
-            course = entry.get('course_id', '')
-            
-            if day in days and time in times:
-                row = times.index(time)
-                col = days.index(day)
-                if grid[row][col]:
-                    grid[row][col] += f"\n{course}"
-                else:
-                    grid[row][col] = course
-                
-        return days, times, grid
+            visible.append(entry)
+
+        if not visible:
+            grid_start = 8 * 60
+            grid_end = 18 * 60
+            slots = []
+            t = grid_start
+            while t <= grid_end:
+                slots.append(self._minutes_to_hhmm(t))
+                t += slot_minutes
+            n_slots = len(slots)
+            grid = [["" for _ in range(len(days))] for _ in range(n_slots)]
+            return days, slots, grid, spans
+
+        start_mins: list[int] = []
+        end_mins: list[int] = []
+
+        for entry in visible:
+            sm = self._parse_time_minutes(entry.get("time"))
+            if sm is None:
+                continue
+            dm = entry.get("duration_minutes")
+            try:
+                dur = (
+                    max(slot_minutes, int(dm))
+                    if dm is not None
+                    else default_duration
+                )
+            except (TypeError, ValueError):
+                dur = default_duration
+            start_mins.append(sm)
+            end_mins.append(sm + dur)
+
+        if not start_mins:
+            slots = []
+            ss = 8 * 60
+            ee = 18 * 60
+            tt = ss
+            while tt <= ee:
+                slots.append(self._minutes_to_hhmm(tt))
+                tt += slot_minutes
+            return days, slots, [["" for _ in range(len(days))] for _ in range(len(slots))], spans
+
+        earliest = min(start_mins)
+        latest = max(end_mins)
+
+        pad = slot_minutes
+        grid_start = max(0, (earliest // slot_minutes) * slot_minutes - pad)
+        grid_end_min = math.ceil(latest / slot_minutes) * slot_minutes + pad
+        n_slots = max(1, (grid_end_min - grid_start) // slot_minutes)
+        times_seq = [
+            self._minutes_to_hhmm(grid_start + i * slot_minutes) for i in range(n_slots)
+        ]
+        grid = [["" for _ in range(len(days))] for _ in range(n_slots)]
+        occupied: dict[int, set[int]] = {}
+
+        def _sort_key(ent: dict) -> tuple:
+            d_raw = ent.get("day")
+            dv = (
+                days.index(d_raw)
+                if d_raw in days
+                else 999
+            )
+            tm_raw = ent.get("time")
+            tm = self._parse_time_minutes(tm_raw)
+            return (dv, tm if tm is not None else 9999, str(ent.get("course_id", "")))
+
+        ordered = sorted(visible, key=_sort_key)
+
+        for entry in ordered:
+            day_raw = entry.get("day")
+            if day_raw not in days:
+                continue
+            col = days.index(day_raw)
+            sm = self._parse_time_minutes(entry.get("time"))
+            if sm is None:
+                continue
+
+            dm = entry.get("duration_minutes")
+            try:
+                dur_min = (
+                    max(slot_minutes, int(dm))
+                    if dm is not None
+                    else default_duration
+                )
+            except (TypeError, ValueError):
+                dur_min = default_duration
+
+            r0 = (sm - grid_start) // slot_minutes
+            if r0 >= n_slots:
+                continue
+            r0 = max(0, min(r0, n_slots - 1))
+            rowspan = max(1, math.ceil(dur_min / slot_minutes))
+            rowspan = min(rowspan, n_slots - r0)
+
+            label = self._schedule_cell_lines(
+                str(entry.get("course_id", "")),
+                self._format_faculty_suffix(entry.get("faculty")),
+            )
+
+            occ = occupied.setdefault(col, set())
+            span_rows = range(r0, r0 + rowspan)
+            conflict = False
+            for rr in span_rows:
+                if rr >= n_slots:
+                    conflict = True
+                    break
+                if rr in occ or str(grid[rr][col]).strip():
+                    conflict = True
+                    break
+
+            if conflict:
+                prior = grid[r0][col]
+                sep = "\n" if prior else ""
+                grid[r0][col] = prior + sep + label
+                occ.add(r0)
+            else:
+                grid[r0][col] = label
+                for rr in span_rows:
+                    if rr < n_slots:
+                        occ.add(rr)
+                if rowspan > 1:
+                    spans.append((r0, col, rowspan, 1))
+
+        return days, times_seq, grid, spans
 
     # Enrich schedules so exported file includes metadata for filtering
     def _enrich_schedule_entry(self, entry: dict) -> dict:
@@ -719,9 +994,33 @@ class ConfigManager:
             )
 
         enriched = dict(entry)
-        enriched["faculty"] = list(entry.get("faculty") or course_info.get("faculty", []) or [])
-        enriched["room"] = list(entry.get("room") or course_info.get("room", []) or [])
-        enriched["lab"] = list(entry.get("lab") or course_info.get("lab", []) or [])
+        ef = self._coerce_optional_str_list(entry.get("faculty"))
+        er = self._coerce_optional_str_list(entry.get("room"))
+        el = self._coerce_optional_str_list(entry.get("lab"))
+
+        cfg_fac = course_info.get("faculty", []) if course_info else []
+        cfg_rm = course_info.get("room", []) if course_info else []
+        cfg_lb = course_info.get("lab", []) if course_info else []
+
+        enriched["faculty"] = list(
+            ef
+            if ef is not None
+            else (cfg_fac if isinstance(cfg_fac, list) else [])
+        )
+        enriched["room"] = list(
+            er
+            if er is not None
+            else (cfg_rm if isinstance(cfg_rm, list) else [])
+        )
+        enriched["lab"] = list(
+            el if el is not None else (cfg_lb if isinstance(cfg_lb, list) else [])
+        )
+        dm = entry.get("duration_minutes")
+        if dm is not None:
+            try:
+                enriched["duration_minutes"] = max(1, int(dm))
+            except (TypeError, ValueError):
+                pass
         return enriched
 
     """

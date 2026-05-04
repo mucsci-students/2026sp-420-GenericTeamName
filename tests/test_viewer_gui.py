@@ -33,6 +33,7 @@ def _config_mgr():
         ["Mon", "Tue"],
         ["08:00", "09:00"],
         [["A", ""], ["", "B"]],
+        [(0, 0, 2, 1)],
     )
     cm.get_summary_text.return_value = "summary text"
     cm.import_file = ""
@@ -54,7 +55,8 @@ def _parent():
 def test_get_pick_lists_and_exclude():
     vm = ViewerManager(_config_mgr())
     out = vm._get_pick_lists(exclude_course_id_for_conflicts="C1")
-    assert out["rooms"] == ["R1", "r1"]
+    _room_key = lambda x: (x.casefold(), x)
+    assert sorted(out["rooms"], key=_room_key) == sorted(["R1", "r1"], key=_room_key)
     assert out["labs"] == ["L1"]
     assert out["faculty"] == ["Prof A", "Prof B"]
     assert out["course_ids"] == ["C2"]
@@ -223,16 +225,17 @@ def test_handle_import_schedule_success(info):
     info.assert_called_once()
 
 
-@patch("viewer.viewer_gui.QMessageBox.critical")
+@patch("viewer.viewer_gui._logger")
 @patch("viewer.viewer_gui.QMessageBox.information", side_effect=Exception("x"))
-def test_handle_import_schedule_info_error( _info, critical):
+def test_handle_import_schedule_info_error(_info, mock_logger):
+    """If the success dialog fails, import still completed; failure is logged."""
     vm = ViewerManager(_config_mgr())
     p = _parent()
     vm.config_mgr.import_file = "imported.json"
     vm.config_mgr.import_schedule_from_json.return_value = [[{"x": 1}]]
     with patch.object(vm, "update_schedule_display"):
         vm.handle_import_schedule(p)
-    critical.assert_called_once()
+    mock_logger.exception.assert_called_once()
 
 
 def test_handle_import_schedule_none():
