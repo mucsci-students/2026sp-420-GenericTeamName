@@ -202,13 +202,13 @@ pytest tests/[name_of_test_file.py]
 
 ## Project layout (summary)
 
-- **`main.py`** – Entry point: `python main.py.
-- **`gui/`** – Contains GUI files, such as 'main_window.py', 'menu_widgets.py', 'ui_styles.py', etc.
-- **`gui/main_window.py** - Acts as the main view of the program.
-- **`tests/`** – Location of written pytests.
+- **`main.py`** – Entry point: `python main.py`.
+- **`gui/`** – GUI package: `main_window.py`, `menu_widgets.py`, `ui_styles.py`, `course_detail_popup.py`, `toast.py`, etc.
+- **`gui/main_window.py`** – Main window and menus; wires managers and undo/redo.
+- **`tests/`** – Pytest suite.
 - **`config/example.json`** – Sample scheduler config.
-- **`config/config.json`** - An empty, default config file.
-- **`config/config_mgr.py** - The model that handles configuration changes.
-- **`faculty, course, room, lab, timeslot_config, & generator folders** all contain their respective features. These managers all act as controllers.
-- **`viewer/** - Contains the 'ViewerManager' to act as a controller for various schedule viewer functions, such as updating view (main_window), and handling import/export with the config manager.
-- **`ai/** - Contains ai logic & a controller to handle changes to the main_window view.
+- **`config/config.json`** – Default empty config path used at startup (replace with your file).
+- **`config/config_mgr.py`** – Loads/saves JSON and schedule conversion helpers.
+- **`faculty/`**, **`course/`**, **`room/`**, **`lab/`**, **`timeslot_config/`**, **`generator/`** – Feature managers (controllers).
+- **`viewer/`** – `ViewerManager`: schedule table updates, import/export hooks, open/save-as config from the UI shell.
+- **`ai/`** – Assistant integration and viewers tied to the main window.

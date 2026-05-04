@@ -3,14 +3,14 @@ API Reference
 
 Main Window
 -----------
-.. automodule:: app.main_window
+.. automodule:: gui.main_window
    :members:
    :undoc-members:
    :show-inheritance:
 
 UI Components
 -------------
-.. automodule:: app.menu_widgets
+.. automodule:: gui.menu_widgets
    :members:
    :undoc-members:
    :show-inheritance:

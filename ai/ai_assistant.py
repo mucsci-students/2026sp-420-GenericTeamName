@@ -9,10 +9,14 @@
 from __future__ import annotations
 
 import copy
+import csv
+import inspect
+import io
 import json
 import os
 import threading
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Any, Callable, Dict, List, Optional
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -64,8 +68,27 @@ _SKIP_ACTIVE_CONFIG_PATH = frozenset(
         "show_config_summary_dialog",
         "undo_configuration_change",
         "redo_configuration_change",
+        "set_active_config_file",
+        "save_config_copy_as",
     }
 )
+
+
+DEFAULT_OPTIMIZER_FLAGS: List[str] = [
+    "faculty_course",
+    "faculty_room",
+    "faculty_lab",
+    "same_room",
+    "same_lab",
+    "pack_rooms",
+]
+
+
+def _sync_config_inspector(mw: Any) -> None:
+    """Push ``config_mgr.data`` into the left JSON inspector (``ViewerManager._sync_detail_view``)."""
+    vm = getattr(mw, "viewer_mgr", None)
+    if vm is not None and hasattr(vm, "_sync_detail_view"):
+        vm._sync_detail_view(mw)
 
 
 def _ensure_config_block(main_window: Any) -> Dict[str, Any]:
@@ -864,7 +887,11 @@ def _execute_tool_impl(main_window: Any, name: str, arguments: Dict[str, Any]) -
     handlers = {
         "get_active_config_path": lambda: ok("Active config path.", path=getattr(cm, "filepath", None)),
         "get_config_summary_text": lambda: ok("Summary text.", summary=cm.get_summary_text() if cm else "No data."),
-        "show_config_summary_dialog": lambda: (main_window.handle_view_summary(), ok("Opened View Summary dialog."))[1],
+        "show_config_summary_dialog": lambda: (
+            main_window.viewer_mgr.handle_view_summary(main_window),
+            ok("Opened View Summary dialog."),
+        )[1],
+        "open_schedule_viewer": lambda: _handle_open_schedule_viewer(main_window, arguments, ok),
         "get_schedule_session_info": lambda: _handle_session_info(main_window, ok),
         "run_schedule_generation": lambda: (main_window.gen_manager.run_scheduler(main_window), ok("Started generation."))[1],
         "get_config_json": lambda: _handle_get_json(cm, ok),
@@ -875,6 +902,16 @@ def _execute_tool_impl(main_window: Any, name: str, arguments: Dict[str, Any]) -
         "export_all_schedules_to_json": lambda: _export_all_schedules_json(main_window, arguments, ok),
         "undo_configuration_change": lambda: _assistant_undo(main_window, ok),
         "redo_configuration_change": lambda: _assistant_redo(main_window, ok),
+        "set_active_config_file": lambda: _tool_set_active_config_file(main_window, arguments, ok),
+        "save_config_copy_as": lambda: _tool_save_config_copy_as(main_window, arguments, ok),
+        "set_current_schedule_index": lambda: _tool_set_current_schedule_index(main_window, arguments, ok),
+        "get_current_schedule_display_text": lambda: _tool_get_current_schedule_display_text(
+            main_window, arguments, ok
+        ),
+        "export_current_schedule_to_csv": lambda: _tool_export_current_schedule_to_csv(
+            main_window, arguments, ok
+        ),
+        "import_schedule_from_file": lambda: _tool_import_schedule_from_file(main_window, arguments, ok),
     }
 
     if name in handlers:
@@ -900,9 +937,11 @@ def _handle_reload(mw, cm, ok_fn):
         return json.dumps(
             {"ok": False, "error": "Failed to reload config (missing file or invalid JSON)."}
         )
-    if hasattr(mw, "mid_panel"):
+    if hasattr(mw, "cfg_panel") and hasattr(mw.cfg_panel, "update_title"):
+        mw.cfg_panel.update_title(mw.cfg_panel, cm.filepath)
+    elif hasattr(mw, "mid_panel") and hasattr(mw.mid_panel, "update_title"):
         mw.mid_panel.update_title(cm.filepath)
-    mw._sync_detail_view()
+    _sync_config_inspector(mw)
     return ok_fn("Reloaded from disk.")
 
 
@@ -956,33 +995,401 @@ def _assistant_redo(mw, ok_fn):
         return json.dumps({"ok": False, "error": "Nothing to redo."})
     return ok_fn("Redid the last undone configuration change.")
 
+
+def _assistant_sync_time_slots(cm: Any) -> None:
+    from timeslot_config.time_slot_editor import TimeSlotEditor
+
+    TimeSlotEditor(cm)._sync_time_slot_config()
+
+
+def _assistant_sync_meeting_classes(cm: Any) -> None:
+    from timeslot_config.meeting_pattern_editor import MeetingPatternEditor
+
+    MeetingPatternEditor(cm)._sync_time_slot_config_classes()
+
+
+def _generate_slot_strings(start_time: str, end_time: str, spacing: int) -> List[str]:
+    slots: List[str] = []
+    try:
+        current = datetime.strptime(str(start_time).strip(), "%H:%M")
+        end = datetime.strptime(str(end_time).strip(), "%H:%M")
+    except ValueError:
+        return []
+    while current < end:
+        slots.append(current.strftime("%H:%M"))
+        current += timedelta(minutes=int(spacing))
+    return slots
+
+
+def _format_schedule_grid_text(cm: Any, schedule: List[Dict[str, Any]]) -> str:
+    days, times, grid, _spans = cm.get_schedule_grid_data(schedule, filter_type="all")
+    lines = ["\t".join([""] + list(days))]
+    for i, t in enumerate(times):
+        row_cells = [str(t)] + [str(grid[i][j]).replace("\n", " / ") for j in range(len(days))]
+        lines.append("\t".join(row_cells))
+    return "\n".join(lines)
+
+
+def _tool_set_active_config_file(mw: Any, args: Dict[str, Any], ok) -> str:
+    path = os.path.abspath(os.path.expanduser(str(args.get("path", "")).strip()))
+    if not path.lower().endswith(".json"):
+        return json.dumps({"ok": False, "error": "path must be a .json file."})
+    if not os.path.isfile(path):
+        return json.dumps({"ok": False, "error": f"File not found: {path}"})
+    if hasattr(mw, "assistant_push_config_undo_snapshot"):
+        mw.assistant_push_config_undo_snapshot()
+    mw.config_mgr.filepath = path
+    loaded = mw.config_mgr.load(mw)
+    if loaded is None:
+        return json.dumps({"ok": False, "error": "Failed to load JSON from path."})
+    if hasattr(mw, "cfg_panel") and hasattr(mw.cfg_panel, "update_title"):
+        mw.cfg_panel.update_title(mw.cfg_panel, mw.config_mgr.filepath)
+    _sync_config_inspector(mw)
+    return ok(f"Switched active config to {path}.", path=path)
+
+
+def _tool_save_config_copy_as(mw: Any, args: Dict[str, Any], ok) -> str:
+    path = os.path.abspath(os.path.expanduser(str(args.get("path", "")).strip()))
+    if not path:
+        return json.dumps({"ok": False, "error": "path is required."})
+    if not path.lower().endswith(".json"):
+        path = path + ".json"
+    try:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(mw.config_mgr.data, f, indent=4)
+    except OSError as e:
+        return json.dumps({"ok": False, "error": str(e)})
+    return ok(f"Wrote config copy to {path}.", path=path)
+
+
+def _tool_set_current_schedule_index(mw: Any, args: Dict[str, Any], ok) -> str:
+    schedules = getattr(mw, "schedules", None) or []
+    try:
+        idx = int(args["index"])
+    except (KeyError, TypeError, ValueError):
+        return json.dumps({"ok": False, "error": "index must be an integer."})
+    if not schedules:
+        return json.dumps({"ok": False, "error": "No schedules loaded."})
+    if idx < 0 or idx >= len(schedules):
+        return json.dumps(
+            {"ok": False, "error": f"index out of range (0..{len(schedules) - 1})."}
+        )
+    mw.current_schedule_index = idx
+    return ok(f"Current schedule index set to {idx}.", index=idx)
+
+
+def _tool_get_current_schedule_display_text(mw: Any, args: Dict[str, Any], ok) -> str:
+    schedules = getattr(mw, "schedules", None) or []
+    idx = int(getattr(mw, "current_schedule_index", 0))
+    if not schedules or idx < 0 or idx >= len(schedules):
+        return json.dumps({"ok": False, "error": "No current schedule to display."})
+    text = _format_schedule_grid_text(mw.config_mgr, schedules[idx])
+    return ok("Schedule grid text (tab-separated).", text=text)
+
+
+def _tool_export_current_schedule_to_csv(mw: Any, args: Dict[str, Any], ok) -> str:
+    path = os.path.abspath(os.path.expanduser(str(args.get("csv_path", "")).strip()))
+    if not path:
+        return json.dumps({"ok": False, "error": "csv_path is required."})
+    if not path.lower().endswith(".csv"):
+        path = path + ".csv"
+    schedules = getattr(mw, "schedules", None) or []
+    idx = int(getattr(mw, "current_schedule_index", 0))
+    if not schedules or idx < 0 or idx >= len(schedules):
+        return json.dumps({"ok": False, "error": "No current schedule to export."})
+    rows = schedules[idx]
+    if not rows:
+        return json.dumps({"ok": False, "error": "Current schedule is empty."})
+    fieldnames: List[str] = []
+    for row in rows:
+        if isinstance(row, dict):
+            for k in row.keys():
+                if k not in fieldnames:
+                    fieldnames.append(str(k))
+    if not fieldnames:
+        fieldnames = ["course_id", "day", "time", "faculty", "room", "lab"]
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
+    w.writeheader()
+    for row in rows:
+        if isinstance(row, dict):
+            flat = {k: json.dumps(row[k]) if isinstance(row[k], (list, dict)) else row[k] for k in fieldnames}
+            w.writerow(flat)
+    try:
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            f.write(buf.getvalue())
+    except OSError as e:
+        return json.dumps({"ok": False, "error": str(e)})
+    return ok(f"Exported current schedule to {path}.", path=path)
+
+
+def _tool_import_schedule_from_file(mw: Any, args: Dict[str, Any], ok) -> str:
+    path = os.path.abspath(os.path.expanduser(str(args.get("file_path", "")).strip()))
+    if not path or not os.path.isfile(path):
+        return json.dumps({"ok": False, "error": "file_path must exist."})
+    low = path.lower()
+    if not low.endswith(".json"):
+        return json.dumps({"ok": False, "error": "Only .json schedule import is supported."})
+    data = mw.config_mgr.import_schedule_from_json(filename=path, parent=None)
+    if not data:
+        return json.dumps({"ok": False, "error": "Import failed or file was empty/invalid."})
+    mw.schedules = data
+    mw.current_schedule_index = 0
+    if hasattr(mw, "viewer_mgr"):
+        mw.viewer_mgr.update_schedule_display(mw, "all")
+    if hasattr(mw, "cfg_panel") and hasattr(mw.cfg_panel, "update_title"):
+        mw.cfg_panel.update_title(mw.cfg_panel, getattr(mw.config_mgr, "import_file", None))
+    return ok(f"Imported {len(data)} schedule option(s).", count=len(data))
+
+
+def _invoke_native_action(fn: Callable[..., Any], mw: Any) -> None:
+    """Call a zero-arg lambda or a manager method that expects ``parent`` as its only argument."""
+    if fn is None or not callable(fn):
+        return
+    try:
+        sig = inspect.signature(fn)
+        skip = (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+        param_count = len([p for p in sig.parameters.values() if p.kind not in skip])
+    except (TypeError, ValueError):
+        param_count = 1
+    if param_count == 0:
+        fn()
+    else:
+        fn(mw)
+
+
+def _handle_open_schedule_viewer(mw, args: Dict[str, Any], ok_fn):
+    mode = str(args.get("mode", "all"))
+    if mode not in ("all", "faculty", "room", "lab"):
+        return json.dumps({"ok": False, "error": f"Invalid mode: {mode!r}."})
+    mw.viewer_mgr.update_schedule_display(mw, mode)
+    return ok_fn(f"Updated schedule viewer ({mode}).")
+
+
 def _handle_native_gui(mw, args, ok_fn):
     action = str(args["action"])
     dispatch = {
+        "file_change_config": lambda: mw.viewer_mgr.handle_change_path(mw),
+        "file_save_config": lambda: mw.config_mgr.save(mw),
+        "file_save_config_as": lambda: mw.viewer_mgr.save_as(mw),
         "faculty_add": mw.faculty_manager.add_faculty_via_dialog,
         "faculty_modify": mw.faculty_manager.modify_faculty_via_dialog,
+        "faculty_delete": mw.faculty_manager.delete_faculty_via_dialog,
+        "faculty_edit_times": mw.faculty_manager.modify_faculty_via_dialog,
+        "faculty_edit_preferences": mw.faculty_manager.modify_faculty_via_dialog,
         "course_add": mw.course_manager.add_course_via_dialog,
         "course_modify": mw.course_manager.modify_course_via_dialog,
         "course_delete": mw.course_manager.delete_course_via_dialog,
         "room_add": mw.room_manager.add_room_via_dialog,
-        "file_save_config": lambda: mw.config_mgr.save(mw),
-        "viewer_open_all": lambda: mw.open_schedule_viewer("all"),
+        "room_modify": mw.room_manager.modify_room_via_dialog,
+        "room_delete": mw.room_manager.delete_room_via_dialog,
+        "lab_add": mw.lab_manager.add_lab_via_dialog,
+        "lab_modify": mw.lab_manager.modify_lab_via_dialog,
+        "lab_delete": mw.lab_manager.delete_lab_via_dialog,
+        "generator_set_limit": mw.gen_manager.set_limit,
+        "generator_set_optimize": mw.gen_manager.set_optimize,
+        "viewer_open_all": lambda: mw.viewer_mgr.update_schedule_display(mw, "all"),
+        "viewer_open_faculty": lambda: mw.viewer_mgr.update_schedule_display(mw, "faculty"),
+        "viewer_open_room": lambda: mw.viewer_mgr.update_schedule_display(mw, "room"),
+        "viewer_open_lab": lambda: mw.viewer_mgr.update_schedule_display(mw, "lab"),
+        "viewer_export": lambda: mw.viewer_mgr.handle_export_schedule(mw),
+        "viewer_import": lambda: mw.viewer_mgr.handle_import_schedule(mw),
+        "viewer_clear_schedules": lambda: mw.viewer_mgr.handle_clear_schedule(mw),
+        "meeting_pattern_add": mw.meeting_pattern_editor.add_meeting_pattern,
+        "meeting_pattern_modify": mw.meeting_pattern_editor.modify_meeting_pattern,
+        "meeting_pattern_delete": mw.meeting_pattern_editor.delete_meeting_pattern,
+        "timeslot_add": mw.time_slot_editor.add_time_slot,
+        "timeslot_modify": mw.time_slot_editor.modify_time_slot,
+        "timeslot_delete": mw.time_slot_editor.delete_time_slot,
     }
     fn = dispatch.get(action)
-    if not fn: return json.dumps({"ok": False, "error": f"Action {action} not mapped."})
-    fn(mw) if callable(fn) else None
+    if not fn:
+        return json.dumps({"ok": False, "error": f"Action {action} not mapped."})
+    _invoke_native_action(fn, mw)
     return ok_fn(f"Launched {action}.")
 
 def _execute_crud_operations(mw, name, args, ok):
+    """Silent JSON config mutations and list tools (schemas must match ``get_tool_schemas``)."""
+    cm = mw.config_mgr
     cfg = _ensure_config_block(mw)
-    courses = cfg.get("courses", [])
+    rooms: List[Any] = cfg.setdefault("rooms", [])
+    labs: List[Any] = cfg.setdefault("labs", [])
+    faculty: List[Any] = cfg.setdefault("faculty", [])
+    courses: List[Any] = cfg.setdefault("courses", [])
+
+    def _rooms_cf() -> Dict[str, int]:
+        return {str(r).casefold(): i for i, r in enumerate(rooms)}
+
+    def _labs_cf() -> Dict[str, int]:
+        return {str(r).casefold(): i for i, r in enumerate(labs)}
+
+    # --- Rooms / labs ---
+    if name == "add_room":
+        rname = str(args.get("room_name", "")).strip()
+        if not rname:
+            return json.dumps({"ok": False, "error": "room_name is required."})
+        if any(str(r).casefold() == rname.casefold() for r in rooms):
+            return json.dumps({"ok": False, "error": f"Room {rname!r} already exists."})
+        rooms.append(rname)
+        _write_config_silent(mw)
+        return ok(f"Added room {rname!r}.", rooms=list(rooms))
+
+    if name == "remove_room":
+        rname = str(args.get("room_name", "")).strip()
+        m = _rooms_cf()
+        if rname.casefold() not in m:
+            return json.dumps({"ok": False, "error": f"Room {rname!r} not found."})
+        rooms.pop(m[rname.casefold()])
+        _write_config_silent(mw)
+        return ok(f"Removed room {rname!r}.", rooms=list(rooms))
+
+    if name == "rename_room":
+        old_n, new_n = str(args.get("old_name", "")).strip(), str(args.get("new_name", "")).strip()
+        if not old_n or not new_n:
+            return json.dumps({"ok": False, "error": "old_name and new_name are required."})
+        try:
+            idx = next(i for i, r in enumerate(rooms) if str(r) == old_n)
+        except StopIteration:
+            return json.dumps({"ok": False, "error": f"Room {old_n!r} not found (exact match)."})
+        if any(str(r).casefold() == new_n.casefold() and i != idx for i, r in enumerate(rooms)):
+            return json.dumps({"ok": False, "error": f"Room {new_n!r} already exists."})
+        rooms[idx] = new_n
+        _write_config_silent(mw)
+        return ok(f"Renamed room {old_n!r} -> {new_n!r}.", rooms=list(rooms))
+
+    if name == "add_lab":
+        lname = str(args.get("lab_name", "")).strip()
+        if not lname:
+            return json.dumps({"ok": False, "error": "lab_name is required."})
+        if any(str(x).casefold() == lname.casefold() for x in labs):
+            return json.dumps({"ok": False, "error": f"Lab {lname!r} already exists."})
+        labs.append(lname)
+        _write_config_silent(mw)
+        return ok(f"Added lab {lname!r}.", labs=list(labs))
+
+    if name == "remove_lab":
+        lname = str(args.get("lab_name", "")).strip()
+        m = _labs_cf()
+        if lname.casefold() not in m:
+            return json.dumps({"ok": False, "error": f"Lab {lname!r} not found."})
+        labs.pop(m[lname.casefold()])
+        _write_config_silent(mw)
+        return ok(f"Removed lab {lname!r}.", labs=list(labs))
+
+    if name == "rename_lab":
+        old_n, new_n = str(args.get("old_name", "")).strip(), str(args.get("new_name", "")).strip()
+        if not old_n or not new_n:
+            return json.dumps({"ok": False, "error": "old_name and new_name are required."})
+        try:
+            idx = next(i for i, x in enumerate(labs) if str(x) == old_n)
+        except StopIteration:
+            return json.dumps({"ok": False, "error": f"Lab {old_n!r} not found (exact match)."})
+        if any(str(x).casefold() == new_n.casefold() and i != idx for i, x in enumerate(labs)):
+            return json.dumps({"ok": False, "error": f"Lab {new_n!r} already exists."})
+        labs[idx] = new_n
+        _write_config_silent(mw)
+        return ok(f"Renamed lab {old_n!r} -> {new_n!r}.", labs=list(labs))
+
+    if name == "list_rooms":
+        return ok("Rooms.", rooms=list(rooms))
+    if name == "list_labs":
+        return ok("Labs.", labs=list(labs))
+    if name == "list_faculty":
+        return ok("Faculty.", faculty=[_faculty_display_name(f) for f in faculty])
+    if name == "list_course_ids":
+        return ok(
+            "Course ids.",
+            course_ids=[str(c.get("course_id", "")) for c in courses if isinstance(c, dict)],
+        )
+
+    # --- Faculty ---
+    if name == "add_faculty":
+        fname = str(args.get("name", "")).strip()
+        if not fname:
+            return json.dumps({"ok": False, "error": "name is required."})
+        if any(_faculty_display_name(f).casefold() == fname.casefold() for f in faculty):
+            return json.dumps({"ok": False, "error": f"Faculty {fname!r} already exists."})
+        faculty.append(fname)
+        _write_config_silent(mw)
+        return ok(f"Added faculty {fname!r}.")
+
+    if name == "remove_faculty":
+        fname = str(args.get("name", "")).strip()
+        idx = _faculty_match_index(faculty, fname)
+        if idx is None:
+            return json.dumps({"ok": False, "error": f"Faculty {fname!r} not found."})
+        faculty.pop(idx)
+        _write_config_silent(mw)
+        return ok(f"Removed faculty matching {fname!r}.")
+
+    if name == "rename_faculty":
+        old_n, new_n = str(args.get("old_name", "")).strip(), str(args.get("new_name", "")).strip()
+        idx = _faculty_match_index(faculty, old_n)
+        if idx is None:
+            return json.dumps({"ok": False, "error": f"Faculty {old_n!r} not found."})
+        entry = faculty[idx]
+        if isinstance(entry, dict):
+            entry["name"] = new_n
+        else:
+            faculty[idx] = {"name": new_n}
+        _write_config_silent(mw)
+        return ok(f"Renamed faculty {old_n!r} -> {new_n!r}.")
+
+    if name == "merge_faculty_object":
+        fname = str(args.get("faculty_name", "")).strip()
+        idx = _faculty_match_index(faculty, fname)
+        if idx is None:
+            return json.dumps({"ok": False, "error": f"Faculty {fname!r} not found."})
+        try:
+            merge = json.loads(str(args.get("merge_json", "{}")))
+        except json.JSONDecodeError as e:
+            return json.dumps({"ok": False, "error": f"Invalid merge_json: {e}"})
+        if not isinstance(merge, dict):
+            return json.dumps({"ok": False, "error": "merge_json must be a JSON object."})
+        entry = faculty[idx]
+        if isinstance(entry, str):
+            entry = {"name": entry}
+            faculty[idx] = entry
+        entry.update(merge)
+        _write_config_silent(mw)
+        return ok(f"Merged fields into faculty matching {fname!r}.", faculty_entry=entry)
+
+    # --- Courses ---
+    if name == "add_course":
+        cid = str(args.get("course_id", "")).strip()
+        if not cid:
+            return json.dumps({"ok": False, "error": "course_id is required."})
+        try:
+            cred = int(args["credits"])
+        except (KeyError, TypeError, ValueError):
+            return json.dumps({"ok": False, "error": "credits must be an integer."})
+        new_c: Dict[str, Any] = {
+            "course_id": cid,
+            "credits": cred,
+            "room": list(args.get("rooms", []) or []),
+            "lab": list(args.get("labs", []) or []),
+            "conflicts": list(args.get("conflicts", []) or []),
+            "faculty": list(args.get("faculty", []) or []),
+        }
+        courses.append(new_c)
+        _write_config_silent(mw)
+        return ok(f"Added course {cid}.", course=new_c)
 
     if name == "update_course":
         cid = str(args["course_id"])
         for c in courses:
             if isinstance(c, dict) and str(c.get("course_id")) == cid:
-                if "rooms" in args: c["room"] = list(args["rooms"])
-                if "credits" in args: c["credits"] = int(args["credits"])
+                if "rooms" in args:
+                    c["room"] = list(args["rooms"])
+                if "labs" in args:
+                    c["lab"] = list(args["labs"])
+                if "credits" in args:
+                    c["credits"] = int(args["credits"])
+                if "faculty" in args:
+                    c["faculty"] = list(args["faculty"])
+                if "conflicts" in args:
+                    c["conflicts"] = list(args["conflicts"])
                 _write_config_silent(mw)
                 return ok(f"Updated course {cid}.", course=c)
         return json.dumps({"ok": False, "error": f"Course {cid} not found."})
@@ -996,8 +1403,191 @@ def _execute_crud_operations(mw, name, args, ok):
                 return ok(f"Deleted course {cid}.")
         return json.dumps({"ok": False, "error": f"Course {cid} not found."})
 
-    if name == "list_rooms": return ok("Rooms.", rooms=list(cfg.get("rooms", [])))
-    
+    # --- Root-level generator settings ---
+    if name == "set_schedule_limit":
+        try:
+            lim = int(args["limit"])
+        except (KeyError, TypeError, ValueError):
+            return json.dumps({"ok": False, "error": "limit must be an integer."})
+        if lim < 1:
+            return json.dumps({"ok": False, "error": "limit must be >= 1."})
+        cm.data["limit"] = lim
+        _write_config_silent(mw)
+        return ok(f"Set schedule limit to {lim}.", limit=lim)
+
+    if name == "set_optimizer_enabled":
+        try:
+            en = bool(args["enabled"])
+        except (KeyError, TypeError, ValueError):
+            return json.dumps({"ok": False, "error": "enabled must be a boolean."})
+        cm.data["optimizer_flags"] = list(DEFAULT_OPTIMIZER_FLAGS) if en else []
+        _write_config_silent(mw)
+        return ok(
+            "Optimizer flags updated.",
+            optimizer_flags=list(cm.data.get("optimizer_flags", [])),
+        )
+
+    # --- Timeslots (config.time_slots + sync to time_slot_config.times) ---
+    if name == "list_timeslots":
+        from timeslot_config.time_slot_editor import TimeSlotEditor
+
+        editor = TimeSlotEditor(cm)
+        ts = editor._get_timeslots()
+        sched_times = cm.data.get("time_slot_config", {}).get("times", {})
+        return ok("Time slots.", time_slots=ts, scheduler_times=sched_times)
+
+    if name in ("add_timeslot_block", "update_timeslot_block", "remove_timeslot_block", "set_timeslot_day_enabled"):
+        from timeslot_config.time_slot_editor import TimeSlotEditor
+
+        editor = TimeSlotEditor(cm)
+        dmap = TimeSlotEditor.DAY_MAP
+        rev = {v: k for k, v in dmap.items()}
+        day_long = _normalize_weekday_for_editor(str(args.get("day", "")), dmap, rev)
+        if not day_long:
+            return json.dumps({"ok": False, "error": "Invalid or missing weekday in day."})
+        ts = editor._get_timeslots()
+        if name == "set_timeslot_day_enabled":
+            try:
+                en = bool(args["enabled"])
+            except (KeyError, TypeError, ValueError):
+                return json.dumps({"ok": False, "error": "enabled must be a boolean."})
+            if day_long not in ts:
+                ts[day_long] = {"enabled": en, "blocks": []}
+            else:
+                ts[day_long]["enabled"] = en
+            cfg["time_slots"] = ts
+            _assistant_sync_time_slots(cm)
+            _write_config_silent(mw)
+            return ok(f"Set {day_long} enabled={en}.", time_slots=ts)
+
+        if day_long not in ts:
+            ts[day_long] = {"enabled": True, "blocks": []}
+        blocks = ts[day_long].setdefault("blocks", [])
+
+        if name == "add_timeslot_block":
+            st, et = str(args.get("start_time", "")).strip(), str(args.get("end_time", "")).strip()
+            try:
+                sp = int(args["spacing_minutes"])
+            except (KeyError, TypeError, ValueError):
+                return json.dumps({"ok": False, "error": "spacing_minutes must be an integer."})
+            if not _parse_hhmm(st) or not _parse_hhmm(et):
+                return json.dumps({"ok": False, "error": "start_time and end_time must be HH:MM."})
+            slot_list = _generate_slot_strings(st, et, sp)
+            if not slot_list:
+                return json.dumps({"ok": False, "error": "No slots generated (check times and spacing)."})
+            blocks.append(
+                {"start_time": st, "end_time": et, "spacing_minutes": sp, "slots": slot_list}
+            )
+            cfg["time_slots"] = ts
+            _assistant_sync_time_slots(cm)
+            _write_config_silent(mw)
+            return ok(f"Added timeslot block on {day_long}.", time_slots=ts)
+
+        try:
+            bi = int(args["block_index"])
+        except (KeyError, TypeError, ValueError):
+            return json.dumps({"ok": False, "error": "block_index must be an integer."})
+        if bi < 0 or bi >= len(blocks):
+            return json.dumps({"ok": False, "error": "block_index out of range."})
+
+        if name == "remove_timeslot_block":
+            blocks.pop(bi)
+            if not blocks:
+                ts.pop(day_long, None)
+            cfg["time_slots"] = ts
+            _assistant_sync_time_slots(cm)
+            _write_config_silent(mw)
+            return ok(f"Removed block {bi} on {day_long}.", time_slots=ts)
+
+        # update_timeslot_block
+        blk = blocks[bi]
+        if "start_time" in args and str(args["start_time"]).strip():
+            blk["start_time"] = str(args["start_time"]).strip()
+        if "end_time" in args and str(args["end_time"]).strip():
+            blk["end_time"] = str(args["end_time"]).strip()
+        if "spacing_minutes" in args:
+            blk["spacing_minutes"] = int(args["spacing_minutes"])
+        st = str(blk.get("start_time", "08:00"))
+        et = str(blk.get("end_time", "17:00"))
+        sp = int(blk.get("spacing_minutes", 60))
+        blk["slots"] = _generate_slot_strings(st, et, sp)
+        cfg["time_slots"] = ts
+        _assistant_sync_time_slots(cm)
+        _write_config_silent(mw)
+        return ok(f"Updated block {bi} on {day_long}.", time_slots=ts)
+
+    # --- Meeting patterns ---
+    if name == "list_meeting_patterns":
+        from timeslot_config.meeting_pattern_editor import MeetingPatternEditor
+
+        patterns = MeetingPatternEditor(cm)._get_patterns()
+        return ok("Meeting patterns.", meeting_patterns=patterns)
+
+    if name in ("add_meeting_pattern", "update_meeting_pattern", "delete_meeting_pattern"):
+        from timeslot_config.meeting_pattern_editor import MeetingPatternEditor
+
+        editor = MeetingPatternEditor(cm)
+        dmap = MeetingPatternEditor.DAY_MAP
+        rev = {v: k for k, v in dmap.items()}
+        pat = editor._get_patterns()
+
+        if name == "delete_meeting_pattern":
+            try:
+                pi = int(args["pattern_index"])
+            except (KeyError, TypeError, ValueError):
+                return json.dumps({"ok": False, "error": "pattern_index must be an integer."})
+            if pi < 0 or pi >= len(pat):
+                return json.dumps({"ok": False, "error": "pattern_index out of range."})
+            pat.pop(pi)
+            cfg["meeting_patterns"] = pat
+            _assistant_sync_meeting_classes(cm)
+            _write_config_silent(mw)
+            return ok("Deleted meeting pattern.", meeting_patterns=pat)
+
+        if name == "add_meeting_pattern":
+            meetings, err = _normalize_meeting_entries(args.get("meetings", []), dmap, rev)
+            if err or not meetings:
+                return json.dumps({"ok": False, "error": err or "meetings required."})
+            try:
+                cred = int(args["credits"])
+            except (KeyError, TypeError, ValueError):
+                return json.dumps({"ok": False, "error": "credits must be an integer."})
+            new_p = {
+                "credits": cred,
+                "meetings": meetings,
+                "start_time": str(args.get("start_time", "") or ""),
+                "disabled": bool(args.get("disabled", False)),
+            }
+            pat.append(new_p)
+            cfg["meeting_patterns"] = pat
+            _assistant_sync_meeting_classes(cm)
+            _write_config_silent(mw)
+            return ok("Added meeting pattern.", meeting_patterns=pat)
+
+        # update_meeting_pattern
+        try:
+            pi = int(args["pattern_index"])
+        except (KeyError, TypeError, ValueError):
+            return json.dumps({"ok": False, "error": "pattern_index must be an integer."})
+        if pi < 0 or pi >= len(pat):
+            return json.dumps({"ok": False, "error": "pattern_index out of range."})
+        cur = pat[pi]
+        if "credits" in args:
+            cur["credits"] = int(args["credits"])
+        if "start_time" in args:
+            cur["start_time"] = str(args.get("start_time") or "")
+        if "disabled" in args:
+            cur["disabled"] = bool(args["disabled"])
+        if "meetings" in args:
+            meetings, err = _normalize_meeting_entries(args["meetings"], dmap, rev)
+            if err:
+                return json.dumps({"ok": False, "error": err})
+            cur["meetings"] = meetings
+        cfg["meeting_patterns"] = pat
+        _assistant_sync_meeting_classes(cm)
+        _write_config_silent(mw)
+        return ok("Updated meeting pattern.", pattern=cur)
+
     return json.dumps({"ok": False, "error": f"Unknown tool: {name}"})
 
 def default_api_key() -> str:

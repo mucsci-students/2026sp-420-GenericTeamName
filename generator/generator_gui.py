@@ -76,8 +76,17 @@ class GenConfigManager:
     def __init__(self, config_mgr, viewer_mgr) -> None:
         self.config_mgr = config_mgr
         self.viewer_mgr = viewer_mgr
-        self.limit = self.config_mgr.data["limit"]
-        self.optimizer_flags = self.config_mgr.data["optimizer_flags"]
+        self._refresh_generator_settings_from_config()
+
+    def _refresh_generator_settings_from_config(self) -> None:
+        """Re-read limit and optimizer flags from ``config_mgr.data`` (silent tools / JSON edit)."""
+        data = self.config_mgr.data or {}
+        try:
+            self.limit = max(1, int(data.get("limit", 1)))
+        except (TypeError, ValueError):
+            self.limit = 1
+        raw = data.get("optimizer_flags", [])
+        self.optimizer_flags = list(raw) if isinstance(raw, list) else []
 
     def set_limit(self, parent: QWidget) -> None:
         """Modifies the limit variable in the config file."""
@@ -151,6 +160,8 @@ class GenConfigManager:
         if not self.config_mgr.data:
             QMessageBox.warning(parent, "No Config", "Please load a config first.")
             return
+
+        self._refresh_generator_settings_from_config()
 
         try:
             from scheduler import Scheduler, load_config_from_file
@@ -323,7 +334,13 @@ class GenConfigManager:
 
                 def course_to_dict(c: Any) -> Any:
                     if hasattr(c, "model_dump"):
-                        return c.model_dump()
+                        try:
+                            return c.model_dump(mode="json", by_alias=True)
+                        except TypeError:
+                            try:
+                                return c.model_dump(by_alias=True)
+                            except TypeError:
+                                return c.model_dump()
                     if hasattr(c, "as_dict"):
                         return c.as_dict()
                     if hasattr(c, "__dict__"):

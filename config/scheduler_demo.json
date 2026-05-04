@@ -1,0 +1,180 @@
+{
+    "config": {
+        "rooms": [
+            "Roddy A",
+            "Roddy B"
+        ],
+        "labs": [
+            "Unix Lab"
+        ],
+        "courses": [
+            {
+                "course_id": "CMSC 101",
+                "credits": 3,
+                "room": [
+                    "Roddy A",
+                    "Roddy B"
+                ],
+                "lab": [],
+                "conflicts": [
+                    "CMSC 102"
+                ],
+                "faculty": [
+                    "Dr. Rivera"
+                ]
+            },
+            {
+                "course_id": "CMSC 102",
+                "credits": 3,
+                "room": [
+                    "Roddy A",
+                    "Roddy B"
+                ],
+                "lab": [],
+                "conflicts": [
+                    "CMSC 101"
+                ],
+                "faculty": [
+                    "Dr. Chen"
+                ]
+            }
+        ],
+        "faculty": [
+            {
+                "name": "Dr. Rivera",
+                "maximum_credits": 12,
+                "minimum_credits": 3,
+                "maximum_days": 5,
+                "unique_course_limit": 3,
+                "times": {
+                    "MON": [
+                        "08:00-18:00"
+                    ],
+                    "TUE": [
+                        "08:00-18:00"
+                    ],
+                    "WED": [
+                        "08:00-18:00"
+                    ],
+                    "THU": [
+                        "08:00-18:00"
+                    ],
+                    "FRI": [
+                        "08:00-18:00"
+                    ]
+                },
+                "mandatory_days": [],
+                "course_preferences": {
+                    "CMSC 101": 8
+                },
+                "room_preferences": {
+                    "Roddy A": 7
+                },
+                "lab_preferences": {
+                    "Unix Lab": 5
+                }
+            },
+            {
+                "name": "Dr. Chen",
+                "maximum_credits": 12,
+                "minimum_credits": 3,
+                "maximum_days": 5,
+                "unique_course_limit": 3,
+                "times": {
+                    "MON": [
+                        "08:00-18:00"
+                    ],
+                    "TUE": [
+                        "08:00-18:00"
+                    ],
+                    "WED": [
+                        "08:00-18:00"
+                    ],
+                    "THU": [
+                        "08:00-18:00"
+                    ],
+                    "FRI": [
+                        "08:00-18:00"
+                    ]
+                },
+                "mandatory_days": [],
+                "course_preferences": {
+                    "CMSC 102": 8
+                },
+                "room_preferences": {
+                    "Roddy B": 7
+                },
+                "lab_preferences": {
+                    "Unix Lab": 5
+                }
+            }
+        ]
+    },
+    "time_slot_config": {
+        "times": {
+            "MON": [
+                {
+                    "start": "08:00",
+                    "end": "17:00",
+                    "spacing": 30
+                }
+            ],
+            "TUE": [
+                {
+                    "start": "08:00",
+                    "end": "17:00",
+                    "spacing": 30
+                }
+            ],
+            "WED": [
+                {
+                    "start": "08:00",
+                    "end": "17:00",
+                    "spacing": 30
+                }
+            ],
+            "THU": [
+                {
+                    "start": "08:00",
+                    "end": "17:00",
+                    "spacing": 30
+                }
+            ],
+            "FRI": [
+                {
+                    "start": "08:00",
+                    "end": "17:00",
+                    "spacing": 30
+                }
+            ]
+        },
+        "classes": [
+            {
+                "credits": 3,
+                "meetings": [
+                    {
+                        "day": "MON",
+                        "duration": 50,
+                        "lab": false
+                    },
+                    {
+                        "day": "WED",
+                        "duration": 50,
+                        "lab": false
+                    },
+                    {
+                        "day": "FRI",
+                        "duration": 50,
+                        "lab": false
+                    }
+                ]
+            }
+        ]
+    },
+    "limit": 3,
+    "optimizer_flags": [
+        "faculty_course",
+        "faculty_room",
+        "same_room"
+    ]
+}

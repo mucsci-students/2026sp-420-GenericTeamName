@@ -12,18 +12,19 @@ The Design-Patterns implemented here are as follows:
 :authors: Kyle Smith, Tyler Strohl, Chayse Altland, Shane del Villar, & Mohamed Mussa
 :class: CMSC 420
 """
-#Note: The """ comment blocks are important for the documentation (see docs folder).
-#TODO: Reformat comments so auto-documentation picks up more files across program.
+# Note: Module docstrings feed Sphinx autodoc; add new public modules in docs/source/api.rst.
 
 import json
 import os
+import re
 import copy
 from collections.abc import Callable
+from functools import partial
 from PyQt6.QtWidgets import (
     QMainWindow, QSplitter, QMenu, QPushButton,
     QVBoxLayout, QHBoxLayout, QWidget, QFileDialog,
     QMessageBox, QDialog, QPlainTextEdit, QLabel,
-    QMenuBar, QLineEdit, QTableWidget, QHeaderView, 
+    QLineEdit, QTableWidget, QHeaderView, 
     QTableWidgetItem, QToolBar, QToolButton,
     )
 from PyQt6.QtCore import Qt, QCoreApplication, QSize
@@ -33,7 +34,9 @@ from PyQt6.QtWidgets import QInputDialog
 from .menu_widgets import ContentPanel
 from .proxy_manager import ProxyManager
 from .course_detail_popup import CourseDetailPopup
+from .toast import show_toast
 from themes.themes import THEME_PRESETS, apply_main_window_theme
+from config.config_mgr import ConfigManager
 
 #=================================================================================
 class MainWindow(QMainWindow):
@@ -247,6 +250,20 @@ class MainWindow(QMainWindow):
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, tb)
 
+        theme_menu = QMenu(self)
+        theme_menu.setToolTipsVisible(True)
+        for theme_name in self.theme_colors:
+            theme_menu.addAction(theme_name).triggered.connect(partial(self.set_theme, theme_name))
+
+        self.theme_btn = QToolButton(self)
+        self.theme_btn.setObjectName("themeToolButton")
+        self.theme_btn.setText(f"{self.current_theme} ▾")
+        self.theme_btn.setToolTip("Color theme (macOS-safe; also under Help → Theme)")
+        self.theme_btn.setMenu(theme_menu)
+        self.theme_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        tb.addWidget(self.theme_btn)
+        tb.addSeparator()
+
         def add_action(
             text: str, slot, tip: str,
             shortcut: QKeySequence | None = None,
@@ -261,7 +278,8 @@ class MainWindow(QMainWindow):
             return act
 
         add_action(
-            "Open…", lambda: self.viewer_mgr.handle_change_path(self),
+            "Open…",
+            lambda: self.run_with_undo(lambda: self.viewer_mgr.handle_change_path(self)),
             "Choose a different JSON configuration file (Ctrl+O)",
             QKeySequence.StandardKey.Open,
         )
@@ -347,7 +365,6 @@ class MainWindow(QMainWindow):
         .. note:: Actions are bound via lambda triggers to respective manager methods.
         """
         menubar = self.menuBar()
-        self._setup_theme_menu(menubar)
 
         # Menubar tab definitions:
         file_menu = menubar.addMenu("File")
@@ -369,6 +386,10 @@ class MainWindow(QMainWindow):
         gen_menu = menubar.addMenu("Generator")
         viewer_menu = menubar.addMenu("Viewer")
         help_menu = menubar.addMenu("Help")
+        theme_help = help_menu.addMenu("Theme")
+        for theme_name in self.theme_colors:
+            theme_help.addAction(theme_name).triggered.connect(partial(self.set_theme, theme_name))
+        help_menu.addSeparator()
         help_menu.addAction("Keyboard shortcuts…", lambda: self.viewer_mgr._show_shortcuts_cheat_sheet(self))
 
         # Command Bindings
@@ -389,28 +410,16 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("Undo").triggered.connect(self.undo)
         edit_menu.addAction("Redo").triggered.connect(self.redo)
 
-    def _setup_theme_menu(self, menubar):
-        """
-        Configures the theme selection button in the corner of the menubar.
-        
-        :param menubar: The QMenuBar instance to attach the widget to.
-        """
-        self.theme_btn = QPushButton(self.current_theme)
-        self.theme_btn.setMaximumWidth(180)
-        theme_menu = QMenu(self)
-        for name in self.theme_colors:
-            theme_menu.addAction(name).triggered.connect(
-                lambda chk, n=name: self.set_theme(n)
-            )
-        self.theme_btn.setMenu(theme_menu)
-        menubar.setCornerWidget(self.theme_btn, Qt.Corner.TopLeftCorner)
-
     def _bind_file_commands(self, menu):
         """Binds file-related operations."""
-        menu.addAction("Change Config File").triggered.connect(lambda: self.viewer_mgr.handle_change_path(self))
+        menu.addAction("Change Config File").triggered.connect(
+            lambda: self.run_with_undo(lambda: self.viewer_mgr.handle_change_path(self))
+        )
         menu.addAction("View Summary").triggered.connect(lambda: self.viewer_mgr.handle_view_summary(self))
         menu.addAction("Save Config").triggered.connect(lambda: self.config_mgr.save(self))
-        menu.addAction("Save Config As").triggered.connect(lambda: self.viewer_mgr.save_as(self))
+        menu.addAction("Save Config As").triggered.connect(
+            lambda: self.run_with_undo(lambda: self.viewer_mgr.save_as(self))
+        )
     
     def _bind_faculty_commands(self, menu):
         """Binds faculty management operations."""
@@ -450,8 +459,12 @@ class MainWindow(QMainWindow):
 
     def _bind_generator_commands(self, menu):
         """Binds schedule generation operations."""
-        menu.addAction("Limit # Of Schedules").triggered.connect(lambda: self.gen_manager.set_limit(self))
-        menu.addAction("Toggle Optimization").triggered.connect(lambda: self.gen_manager.set_optimize(self))
+        menu.addAction("Limit # Of Schedules").triggered.connect(
+            lambda: self.run_with_undo(lambda: self.gen_manager.set_limit(self))
+        )
+        menu.addAction("Toggle Optimization").triggered.connect(
+            lambda: self.run_with_undo(lambda: self.gen_manager.set_optimize(self))
+        )
         menu.addAction("Generate Schedules").triggered.connect(lambda: self.gen_manager.run_scheduler(self))
 
     def _bind_viewer_commands(self, menu):
@@ -485,94 +498,215 @@ class MainWindow(QMainWindow):
     Handler Functions:
     """
     #=================================================================================    
-    #IMPORTANT FUNCTIONS FOR COURSE DETAIL POPUP
-    #TODO: Please move these to CourseDetailPopup,
-    #      & refactor the class to clean up main window,
-    #      & so an entirely new object doesnt have to be made
-    #      for every cell click.
-
-    #TODO: Fix the same filters issue here that was prev resolved,
-    #      cells are going purely off of active config.
+    # Course-detail helpers stay on MainWindow because they need ``calendar_view`` and config.
     #-------------------------------------------
     def _on_schedule_cell_clicked(self, row: int, col: int) -> None:
         """
         Slot: when the user clicks a cell in the schedule grid, find the
         matching course and show the CourseDetailPopup near the cursor.
         """
-        item = self.calendar_view.item(row, col)
-        if item is None or not item.text().strip():
+        anchor_row, anchor_col, cell_text = self._calendar_anchor_cell(row, col)
+        if not cell_text.strip():
             return
 
-        course = self._find_course_for_cell(item.text())
-        if not course:
+        payloads = self._all_course_popup_payloads(anchor_row, anchor_col, cell_text)
+        if not payloads:
             return
 
         from PyQt6.QtGui import QCursor
-        popup = CourseDetailPopup(course, self)
+        popup = CourseDetailPopup(payloads, self)
         popup.show_near(QCursor.pos())
 
-    def _find_course_for_cell(self, cell_text: str) -> dict | None:
+    def _calendar_anchor_cell(self, row: int, col: int) -> tuple[int, int, str]:
         """
-        Build a rich course dict for the popup by combining the schedule's
-        time assignments with the course definition from the config.
+        Row spans store ``QTableWidgetItem`` text only on the top-left row.
         """
-        if not self.schedules:
-            return None
-        if not (0 <= self.current_schedule_index < len(self.schedules)):
+        it = self.calendar_view.item(row, col)
+        if it is not None and str(it.text()).strip():
+            return row, col, str(it.text())
+        for rr in range(row, -1, -1):
+            it2 = self.calendar_view.item(rr, col)
+            if it2 is not None and str(it2.text()).strip():
+                return rr, col, str(it2.text())
+        return row, col, ""
+
+    @staticmethod
+    def _guess_course_ids_from_cell_text(cell_text: str) -> list[str]:
+        """Lines resembling ``SUBJECT NUMBER`` where *NUMBER* starts with a digit."""
+        found: list[str] = []
+        seen: set[str] = set()
+        for raw in cell_text.splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            if parts[0].lower().startswith(("dr.", "prof", "prof.")):
+                continue
+            if not re.match(r"^\d", parts[1]):
+                continue
+            cand = f"{parts[0]} {parts[1]}".strip()
+            if cand and cand not in seen:
+                seen.add(cand)
+                found.append(cand)
+        return found
+
+    def _meetings_at_grid_day_time(self, day: str, time_label: str) -> list[dict]:
+        if not self.schedules or not (0 <= self.current_schedule_index < len(self.schedules)):
+            return []
+        sched = self.schedules[self.current_schedule_index]
+        if not isinstance(sched, list):
+            return []
+
+        tgt_min = ConfigManager._parse_time_minutes(time_label)
+        day_s = day.strip()
+        time_s = str(time_label).strip()
+        out: list[dict] = []
+        for e in sched:
+            if not isinstance(e, dict):
+                continue
+            if str(e.get("day", "")).strip() != day_s:
+                continue
+            em = ConfigManager._parse_time_minutes(e.get("time"))
+            if tgt_min is not None and em is not None and em == tgt_min:
+                out.append(e)
+            elif time_s and str(e.get("time", "")).strip() == time_s:
+                out.append(e)
+        return out
+
+    def _ordered_unique_course_ids(self, meetings: list[dict]) -> list[str]:
+        ids: list[str] = []
+        seen: set[str] = set()
+        for e in meetings:
+            cid = str(e.get("course_id", "")).strip()
+            if cid and cid not in seen:
+                seen.add(cid)
+                ids.append(cid)
+        return ids
+
+    def _all_course_popup_payloads(
+        self,
+        anchor_row: int,
+        anchor_col: int,
+        cell_text: str,
+    ) -> list[dict]:
+        payloads: list[dict] = []
+        hci = self.calendar_view.horizontalHeaderItem(anchor_col)
+        vhi = self.calendar_view.verticalHeaderItem(anchor_row)
+
+        if hci is not None and vhi is not None:
+            meetings = self._meetings_at_grid_day_time(hci.text().strip(), vhi.text().strip())
+            for cid in self._ordered_unique_course_ids(meetings):
+                p = self._popup_payload_for_course_id(cid)
+                if p:
+                    payloads.append(p)
+
+        if payloads:
+            return payloads
+
+        guessed: set[str] = set()
+        for cid in self._guess_course_ids_from_cell_text(cell_text):
+            if cid in guessed:
+                continue
+            guessed.add(cid)
+            p = self._popup_payload_for_course_id(cid)
+            if p:
+                payloads.append(p)
+        return payloads
+
+    def _popup_payload_for_course_id(self, target_id: str) -> dict | None:
+        """
+        Combine every meeting slice for ``target_id`` with config fallback fields.
+        """
+        if not self.schedules or not (0 <= self.current_schedule_index < len(self.schedules)):
             return None
 
         schedule = self.schedules[self.current_schedule_index]
         if not isinstance(schedule, list):
             return None
 
-        # The cell usually displays something like "CMSC 161.01" — grab the
-        # first token and use that as the matching id.
-        first_line = cell_text.splitlines()[0].strip() if cell_text else ""
-        target_id = first_line.split()[0:2]  # e.g. ["CMSC", "161.01"]
-        target_id = " ".join(target_id) if target_id else ""
+        tid = target_id.strip()
+        if not tid:
+            return None
 
-        # Gather every meeting in the schedule for this section.
         meetings = [
             e for e in schedule
-            if isinstance(e, dict)
-            and str(e.get("course_id", "")).strip() == target_id
+            if isinstance(e, dict) and str(e.get("course_id", "")).strip() == tid
         ]
         if not meetings:
             return None
 
-        # Build a "days & time" string like "Mon Wed Fri  10:00"
         days = [m.get("day", "") for m in meetings if m.get("day")]
         times = sorted({m.get("time", "") for m in meetings if m.get("time")})
-        time_str = " ".join(days) + ("  " + ", ".join(times) if times else "")
 
-        # Try to look up the underlying course definition in the config so
-        # we can show room / lab / credits / faculty.
-        base_id = target_id.split(".")[0].strip()  # "CMSC 161.01" -> "CMSC 161"
+        base_id = tid.split(".")[0].strip()
         config_courses = (
             self.config_mgr.data.get("config", {}).get("courses", [])
             if hasattr(self, "config_mgr") else []
         )
-        base_course = next(
-            (c for c in config_courses
-             if isinstance(c, dict) and str(c.get("course_id", "")).strip() == base_id),
+        cfg_full = next(
+            (
+                c for c in config_courses
+                if isinstance(c, dict) and str(c.get("course_id", "")).strip() == tid
+            ),
+            None,
+        )
+        base_course = cfg_full or next(
+            (
+                c for c in config_courses
+                if isinstance(c, dict) and str(c.get("course_id", "")).strip() == base_id
+            ),
             {},
         )
 
-        # Split target_id into course_id + section for nicer display
+        def _collect_from_meetings(key: str) -> list:
+            out, seen = [], set()
+            for m in meetings:
+                if not isinstance(m, dict):
+                    continue
+                val = m.get(key)
+                chunk: list[str] = []
+                if isinstance(val, list):
+                    for v in val:
+                        if isinstance(v, dict):
+                            nm = str(v.get("name") or v.get("id") or "").strip()
+                            if nm:
+                                chunk.append(nm)
+                        elif v is not None and str(v).strip():
+                            chunk.append(str(v).strip())
+                elif val is not None and str(val).strip():
+                    chunk.append(str(val).strip())
+                for s in chunk:
+                    if s not in seen:
+                        seen.add(s)
+                        out.append(s)
+            return out
+
+        mf = _collect_from_meetings("faculty")
+        mr = _collect_from_meetings("room")
+        ml = _collect_from_meetings("lab")
+
+        def _cfg_list(key: str) -> list:
+            v = base_course.get(key, []) if isinstance(base_course, dict) else []
+            if isinstance(v, list):
+                return v
+            return [v] if v not in (None, "") else []
+
         section = ""
-        course_id_display = target_id
-        if "." in target_id:
-            course_id_display, section = target_id.split(".", 1)
+        course_id_display = tid
+        if "." in tid:
+            course_id_display, section = tid.split(".", 1)
             course_id_display = course_id_display.strip()
             section = section.strip()
 
         return {
-            "course_id": course_id_display or target_id,
+            "course_id": course_id_display or tid,
             "section": section,
-            "faculty": base_course.get("faculty", []),
-            "room": base_course.get("room", []),
-            "lab": base_course.get("lab", []),
-            "credits": base_course.get("credits"),
+            "faculty": mf or _cfg_list("faculty"),
+            "room": mr or _cfg_list("room"),
+            "lab": ml or _cfg_list("lab"),
+            "credits": base_course.get("credits") if isinstance(base_course, dict) else None,
             "days": days,
             "time_slot": ", ".join(times) if times else "",
         }
@@ -594,26 +728,33 @@ class MainWindow(QMainWindow):
             self.viewer_mgr._sync_detail_view(self)
             self.viewer_mgr._update_path_label_text(self)
 
+    def _show_toast(self, message: str) -> None:
+        host = self.centralWidget()
+        if host is not None:
+            show_toast(host, message)
+
     def undo(self):
         if not self.undo_stack:
-            QMessageBox.information(self, "Undo", "Nothing to undo.")
+            self._show_toast("Nothing to undo.")
             return
 
         current = copy.deepcopy(self.config_mgr.data)
         self.redo_stack.append(current)
         self.config_mgr.data = self.undo_stack.pop()
-        self.config_mgr.save(self)
+        self.config_mgr.save(self, silent=True)
         self.viewer_mgr._sync_detail_view(self)
         self.viewer_mgr._update_path_label_text(self)
+        self._show_toast("Undid the last configuration change.")
 
     def redo(self):
         if not self.redo_stack:
-            QMessageBox.information(self, "Redo", "Nothing to redo.")
+            self._show_toast("Nothing to redo.")
             return
 
         current = copy.deepcopy(self.config_mgr.data)
         self.undo_stack.append(current)
         self.config_mgr.data = self.redo_stack.pop()
-        self.config_mgr.save(self)
+        self.config_mgr.save(self, silent=True)
         self.viewer_mgr._sync_detail_view(self)
         self.viewer_mgr._update_path_label_text(self)
+        self._show_toast("Redid the last configuration change.")

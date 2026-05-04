@@ -10,6 +10,7 @@ import pytest
 import json
 import os
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
@@ -118,6 +119,59 @@ def test_scheduler_output_to_viewer_format(config_mgr):
     assert formatted[0]["day"] == "Mon"
     assert formatted[0]["time"] == "08:00"
 
+
+def test_scheduler_output_to_viewer_format_merges_config_faculty(config_mgr):
+    config_mgr.data.setdefault("config", {}).setdefault("courses", []).append(
+        {"course_id": "CMSC 161", "faculty": ["Zoppetti"], "room": [], "lab": []}
+    )
+    raw_data = [{
+        "course_id": "CMSC 161",
+        "section": "01",
+        "times": [{"day": 1, "start": 480, "duration": 50}],
+    }]
+    formatted = config_mgr.scheduler_output_to_viewer_format(raw_data)
+    assert formatted[0]["faculty"] == ["Zoppetti"]
+    assert formatted[0].get("duration_minutes") == 50
+
+
+def test_scheduler_output_keeps_solver_faculty_room_lab(config_mgr):
+    """Shapes like ``CourseInstance.model_dump``: course_str + scalar assignments."""
+    raw_data = [{
+        "course_str": "CMSC 499.03",
+        "faculty": "Pat Q. Teacher",
+        "room": "ITE 257",
+        "lab": "Linux Suite",
+        "times": [{"day": 3, "start": 600, "duration": 50}],
+    }]
+    formatted = config_mgr.scheduler_output_to_viewer_format(raw_data)
+    assert len(formatted) == 1
+    row = formatted[0]
+    assert row["course_id"] == "CMSC 499.03"
+    assert row["faculty"] == ["Pat Q. Teacher"]
+    assert row["room"] == ["ITE 257"]
+    assert row["lab"] == ["Linux Suite"]
+    assert row["day"] == "Wed"
+
+
+def test_scheduler_solver_faculty_overrides_heavier_config_lists(config_mgr):
+    config_mgr.data.setdefault("config", {}).setdefault("courses", []).append(
+        {
+            "course_id": "TEST 301",
+            "faculty": ["Faculty Only In Config"],
+            "room": ["Room On File"],
+            "lab": [],
+        }
+    )
+    raw_data = [{
+        "course_str": "TEST 301.01",
+        "faculty": "Solver Picked Instructor",
+        "room": "Solver Room A",
+        "times": [{"day": 1, "start": 480, "duration": 50}],
+    }]
+    formatted = config_mgr.scheduler_output_to_viewer_format(raw_data)[0]
+    assert formatted["faculty"] == ["Solver Picked Instructor"]
+    assert formatted["room"] == ["Solver Room A"]
+
 ## --- 4. Export / Import Tests ---
 
 def test_export_schedule_to_json_cancel(config_mgr):
@@ -219,11 +273,12 @@ def test_import_schedule_from_json(config_mgr, tmp_path):
 def test_get_schedule_grid_data_all(config_mgr):
     config_mgr.load(MagicMock())
     schedule_data = [{"course_id": "CMSC101", "day": "Mon", "time": "08:00"}]
-    days, times, grid = config_mgr.get_schedule_grid_data(schedule_data, filter_type="all")
-    
-    # 08:00 is index 8 (since loop is range(24))
-    # Mon is index 0
-    assert grid[8][0] == "CMSC101"
+    days, times, grid, spans = config_mgr.get_schedule_grid_data(schedule_data, filter_type="all")
+
+    row = times.index("08:00")
+    assert "CMSC101" in grid[row][0]
+    assert "Smith" in grid[row][0]
+    assert any(rs > 1 for _r, _c, rs, _cs in spans)
 
 def test_get_schedule_grid_data_filter_success(config_mgr):
     config_mgr.load(MagicMock())
@@ -233,10 +288,12 @@ def test_get_schedule_grid_data_filter_success(config_mgr):
     ]
     
     # Filter for faculty "Smith"
-    days, times, grid = config_mgr.get_schedule_grid_data(schedule_data, filter_type="faculty", filter_value="Smith")
+    days, times, grid, _spans = config_mgr.get_schedule_grid_data(schedule_data, filter_type="faculty", filter_value="Smith")
     
-    assert grid[8][0] == "CMSC101"
-    assert grid[9][1] == "" # CMSC102 should be filtered out
+    r8 = times.index("08:00")
+    assert "CMSC101" in grid[r8][0]
+    for r in range(len(times)):
+        assert grid[r][1] == ""
 
 def test_get_schedule_grid_data_collision(config_mgr):
     config_mgr.load(MagicMock())
@@ -244,5 +301,19 @@ def test_get_schedule_grid_data_collision(config_mgr):
         {"course_id": "C1", "day": "Mon", "time": "10:00"},
         {"course_id": "C2", "day": "Mon", "time": "10:00"}
     ]
-    _, _, grid = config_mgr.get_schedule_grid_data(schedule_data)
-    assert "C1\nC2" in grid[10][0]
+    _, times, grid, _ = config_mgr.get_schedule_grid_data(schedule_data)
+    r10 = times.index("10:00")
+    assert "C1" in grid[r10][0] and "C2" in grid[r10][0]
+
+
+def test_scheduler_demo_json_validates_and_runs_scheduler():
+    """``config/scheduler_demo.json`` matches ``course-constraint-scheduler`` schema."""
+    from scheduler import Scheduler
+    from scheduler.config import CombinedConfig
+
+    path = Path(__file__).resolve().parent / "scheduler_demo.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    cfg = CombinedConfig(**raw)
+    engine = Scheduler(cfg)
+    first = next(engine.get_models(), None)
+    assert first is not None

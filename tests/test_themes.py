@@ -90,7 +90,7 @@ def test_apply_main_window_theme_light_path(mock_main, mock_corner, mock_editor_
 
     mw.setStyleSheet.assert_called_once_with("main-qss")
     mw.theme_btn.setStyleSheet.assert_called_once_with("btn-qss")
-    mw.theme_btn.setText.assert_called_once_with("Light")
+    mw.theme_btn.setText.assert_called_once_with("Light ▾")
     mw.inspect_panel.set_color.assert_called_once()
     mw.cfg_panel.set_color.assert_called_once()
     mw.assistant_panel.set_color.assert_called_once()

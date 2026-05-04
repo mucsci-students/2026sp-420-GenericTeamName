@@ -17,20 +17,10 @@ release = '4.2'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = []
-
 templates_path = ['_templates']
 exclude_patterns = []
 
-
-
-# -- Options for HTML output -------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
-
-html_theme = 'alabaster'
-html_static_path = ['_static']
-
-# Point to the root directory where main.py and the /app folder live
+# Repository root (contains main.py, gui/, config/, …) for autodoc imports
 sys.path.insert(0, os.path.abspath('../../'))
 
 extensions = [
@@ -39,4 +29,8 @@ extensions = [
     'sphinx.ext.napoleon',     # Supports Google/NumPy style docstrings
 ]
 
+# -- Options for HTML output -------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
+
 html_theme = 'sphinx_rtd_theme'
+html_static_path = ['_static']

@@ -29,6 +29,24 @@ def _manager(data=None):
     return GenConfigManager(cfg, viewer), cfg, viewer
 
 
+def test_refresh_generator_settings_picks_up_json_limit_changes():
+    """Assistant / silent edits update ``config_mgr.data``; generation must not use a stale limit."""
+    mgr, cfg, _ = _manager(
+        {
+            "limit": 1,
+            "optimizer_flags": ["faculty_course"],
+            "config": {},
+            "time_slot_config": {},
+        }
+    )
+    assert mgr.limit == 1
+    cfg.data["limit"] = 4
+    cfg.data["optimizer_flags"] = ["faculty_course", "same_room"]
+    mgr._refresh_generator_settings_from_config()
+    assert mgr.limit == 4
+    assert mgr.optimizer_flags == ["faculty_course", "same_room"]
+
+
 @patch("generator.generator_gui.QMessageBox.warning")
 def test_set_limit_no_config(mock_warning):
     mgr, cfg, _ = _manager()

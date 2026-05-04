@@ -119,7 +119,7 @@ def apply_main_window_theme(mw: Any) -> None:
             btn_bg=btn_bg, text_color=text_color, btn_border=btn_border
         )
     )
-    mw.theme_btn.setText(mw.current_theme)
+    mw.theme_btn.setText(f"{mw.current_theme} ▾")
     for panel in (mw.inspect_panel, mw.cfg_panel, mw.assistant_panel):
         panel.set_color(mw.theme_color, panel_border)
     _apply_editor_panels_theme(mw, table_bg, text_color, btn_border, muted)
